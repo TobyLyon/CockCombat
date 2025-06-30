@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pixel Texture Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    .canvas-container {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px;
+      background: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    canvas {
+      border: 1px solid #ddd;
+      image-rendering: pixelated;
+    }
+    button {
+      margin: 10px;
+      padding: 8px 16px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pixel Texture Generator</h1>
+  
+  <div class="canvas-container">
+    <h2>Pixel Dirt</h2>
+    <canvas id="dirtCanvas" width="64" height="64"></canvas><br>
+    <button onclick="downloadTexture('dirtCanvas', 'pixel-dirt.png')">Download Dirt Texture</button>
+  </div>
+  
+  <div class="canvas-container">
+    <h2>Pixel Rope</h2>
+    <canvas id="ropeCanvas" width="64" height="64"></canvas><br>
+    <button onclick="downloadTexture('ropeCanvas', 'pixel-rope.png')">Download Rope Texture</button>
+  </div>
+
+  <script>
+    // Generate dirt texture
+    function generateDirtTexture() {
+      const canvas = document.getElementById('dirtCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Base color
+      ctx.fillStyle = '#a87d5d';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Add pixel details
+      for (let x = 0; x < canvas.width; x++) {
+        for (let y = 0; y < canvas.height; y++) {
+          const noise = Math.random();
+          
+          if (noise > 0.85) {
+            // Dark spots
+            ctx.fillStyle = '#8b6d4d';
+            ctx.fillRect(x, y, 1, 1);
+          } else if (noise < 0.15) {
+            // Light spots
+            ctx.fillStyle = '#c49a7a';
+            ctx.fillRect(x, y, 1, 1);
+          }
+          
+          // Add some pebbles
+          if (noise > 0.95) {
+            ctx.fillStyle = '#d2b48c';
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+    }
+    
+    // Generate rope texture
+    function generateRopeTexture() {
+      const canvas = document.getElementById('ropeCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Base color
+      ctx.fillStyle = '#d2b48c';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Rope pattern
+      const ropeWidth = 8;
+      const ropeSpacing = 4;
+      
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          // Create twisted rope pattern
+          const twist = Math.sin((x / ropeWidth) * Math.PI) * ropeSpacing;
+          const yOffset = (y + twist) % (ropeSpacing * 2);
+          
+          if (yOffset < ropeSpacing) {
+            ctx.fillStyle = '#a0522d';
+          } else {
+            ctx.fillStyle = '#cd853f';
+          }
+          
+          ctx.fillRect(x, y, 1, 1);
+          
+          // Add highlights and shadows
+          const noise = Math.random();
+          if (yOffset === 0 || yOffset === ropeSpacing) {
+            if (noise > 0.5) {
+              ctx.fillStyle = '#e6c9a8';
+              ctx.fillRect(x, y, 1, 1);
+            }
+          }
+          
+          if (yOffset === ropeSpacing - 1 || yOffset === (ropeSpacing * 2) - 1) {
+            if (noise > 0.5) {
+              ctx.fillStyle = '#8b4513';
+              ctx.fillRect(x, y, 1, 1);
+            }
+          }
+        }
+      }
+    }
+    
+    // Download texture as PNG
+    function downloadTexture(canvasId, filename) {
+      const canvas = document.getElementById(canvasId);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // Generate textures on page load
+    window.onload = function() {
+      generateDirtTexture();
+      generateRopeTexture();
+    };
+  </script>
+</body>
+</html>
