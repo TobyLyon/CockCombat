@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, Users, Trophy, AlertCircle, Loader2 } from "lucide-react"
 import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/utils"
 import { Lobby } from "@/app/api/lobbies/route"
+import { Connection, clusterApiUrl } from "@solana/web3.js"
+import { Transaction } from "@solana/web3.js"
 
 interface WaitingQueueProps {
   lobby: Lobby;
@@ -28,8 +30,10 @@ export default function WaitingQueue({
   onStartBattle,
   playSound,
 }: WaitingQueueProps) {
-  const { publicKey } = useWallet()
+  const { publicKey, sendTransaction } = useWallet()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
+  const [isReady, setIsReady] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     // Poll the specific lobby for status updates
@@ -61,6 +65,55 @@ export default function WaitingQueue({
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
   
+  const handleReadyUp = async () => {
+    if (lobby.matchType !== 'ranked' || !publicKey || !sendTransaction) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // 1. Prepare the wager transaction from the backend
+      const prepareResponse = await fetch('/api/wager/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lobbyId: lobby.id }),
+      });
+
+      if (!prepareResponse.ok) {
+        throw new Error('Failed to prepare wager transaction');
+      }
+
+      const { transaction: serializedTransaction } = await prepareResponse.json();
+      const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
+
+      // 2. Send and confirm the transaction
+      const connection = new Connection(clusterApiUrl('devnet'));
+      const signature = await sendTransaction(transaction, connection);
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      console.log('Wager confirmed with signature:', signature);
+      
+      // 3. Confirm the wager with the backend
+      const confirmResponse = await fetch('/api/wager/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lobbyId: lobby.id, signature }),
+      });
+
+      if (!confirmResponse.ok) {
+        throw new Error('Failed to confirm wager with backend');
+      }
+      
+      setIsReady(true);
+      playSound('button');
+
+    } catch (error) {
+      console.error("Failed to ready up:", error);
+      // Add user-facing error notification here
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-6 max-w-4xl w-full mx-auto">
       <div className="flex flex-col md:flex-row gap-6">
@@ -98,6 +151,7 @@ export default function WaitingQueue({
                           <span className="text-white text-sm mr-1">
                             {player.playerId === publicKey?.toBase58() ? "You" : truncateAddress(player.playerId)}
                           </span>
+                          {/* We will add a ready status indicator here later */}
                         </div>
                       </div>
                     </div>
@@ -135,6 +189,21 @@ export default function WaitingQueue({
                   <AlertCircle className="h-4 w-4 mr-2 text-yellow-400" />
                   <span>4 players minimum to start.</span>
                 </div>
+              </div>
+            )}
+
+            {lobby.matchType === 'ranked' && (
+              <div className="mt-4">
+                <Button
+                  onClick={handleReadyUp}
+                  disabled={isReady || isProcessing}
+                  className="w-full pixel-font bg-green-600 hover:bg-green-500 text-white"
+                >
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : (isReady ? "READY" : "READY UP")}
+                </Button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  This will commit your wager of {lobby.amount} {lobby.currency}.
+                </p>
               </div>
             )}
           </div>

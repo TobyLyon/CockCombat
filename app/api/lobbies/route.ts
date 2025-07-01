@@ -8,7 +8,7 @@ export interface Lobby {
   id: string;
   amount: number;
   currency: string;
-  players: { playerId: string; chickenId: string; isAi?: boolean }[];
+  players: { playerId: string; chickenId: string; isAi?: boolean; isReady?: boolean }[];
   capacity: number;
   highRoller: boolean;
   status: 'open' | 'starting' | 'in-progress';
@@ -61,7 +61,7 @@ export async function GET() {
 
 // API handler for a player to join a lobby (handles both wagered and tutorial)
 export async function POST(req: NextRequest) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

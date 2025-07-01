@@ -19,6 +19,7 @@ import { Lobby } from "@/app/api/lobbies/route";
 import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
 import supabase from '@/lib/supabase-client'
+import { useProfile } from "@/hooks/use-profile"
 
 export default function BattleArena() {
   const router = useRouter()
@@ -29,6 +30,7 @@ export default function BattleArena() {
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [joinedLobby, setJoinedLobby] = useState<Lobby | null>(null);
+  const { activeChicken } = useProfile();
   
   // Use the game state context instead of local state
   const { 
@@ -122,46 +124,17 @@ export default function BattleArena() {
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) {
       console.error("Wallet not connected");
-      // You can add a user-facing notification here
+      return;
+    }
+    if (!activeChicken) {
+      console.error("No active chicken selected!");
+      // Here you might want to show a toast notification to the user
       return;
     }
 
     setIsJoining(lobby.id);
 
     try {
-      // If there's a wager, handle the transaction
-      if (lobby.amount > 0) {
-        if (!sendTransaction) {
-          console.error("sendTransaction not available");
-          return;
-        }
-        // 1. Create the wager transaction
-        const wagerResponse = await fetch('/api/wager', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lobbyId: lobby.id,
-            playerPublicKey: publicKey.toBase58(),
-          }),
-        });
-
-        if (!wagerResponse.ok) {
-          const errorData = await wagerResponse.json();
-          throw new Error(errorData.error || 'Failed to create wager transaction');
-        }
-
-        const { transaction: serializedTransaction } = await wagerResponse.json();
-        const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
-        
-        // 2. Send and confirm the transaction
-        const connection = new Connection(clusterApiUrl('devnet'));
-        const signature = await sendTransaction(transaction, connection);
-        await connection.confirmTransaction(signature, 'confirmed');
-
-        console.log('Transaction successful with signature:', signature);
-      }
-
-      // 3. Join the lobby (for both wagered and non-wagered lobbies)
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Not authenticated');
@@ -175,7 +148,7 @@ export default function BattleArena() {
         },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          playerId: publicKey.toBase58(),
+          chickenId: activeChicken.id,
         }),
       });
 
@@ -184,7 +157,7 @@ export default function BattleArena() {
         throw new Error(errorData.error || 'Failed to join lobby');
       }
 
-      // 4. Proceed to the queue
+      // Proceed to the queue
       joinQueue();
       setJoinedLobby(lobby);
 
@@ -347,10 +320,9 @@ export default function BattleArena() {
             
             {/* Show game over screen */}
             <GameOver 
-              isVictory={isVictorious}
-              onPlayAgain={handlePlayAgain}
-              onExit={exitBattle}
-              prizeAmount={0}
+              winner={players.find(p => p.isAlive) || null}
+              humanPlayer={playerChicken || null}
+              onExit={exitBattle} 
             />
           </div>
         )}
