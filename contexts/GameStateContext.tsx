@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import * as THREE from 'three';
 import { mockPlayers, soundMap } from '@/mocks/game-data';
 import { useAudio } from './AudioContext'; // Import useAudio
+import * as audioConfig from '@/lib/audio-config';
 
 // Define player status interface
 export interface PlayerStatus {
@@ -25,10 +26,10 @@ export interface PlayerStatus {
 }
 
 // Define the possible game states
-export type GameState = "lobby" | "queue" | "battle" | "gameOver" | "winner";
+export type GameState = 'lobby' | 'queue' | 'battle' | 'game-over' | 'victory';
 
 // Define main context type
-interface GameStateContextType {
+export interface GameContextProps {
   gameState: GameState;
   setGameState: (state: GameState) => void;
   volume: number;
@@ -37,11 +38,11 @@ interface GameStateContextType {
   toggleAudio: () => void;
   playerChicken: any; // Define more specifically later
   players: PlayerStatus[];
-  playSound: (sound: string) => void;
+  playSound: (soundKey: string, loop?: boolean) => void;
   handlePlayerDamage: (targetPlayerId: string, damageAmount?: number) => void;
   chickensLeft: number;
   inQueue: boolean;
-  joinQueue: () => void;
+  joinQueue: (lobby: any) => void;
   leaveQueue: () => void;
   startBattle: () => void;
   endBattle: () => void;
@@ -53,10 +54,11 @@ interface GameStateContextType {
   hasInteracted: boolean;
   setHasInteracted: (value: boolean) => void;
   prizeAmount: number; // Track the prize amount for the winner
+  activeLobby: any | null;
 }
 
 // Create the context with default values
-const GameStateContext = createContext<GameStateContextType | undefined>(undefined);
+const GameStateContext = createContext<GameContextProps | undefined>(undefined);
 
 // Define the chickenFeetOffsetY constant
 const chickenFeetOffsetY = 0.7;
@@ -199,7 +201,7 @@ const generateMockOpponents = (count: number) => {
 const initialPlayers = [...mockPlayers];
 
 // Provider component
-export function GameStateProvider({ children }: { children: React.ReactNode }) {
+export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Game state
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [selectedChicken, setSelectedChicken] = useState<any>(null);
@@ -296,7 +298,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       playMusic('background');
     } else if (gameState === 'battle') {
       playMusic('arena');
-    } else if (gameState === 'gameOver' || gameState === 'winner') {
+    } else if (gameState === 'game-over' || gameState === 'victory') {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
@@ -379,7 +381,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       
       if (newHp <= 0) {
         // Player is defeated
-        playSound('death');
+        playSound('die');
         setLastDefeatedChickenId(targetPlayerId);
         
         const updatedPlayers = currentPlayers.map(p =>
@@ -397,7 +399,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
             console.log("All players defeated.");
             setPrizeAmount(0);
           }
-          setGameState('gameOver');
+          setGameState('game-over');
         }
         return updatedPlayers;
         
@@ -431,15 +433,16 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   // Join queue
-  const joinQueue = () => {
+  const joinQueue = (lobby: any) => {
+    console.log("Joining queue for lobby:", lobby)
     setGameState('queue');
-    playSound('button');
+    playSound('click');
   };
   
   // Leave queue
   const leaveQueue = () => {
     setGameState('lobby');
-    playSound('button');
+    playSound('click');
   };
   
   // Start battle
@@ -450,14 +453,14 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   
   // End battle
   const endBattle = () => {
-    setGameState('gameOver');
-    playSound('lose');
+    setGameState('game-over');
+    playSound('die');
   };
   
   // Exit battle
   const exitBattle = () => {
     setGameState('lobby');
-    playSound('button');
+    playSound('click');
   };
   
   // --- Need toggleAudio implementation --- 
@@ -550,6 +553,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     hasInteracted,
     setHasInteracted: () => {}, // Provide empty function
     prizeAmount,
+    activeLobby: null,
   };
   
   // Cleanup Three.js resources when unmounted
@@ -565,7 +569,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 }
 
 // Custom hook to use the game state context
-export function useGameState() {
+export const useGameState = () => {
   const context = useContext(GameStateContext);
   if (context === undefined) {
     throw new Error('useGameState must be used within a GameStateProvider');

@@ -143,6 +143,9 @@ export default function BattleArena() {
     setIsJoining(lobby.id);
 
     try {
+      // For non-free matches, you might have a wager flow here.
+      // For now, we'll treat all joins similarly.
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Not authenticated');
@@ -171,14 +174,16 @@ export default function BattleArena() {
       setLobbies(prevLobbies => 
         prevLobbies.map(l => l.id === updatedLobby.id ? updatedLobby : l)
       );
-
-      // Proceed to the queue
-      joinQueue();
+      
+      // THIS IS THE FIX: Set the game state to 'queue' and store the joined lobby.
       setJoinedLobby(updatedLobby);
+      joinQueue(updatedLobby); // Pass lobby data to the context
 
     } catch (error) {
       console.error("Failed to join lobby:", error);
-      // Add user-facing error notification here (e.g., a toast)
+      toast.error("Failed to join lobby", {
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
     } finally {
       setIsJoining(null);
     }
@@ -234,21 +239,21 @@ export default function BattleArena() {
                       }}
                       whileHover={{ scale: 1.05, y: -5 }}
                       className={`relative overflow-hidden bg-gray-800/50 border rounded-lg flex flex-col justify-between transition-all duration-300 group
-                        ${lobby.highRoller 
+                        ${lobby.high_roller 
                           ? 'border-red-500/50 hover:border-red-500' 
                           : 'border-gray-700/50 hover:border-yellow-500'}`
                       }
                     >
                       <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-br from-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity`}></div>
-                      {lobby.highRoller && <div className="absolute inset-0 bg-red-500/10 animate-pulse-slow"></div>}
-                      <div className={`absolute -top-12 -right-12 text-6xl opacity-5 group-hover:opacity-10 transition-opacity duration-300 ${lobby.highRoller ? 'text-red-400' : 'text-yellow-400'}`}>
-                        {lobby.highRoller ? <Flame /> : <Swords />}
+                      {lobby.high_roller && <div className="absolute inset-0 bg-red-500/10 animate-pulse-slow"></div>}
+                      <div className={`absolute -top-12 -right-12 text-6xl opacity-5 group-hover:opacity-10 transition-opacity duration-300 ${lobby.high_roller ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {lobby.high_roller ? <Flame /> : <Swords />}
                       </div>
                       
                       <div className="p-5 sm:p-6 z-10 flex flex-col flex-grow">
                         <div className="mb-4 flex-grow">
-                          <p className={`text-sm uppercase tracking-widest ${lobby.highRoller ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {lobby.highRoller ? 'High-Roller' : 'Wager'}
+                          <p className={`text-sm uppercase tracking-widest ${lobby.high_roller ? 'text-red-400' : 'text-yellow-400'}`}>
+                            {lobby.high_roller ? 'High-Roller' : 'Wager'}
                           </p>
                           <h3 className="text-3xl font-bold pixel-font text-white">
                             {lobby.amount} <span className="text-2xl opacity-80">{lobby.currency}</span>
@@ -266,15 +271,17 @@ export default function BattleArena() {
                         <Button 
                           className={`w-full font-bold text-lg pixel-font transition-all ${
                             lobby.players.length >= lobby.capacity ? 'bg-gray-600 cursor-not-allowed' :
-                            lobby.highRoller 
+                            lobby.high_roller 
                               ? 'bg-red-600 hover:bg-red-500 text-white' 
                               : 'bg-yellow-500 hover:bg-yellow-400 text-black'
                           }`}
                           onClick={() => handleJoinLobby(lobby)}
-                          disabled={isJoining === lobby.id || lobby.players.length >= lobby.capacity}
+                          disabled={isJoining === lobby.id || lobby.players.length >= lobby.capacity || lobby.is_coming_soon}
                         >
                           {isJoining === lobby.id ? (
                             <Loader2 className="h-6 w-6 animate-spin" />
+                          ) : lobby.is_coming_soon ? (
+                            'Coming Soon'
                           ) : (
                             lobby.players.length >= lobby.capacity ? 'Lobby Full' : 'Join Match'
                           )}
@@ -320,7 +327,7 @@ export default function BattleArena() {
           </div>
         )}
         
-        {gameState === "gameOver" && (
+        {gameState === "game-over" && (
           <div className="flex-1 relative">
             {/* Keep showing the arena in the background */}
             <EnhancedArenaScene 
@@ -342,7 +349,7 @@ export default function BattleArena() {
           </div>
         )}
         
-        {gameState === "winner" && (
+        {gameState === "victory" && (
           <div className="flex-1 relative">
             {/* Keep showing the arena in the background */}
             <EnhancedArenaScene 
@@ -361,7 +368,7 @@ export default function BattleArena() {
         )}
       </main>
 
-      {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
+      {gameState !== "battle" && gameState !== "game-over" && gameState !== "victory" && (
         <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs">
           <p> {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
         </footer>
