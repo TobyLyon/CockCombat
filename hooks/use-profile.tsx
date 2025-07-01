@@ -80,40 +80,38 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (walletAddress: string) => {
     setIsLoadingProfile(true)
     try {
-      // Try to get profile
       const profileData = await ProfileService.getProfile(walletAddress)
+      setProfile(profileData)
       
       if (profileData) {
-        setProfile(profileData)
-        
-        // Fetch chickens
+        // If profile exists, fetch related data
         fetchChickens(walletAddress, profileData.active_chicken_id)
-        
-        // Fetch matches
         fetchMatches(walletAddress)
-        
-        // Fetch achievements
         fetchAchievements(walletAddress)
-        
-        // Fetch transactions
         fetchTransactions(walletAddress)
-        
-        // Update last login
-        ProfileService.updateProfile(walletAddress, {
-          last_login: new Date().toISOString()
-        })
-      } else {
-        // Profile doesn't exist, create new profile
-        const newProfile = await ProfileService.initializeNewProfile(walletAddress)
-        if (newProfile) {
-          setProfile(newProfile)
-          fetchChickens(walletAddress, newProfile.active_chicken_id)
-          toast.success('Profile created successfully!')
-        }
+        ProfileService.updateProfile(walletAddress, { last_login: new Date().toISOString() })
       }
-    } catch (error) {
-      console.error('Error fetching profile:', error)
-      toast.error('Error loading profile')
+    } catch (error: any) {
+      // Check if it's a "Not Found" error, which is expected for new users
+      if (error && error.code === 'PGRST116') {
+        console.log("No profile found, initializing new one.")
+        try {
+          const newProfile = await ProfileService.initializeNewProfile(walletAddress)
+          if (newProfile) {
+            setProfile(newProfile)
+            // Fetch chickens for the new profile (should be empty but good practice)
+            fetchChickens(walletAddress, newProfile.active_chicken_id)
+            toast.success("Welcome! Your Cock Combat profile has been created.")
+          }
+        } catch (initError) {
+          console.error('Error initializing new profile:', initError)
+          toast.error('Could not create your profile.')
+        }
+      } else {
+        // Handle all other unexpected errors
+        console.error('Error fetching profile:', error)
+        toast.error('An unexpected error occurred while loading your profile.')
+      }
     } finally {
       setIsLoadingProfile(false)
     }
