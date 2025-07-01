@@ -93,29 +93,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // SCENARIO 1: WAGERED MATCH (A signed transaction is provided)
-    if (signedTransaction) {
-        if (lobby.matchType !== 'ranked') {
-            return NextResponse.json({ error: 'This is not a wager lobby.' }, { status: 400 });
-        }
-
-        const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-        const transaction = Transaction.from(Buffer.from(signedTransaction, 'base64'));
-        
-        // This is a simplified verification. A real app should validate the transaction contents.
-        const signature = await connection.sendRawTransaction(transaction.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
-
-        console.log(`Wager transaction confirmed: ${signature}`);
-    } 
-    // SCENARIO 2: TUTORIAL MATCH (No signed transaction)
-    else {
-        if (lobby.matchType !== 'tutorial') {
-            return NextResponse.json({ error: 'This lobby requires a wager.' }, { status: 400 });
-        }
-        // No transaction needed, just proceed.
-    }
-
     // If all checks pass, add the player to the lobby.
     const player = { playerId: session.user.id, chickenId };
     lobby.players.push(player);
