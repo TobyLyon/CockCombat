@@ -20,6 +20,7 @@ import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
 import supabase from '@/lib/supabase-client'
 import { useProfile } from "@/hooks/use-profile"
+import { toast } from "sonner"
 
 export default function BattleArena() {
   const router = useRouter()
@@ -123,12 +124,19 @@ export default function BattleArena() {
 
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) {
-      console.error("Wallet not connected");
+      toast.error("Wallet not connected", {
+        description: "Please connect your wallet to join a lobby.",
+      });
       return;
     }
     if (!activeChicken) {
-      console.error("No active chicken selected!");
-      // Here you might want to show a toast notification to the user
+      toast.error("No active chicken selected!", {
+        description: "Please go to your profile to select an active chicken.",
+        action: {
+          label: "Go to Profile",
+          onClick: () => router.push('/profile'),
+        },
+      });
       return;
     }
 

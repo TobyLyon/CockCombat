@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation"
 import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
-import { Volume2, VolumeX, Home } from "lucide-react"
+import { Volume2, VolumeX, Home, Loader2, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Image from "next/image"
 import { useAudio } from "@/contexts/AudioContext"
+import { useProfile } from "@/hooks/use-profile"
+import { Chicken } from "@/lib/supabase-client"
 
 // --- Define Prop Interfaces ---
 interface ChickenStats {
@@ -38,7 +40,9 @@ interface BattleData {
 }
 
 interface ChickenCardProps {
-  chicken: ChickenData;
+  chicken: Chicken;
+  isActive: boolean;
+  onSelect: (chickenId: string) => void;
 }
 
 interface BattleHistoryItemProps {
@@ -47,12 +51,22 @@ interface BattleHistoryItemProps {
 // ------------------------------
 
 // Chicken Card Component
-function ChickenCard({ chicken }: ChickenCardProps) {
+function ChickenCard({ chicken, isActive, onSelect }: ChickenCardProps) {
   return (
-    <div className="bg-[#444444] border-2 border-[#666666] rounded-lg overflow-hidden hover:border-yellow-500 transition-all">
+    <div 
+      className={`bg-[#444444] border-2 rounded-lg overflow-hidden transition-all relative
+        ${isActive ? "border-yellow-400 shadow-lg shadow-yellow-400/20" : "border-[#666666] hover:border-yellow-500"}`
+      }
+    >
+      {isActive && (
+        <div className="absolute top-2 right-2 bg-yellow-400 text-black px-2 py-1 text-xs font-bold rounded-full flex items-center gap-1">
+          <CheckCircle className="h-4 w-4" />
+          ACTIVE
+        </div>
+      )}
       <div className="aspect-square relative bg-[#333333]">
         <Image
-          src={chicken.image || "/placeholder.svg?height=200&width=200"}
+          src={"/placeholder.svg?height=200&width=200"} // Replace with actual chicken image if available
           alt={chicken.name}
           fill
           className="object-contain p-4"
@@ -77,10 +91,19 @@ function ChickenCard({ chicken }: ChickenCardProps) {
           </div>
         </div>
 
-        <div className="flex justify-between text-sm">
+        <div className="flex justify-between text-sm mb-4">
           <span className="text-green-400">{chicken.wins} Wins</span>
           <span className="text-red-400">{chicken.losses} Losses</span>
         </div>
+        
+        <Button 
+          onClick={() => onSelect(chicken.id)}
+          disabled={isActive}
+          className="w-full"
+          variant={isActive ? "outline" : "primary"}
+        >
+          {isActive ? "Activated" : "Activate"}
+        </Button>
       </div>
     </div>
   )
@@ -108,106 +131,49 @@ function BattleHistoryItem({ battle }: BattleHistoryItemProps) {
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { connected, publicKey } = useWallet()
-  const { audioEnabled, setAudioEnabled, playSound, playMusic, volume, pauseMusic } = useAudio()
-  const [userChickens, setUserChickens] = useState<ChickenData[]>([])
-  const [battleHistory, setBattleHistory] = useState<BattleData[]>([])
-  const [stats, setStats] = useState({
-    totalFights: 0,
-    wins: 0,
-    losses: 0,
-    cluckBalance: 0,
-  })
-  const [loading, setLoading] = useState(true)
+  const { connected } = useWallet()
+  const { audioEnabled, setAudioEnabled, playSound } = useAudio()
+  const { 
+    profile, 
+    chickens, 
+    activeChicken, 
+    setActiveChicken,
+    isLoadingProfile, 
+    refreshProfile 
+  } = useProfile()
+  const [isSettingActive, setIsSettingActive] = useState(false)
 
   // Redirect if not connected
   useEffect(() => {
-    if (!connected) {
-      // Small delay to avoid immediate redirect
-      const timer = setTimeout(() => {
-        router.push("/")
-      }, 1000)
+    if (!connected && !isLoadingProfile) {
+      const timer = setTimeout(() => router.push("/"), 1000)
       return () => clearTimeout(timer)
     }
-  }, [connected, router])
+  }, [connected, isLoadingProfile, router])
 
-  // Load user data
-  useEffect(() => {
-    if (connected) {
-      // Simulate loading user data
-      setTimeout(() => {
-        setUserChickens([
-          {
-            id: "chicken-1",
-            name: "Feather Fury",
-            level: 3,
-            wins: 7,
-            losses: 2,
-            image: "/placeholder.svg?height=200&width=200",
-            stats: { strength: 8, speed: 7, defense: 5 },
-          },
-          {
-            id: "chicken-2",
-            name: "Beak Breaker",
-            level: 5,
-            wins: 12,
-            losses: 3,
-            image: "/placeholder.svg?height=200&width=200",
-            stats: { strength: 9, speed: 6, defense: 7 },
-          },
-          {
-            id: "chicken-3",
-            name: "Talon Terror",
-            level: 2,
-            wins: 3,
-            losses: 1,
-            image: "/placeholder.svg?height=200&width=200",
-            stats: { strength: 6, speed: 9, defense: 4 },
-          },
-        ])
-
-        setBattleHistory([
-          { id: 1, result: "win", fighter: "Feather Fury", opponent: "Wing Warrior", reward: 25, date: "2 hours ago" },
-          { id: 2, result: "loss", fighter: "Beak Breaker", opponent: "Cluck Norris", reward: 0, date: "5 hours ago" },
-          { id: 3, result: "win", fighter: "Talon Terror", opponent: "Hen Solo", reward: 15, date: "Yesterday" },
-          { id: 4, result: "win", fighter: "Feather Fury", opponent: "Mother Clucker", reward: 30, date: "2 days ago" },
-        ])
-
-        setStats({
-          totalFights: 25,
-          wins: 19,
-          losses: 6,
-          cluckBalance: 145,
-        })
-
-        setLoading(false)
-      }, 1500)
-    }
-  }, [connected])
-
-  // Setup background music using AudioContext
-  useEffect(() => {
-    if (audioEnabled) {
-      playMusic('/sounds/background.mp3')
+  const handleSelectChicken = async (chickenId: string) => {
+    setIsSettingActive(true)
+    playSound("click")
+    const success = await setActiveChicken(chickenId)
+    if (success) {
+      // You can add a success toast here
     } else {
-      pauseMusic()
+      // You can add an error toast here
     }
-  }, [audioEnabled, playMusic, pauseMusic])
-
-  // Handle audio toggle using AudioContext
-  const toggleAudio = () => {
-    const currentlyEnabled = audioEnabled;
-    setAudioEnabled(!currentlyEnabled);
-    // playSound("click") // Optional: play click sound
+    setIsSettingActive(false)
   }
 
-  // Play sound effect (already uses context correctly via playSound)
-  const handleSoundClick = (soundName: string) => {
-    playSound(soundName)
+  if (isLoadingProfile || !profile) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gray-900">
+        <Loader2 className="h-16 w-16 animate-spin text-yellow-400"/>
+        <p className="text-white ml-4">Loading Profile...</p>
+      </div>
+    )
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-[#3a8c4f] flex flex-col">
+    <div className="h-screen w-screen overflow-hidden relative bg-gray-800 text-white flex flex-col">
       {/* Pixel art background - profile themed */}
       <div className="absolute inset-0 z-0">
         {/* Sky */}
@@ -231,14 +197,14 @@ export default function ProfilePage() {
       </div>
 
       {/* Game header */}
-      <header className="relative z-10 flex justify-between items-center p-4 bg-[#333333] border-b-4 border-[#222222] text-white">
+      <header className="relative z-10 flex justify-between items-center p-4 bg-black/20 border-b border-white/10">
         <div className="flex items-center gap-2">
           <Link href="/">
             <Button
               variant="outline"
               size="icon"
               className="w-10 h-10 rounded-md bg-[#444444] border-2 border-[#666666] hover:bg-[#555555]"
-              onClick={() => handleSoundClick("click")}
+              onClick={() => playSound("click")}
             >
               <Home className="w-6 h-6" />
             </Button>
@@ -248,8 +214,9 @@ export default function ProfilePage() {
             size="icon"
             className="w-10 h-10 rounded-md bg-[#444444] border-2 border-[#666666] hover:bg-[#555555]"
             onClick={() => {
-              toggleAudio() 
-              handleSoundClick("click") // Play click sound via context
+              const currentlyEnabled = audioEnabled;
+              setAudioEnabled(!currentlyEnabled);
+              playSound("click");
             }}
           >
             {audioEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
@@ -260,96 +227,46 @@ export default function ProfilePage() {
           MY PROFILE
         </h1>
 
-        <div>{!connected && <WalletMultiButton onClickSound={() => handleSoundClick("click")} />}</div>
+        <div>{!connected && <WalletMultiButton onClickSound={() => playSound("click")} />}</div>
       </header>
 
       {/* Main content */}
-      <main className="relative z-10 flex-1 overflow-auto p-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-t-yellow-400 border-r-yellow-400 border-b-transparent border-l-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-white pixel-font">Loading Profile...</p>
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* User Info Header */}
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-yellow-400">
+              {/* Placeholder for avatar */}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold pixel-font">{profile.username}</h1>
+              <p className="text-gray-400 text-sm truncate">{profile.wallet_address}</p>
             </div>
           </div>
-        ) : (
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-[#444444] p-4 rounded-lg border-2 border-[#666666]">
-              <div>
-                <h2 className="text-2xl font-bold text-yellow-400 pixel-font">My Cock Collection</h2>
-                <p className="text-sm text-gray-300">
-                  Wallet: {publicKey.slice(0, 6)}...{publicKey.slice(-4)}
-                </p>
+          
+          <Tabs defaultValue="chickens">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="chickens">My Chickens</TabsTrigger>
+              <TabsTrigger value="history">Battle History</TabsTrigger>
+            </TabsList>
+            <TabsContent value="chickens">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
+                {chickens.map(chicken => (
+                  <ChickenCard 
+                    key={chicken.id} 
+                    chicken={chicken} 
+                    isActive={activeChicken?.id === chicken.id}
+                    onSelect={handleSelectChicken}
+                  />
+                ))}
               </div>
-
-              <div className="mt-4 md:mt-0 flex items-center space-x-4">
-                <div className="bg-[#333333] px-4 py-2 rounded-lg border border-[#555555]">
-                  <span className="text-yellow-400 font-bold">{stats.cluckBalance} $CLUCK</span>
-                </div>
-                <Button
-                  className="bg-[#ff4500] hover:bg-[#ff6347] text-white font-bold"
-                  onClick={() => handleSoundClick("click")}
-                >
-                  Get More $CLUCK
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-[#444444] rounded-lg p-4 border-2 border-[#666666]">
-                <div className="text-sm text-gray-300">Total Fighters</div>
-                <div className="text-2xl font-bold text-white">{userChickens.length}</div>
-              </div>
-              <div className="bg-[#444444] rounded-lg p-4 border-2 border-[#666666]">
-                <div className="text-sm text-gray-300">Total Fights</div>
-                <div className="text-2xl font-bold text-white">{stats.totalFights}</div>
-              </div>
-              <div className="bg-[#444444] rounded-lg p-4 border-2 border-[#666666]">
-                <div className="text-sm text-gray-300">Wins</div>
-                <div className="text-2xl font-bold text-green-400">{stats.wins}</div>
-              </div>
-              <div className="bg-[#444444] rounded-lg p-4 border-2 border-[#666666]">
-                <div className="text-sm text-gray-300">Losses</div>
-                <div className="text-2xl font-bold text-red-400">{stats.losses}</div>
-              </div>
-            </div>
-
-            <Tabs defaultValue="collection" className="mb-6">
-              <TabsList className="bg-[#444444] border border-[#666666]">
-                <TabsTrigger
-                  value="collection"
-                  className="data-[state=active]:bg-[#555555]"
-                  onClick={() => handleSoundClick("tab")}
-                >
-                  My Collection
-                </TabsTrigger>
-                <TabsTrigger
-                  value="history"
-                  className="data-[state=active]:bg-[#555555]"
-                  onClick={() => handleSoundClick("tab")}
-                >
-                  Battle History
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="collection" className="pt-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {userChickens.map((chicken) => (
-                    <ChickenCard key={chicken.id} chicken={chicken} />
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="history" className="pt-4">
-                <div className="bg-[#444444] rounded-lg overflow-hidden border-2 border-[#666666]">
-                  {battleHistory.map((battle) => (
-                    <BattleHistoryItem key={battle.id} battle={battle} />
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
+            </TabsContent>
+            <TabsContent value="history">
+              {/* Battle history content will go here */}
+              <p className="text-center py-12 text-gray-500">Battle history coming soon.</p>
+            </TabsContent>
+          </Tabs>
+        </div>
       </main>
 
       {/* Game footer */}
