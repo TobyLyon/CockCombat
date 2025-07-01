@@ -157,9 +157,16 @@ export default function BattleArena() {
         throw new Error(errorData.error || 'Failed to join lobby');
       }
 
+      const updatedLobby = await joinResponse.json();
+
+      // Update the main lobbies list
+      setLobbies(prevLobbies => 
+        prevLobbies.map(l => l.id === updatedLobby.id ? updatedLobby : l)
+      );
+
       // Proceed to the queue
       joinQueue();
-      setJoinedLobby(lobby);
+      setJoinedLobby(updatedLobby);
 
     } catch (error) {
       console.error("Failed to join lobby:", error);
