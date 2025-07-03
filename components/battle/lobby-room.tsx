@@ -39,8 +39,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
   // Join lobby room on mount
   useEffect(() => {
-    if (socket && isConnected) {
+    if (socket && isConnected && publicKey) {
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
+      
+      // First register the wallet address with the socket
+      socket.emit('register_wallet', publicKey.toString());
+      
+      // Then join the lobby room
       socket.emit('join_lobby_room', lobby.id);
       
       // Request current lobby state after joining
@@ -63,7 +68,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
         socket.emit('leave_lobby_room', lobby.id);
       };
     }
-  }, [socket, isConnected, lobby.id]);
+  }, [socket, isConnected, lobby.id, publicKey]);
 
   // Set up socket listeners
   useEffect(() => {
@@ -71,10 +76,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
+      console.log('Current publicKey:', publicKey?.toString());
       setLobbyData(updatedLobby);
       
       // Update players list with the lobby data
       if (updatedLobby.players) {
+        console.log('Setting players:', updatedLobby.players);
         setPlayers(updatedLobby.players);
       }
     };
@@ -116,12 +123,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
       onStartMatch();
     };
 
+    const handleRefreshLobbyState = () => {
+      console.log('🔄 Refreshing lobby state...');
+      socket.emit('get_lobby_state', lobby.id);
+    };
+
     socket.on('lobby_updated', handleLobbyUpdate);
     socket.on('player_joined_lobby', handlePlayerJoined);
     socket.on('player_left_lobby', handlePlayerLeft);
     socket.on('player_ready_status', handlePlayerReady);
     socket.on('match_starting', handleMatchStarting);
     socket.on('match_started', handleMatchStarted);
+    socket.on('refresh_lobby_state', handleRefreshLobbyState);
 
     return () => {
       socket.off('lobby_updated', handleLobbyUpdate);
@@ -130,6 +143,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
       socket.off('player_ready_status', handlePlayerReady);
       socket.off('match_starting', handleMatchStarting);
       socket.off('match_started', handleMatchStarted);
+      socket.off('refresh_lobby_state', handleRefreshLobbyState);
     };
   }, [socket, onStartMatch]);
 
@@ -177,6 +191,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
     // Toggle ready state
     const newReadyState = !isReady;
+    console.log(`🎯 Setting ready state to ${newReadyState} for player ${publicKey.toString()}`);
     setIsReady(newReadyState);
     socket.emit('player_ready', {
       lobbyId: lobby.id,

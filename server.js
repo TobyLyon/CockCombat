@@ -51,8 +51,19 @@ app.prepare().then(() => {
       joinedAt: Date.now()
     });
 
+    // Handle registration of wallet address to socket connection
+    socket.on('register_wallet', (walletAddress) => {
+      console.log(`🔗 Linking wallet ${walletAddress} to socket ${socket.id}`);
+      
+      const connection = activeConnections.get(socket.id);
+      if (connection) {
+        connection.walletAddress = walletAddress;
+        console.log(`✅ Wallet ${walletAddress} registered to socket ${socket.id}`);
+      }
+    });
+
     // Handle lobby room joining
-    socket.on('join_lobby_room', (lobbyId) => {
+    socket.on('join_lobby_room', async (lobbyId) => {
       if (lobbyId) {
         // Check if already in this lobby to prevent duplicate joins
         const connection = activeConnections.get(socket.id);
@@ -64,25 +75,93 @@ app.prepare().then(() => {
         console.log(`🏟️ Client ${socket.id} joining lobby room: ${lobbyId}`);
         socket.join(lobbyId);
         
-        // Initialize player data for this lobby
+        // Update connection data for this lobby
         if (connection) {
           connection.currentLobby = lobbyId;
           connection.isReady = false;
         }
         
-        // Generate random chicken for display
-        const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-        const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-        
-        // Broadcast to lobby that someone joined
-        socket.to(lobbyId).emit('player_joined_lobby', {
-          playerId: socket.id,
-          username: `Player_${socket.id.slice(0, 6)}`,
-          chickenName: randomChicken,
-          isReady: false,
-          isAi: false,
-          timestamp: Date.now()
-        });
+        // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
+        try {
+          const response = await fetch(`http://localhost:${port}/api/lobbies`);
+          const lobbies = await response.json();
+          const lobby = lobbies.find(l => l.id === lobbyId);
+          
+          if (lobby) {
+            // Check if any of the HTTP API players could be this socket connection
+            // This is a bit tricky since socket.id != wallet address, but we can try to match
+            console.log(`🔍 Checking if socket ${socket.id} matches any lobby players for ${lobbyId}`);
+            
+            // For now, if this socket joins a lobby room, we assume they're validly in that lobby
+            // The frontend should ensure this by only joining socket rooms after successful HTTP join
+            
+            // Don't broadcast a duplicate join if this socket represents an existing HTTP player
+            // Instead, just refresh the lobby state for everyone
+            console.log(`🔄 Refreshing lobby state for all players in ${lobbyId}`);
+            
+            const lobbyPlayers = lobby.players.map(player => {
+              // Check ready status from socket connections
+              let isReady = false;
+              for (const [connectionId, conn] of activeConnections.entries()) {
+                if (conn.currentLobby === lobbyId) {
+                  isReady = conn.isReady || false;
+                  break;
+                }
+              }
+              
+              return {
+                playerId: player.playerId,
+                username: player.username || player.playerId.slice(0, 8) + '...',
+                chickenName: player.chickenId || 'Default',
+                isReady: player.isAi ? true : isReady,
+                isAi: player.isAi || false
+              };
+            });
+            
+            // Broadcast updated lobby state to all players in the room
+            io.to(lobbyId).emit('lobby_updated', {
+              id: lobbyId,
+              players: lobbyPlayers,
+              capacity: lobby.capacity,
+              amount: lobby.amount,
+              currency: lobby.currency,
+              matchType: lobby.matchType
+            });
+            
+          } else {
+            // Fallback for lobbies not in HTTP API (shouldn't happen for tutorial)
+            console.log(`⚠️ Lobby ${lobbyId} not found in API, using socket-only mode`);
+            
+            // Generate random chicken for display
+            const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
+            const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
+            
+            // Broadcast to lobby that someone joined (socket-only mode)
+            socket.to(lobbyId).emit('player_joined_lobby', {
+              playerId: socket.id,
+              username: `Player_${socket.id.slice(0, 6)}`,
+              chickenName: randomChicken,
+              isReady: false,
+              isAi: false,
+              timestamp: Date.now()
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error checking lobby API during socket join:', error);
+          
+          // Fallback to old socket-only behavior
+          const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
+          const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
+          
+          socket.to(lobbyId).emit('player_joined_lobby', {
+            playerId: socket.id,
+            username: `Player_${socket.id.slice(0, 6)}`,
+            chickenName: randomChicken,
+            isReady: false,
+            isAi: false,
+            timestamp: Date.now()
+          });
+        }
       }
     });
 
@@ -170,26 +249,45 @@ app.prepare().then(() => {
         
         // Check if all players are ready
         checkLobbyReadyStatus(lobbyId, io);
+        
+        // Also emit a lobby_updated event to refresh the full lobby state
+        setTimeout(() => {
+          io.to(lobbyId).emit('refresh_lobby_state');
+        }, 100);
       }
     });
 
     // Handle get lobby state request
     socket.on('get_lobby_state', async (lobbyId) => {
       try {
-        // Fetch lobby data from API to get real usernames
+        // Fetch lobby data from API to get real usernames and player list
         const response = await fetch(`http://localhost:${port}/api/lobbies`);
         const lobbies = await response.json();
         const lobby = lobbies.find(l => l.id === lobbyId);
         
         if (lobby) {
-          // Convert API lobby players to socket format
-          const lobbyPlayers = lobby.players.map(player => ({
-            playerId: player.playerId,
-            username: player.username || player.playerId.slice(0, 8) + '...',
-            chickenName: player.chickenId || 'Default',
-            isReady: false, // Will be updated by ready events
-            isAi: player.isAi || false
-          }));
+          // Merge API lobby players with socket ready status
+          const lobbyPlayers = lobby.players.map(player => {
+            // Check if this player has a socket connection with ready status
+            let isReady = false;
+            for (const [connectionId, connection] of activeConnections.entries()) {
+              if (connection.currentLobby === lobbyId && 
+                  (connection.walletAddress === player.playerId || connectionId === socket.id)) {
+                isReady = connection.isReady || false;
+                break;
+              }
+            }
+            
+            return {
+              playerId: player.playerId,
+              username: player.username || player.playerId.slice(0, 8) + '...',
+              chickenName: player.chickenId || 'Default',
+              isReady: player.isAi ? true : isReady, // AI players are always ready
+              isAi: player.isAi || false
+            };
+          });
+          
+          console.log(`📋 Sending lobby state for ${lobbyId}:`, lobbyPlayers);
           
           socket.emit('lobby_updated', {
             id: lobbyId,
@@ -199,13 +297,40 @@ app.prepare().then(() => {
             currency: lobby.currency,
             matchType: lobby.matchType
           });
+        } else {
+          console.log(`⚠️ Lobby ${lobbyId} not found in API, using fallback`);
+          // Fallback to socket-only method
+          const lobbyPlayers = [];
+          
+          for (const [id, connection] of activeConnections.entries()) {
+            if (connection.currentLobby === lobbyId) {
+              const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
+              const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
+              
+              lobbyPlayers.push({
+                playerId: id,
+                username: `Player_${id.slice(0, 6)}`,
+                chickenName: randomChicken,
+                isReady: connection.isReady || false,
+                isAi: false
+              });
+            }
+          }
+          
+          socket.emit('lobby_updated', {
+            id: lobbyId,
+            players: lobbyPlayers,
+            capacity: 8,
+            amount: 0,
+            currency: 'FREE',
+            matchType: 'tutorial'
+          });
         }
       } catch (error) {
-        console.error('Error fetching lobby state:', error);
-        // Fallback to old method
+        console.error('❌ Error fetching lobby state:', error);
+        // Fallback to socket-only method
         const lobbyPlayers = [];
         
-        // Get all connections in this lobby
         for (const [id, connection] of activeConnections.entries()) {
           if (connection.currentLobby === lobbyId) {
             const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
@@ -223,7 +348,11 @@ app.prepare().then(() => {
         
         socket.emit('lobby_updated', {
           id: lobbyId,
-          players: lobbyPlayers
+          players: lobbyPlayers,
+          capacity: 8,
+          amount: 0,
+          currency: 'FREE',
+          matchType: 'tutorial'
         });
       }
     });
@@ -306,113 +435,117 @@ app.prepare().then(() => {
   });
 
   // Check if lobby is ready to start
-  function checkLobbyReadyStatus(lobbyId, io) {
-    const lobbyPlayers = [];
-    
-    // Get all connections in this lobby
-    for (const [id, connection] of activeConnections.entries()) {
-      if (connection.currentLobby === lobbyId) {
-        const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-        const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-        
-        lobbyPlayers.push({
-          playerId: id,
-          username: `Player_${id.slice(0, 6)}`,
-          chickenName: randomChicken,
-          isReady: connection.isReady || false,
-          isAi: false
-        });
-      }
-    }
-    
-    // Check if we have minimum players and all are ready
-    const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
-    const allReady = lobbyPlayers.length >= minPlayers && 
-                     lobbyPlayers.every(p => p.isReady);
-    
-    if (allReady) {
-      console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
+  async function checkLobbyReadyStatus(lobbyId, io) {
+    try {
+      // Fetch lobby data from API to get the real player list
+      const response = await fetch(`http://localhost:${port}/api/lobbies`);
+      const lobbies = await response.json();
+      const lobby = lobbies.find(l => l.id === lobbyId);
       
-      // Start countdown
-      let countdown = 5;
-      const countdownInterval = setInterval(() => {
-        io.to(lobbyId).emit('match_starting', { countdown });
-        countdown--;
-        
-        if (countdown < 0) {
-          clearInterval(countdownInterval);
-          io.to(lobbyId).emit('match_started');
-          
-          // Clean up lobby connections
-          for (const [id, connection] of activeConnections.entries()) {
-            if (connection.currentLobby === lobbyId) {
-              delete connection.currentLobby;
-              delete connection.isReady;
+      if (lobby) {
+        // Merge API lobby players with socket ready status
+        const lobbyPlayers = lobby.players.map(player => {
+          // Check if this player has a socket connection with ready status
+          let isReady = false;
+          for (const [connectionId, connection] of activeConnections.entries()) {
+            if (connection.currentLobby === lobbyId && 
+                connection.walletAddress === player.playerId) {
+              isReady = connection.isReady || false;
+              break;
             }
           }
-        }
-      }, 1000);
-    } else if (lobbyId.includes('tutorial') && lobbyPlayers.length > 0 && lobbyPlayers.every(p => p.isReady)) {
-      // For free lobbies, if players are ready but not enough, start AI backfill timer
-      console.log(`⏰ Starting AI backfill timer for free lobby ${lobbyId} - ${lobbyPlayers.length} ready players`);
-      
-      // Clear any existing timer for this lobby
-      if (global.readyTimers && global.readyTimers[lobbyId]) {
-        clearTimeout(global.readyTimers[lobbyId]);
-      }
-      
-      // Initialize global timers object if not exists
-      if (!global.readyTimers) {
-        global.readyTimers = {};
-      }
-      
-      // Set 1-minute timer for AI backfill
-      global.readyTimers[lobbyId] = setTimeout(() => {
-        console.log(`🤖 AI backfill triggered for free lobby ${lobbyId}`);
-        
-        // Add AI players to fill the lobby
-        const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
-        const currentPlayers = lobbyPlayers.length;
-        
-        // Broadcast AI players joining
-        for (let i = currentPlayers; i < minPlayers; i++) {
-          const randomName = aiNames[Math.floor(Math.random() * aiNames.length)];
-          const randomChicken = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin'][Math.floor(Math.random() * 6)];
           
-          io.to(lobbyId).emit('player_joined_lobby', {
-            playerId: `ai-${Math.random().toString(36).substring(2, 9)}`,
-            username: randomName,
-            chickenName: randomChicken,
-            isReady: true,
-            isAi: true,
-            timestamp: Date.now()
-          });
-        }
+          return {
+            playerId: player.playerId,
+            username: player.username || player.playerId.slice(0, 8) + '...',
+            chickenName: player.chickenId || 'Default',
+            isReady: player.isAi ? true : isReady, // AI players are always ready
+            isAi: player.isAi || false
+          };
+        });
         
-        // Start the match with AI players
-        console.log(`🚀 Starting free lobby ${lobbyId} with AI backfill`);
-        let countdown = 3;
-        const countdownInterval = setInterval(() => {
-          io.to(lobbyId).emit('match_starting', { countdown });
-          countdown--;
+        // Check if we have minimum players and all are ready
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
+        const readyPlayers = lobbyPlayers.filter(p => p.isReady);
+        const allReady = lobbyPlayers.length >= minPlayers && 
+                         readyPlayers.length === lobbyPlayers.length;
+        
+        console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${lobbyPlayers.length} ready (min: ${minPlayers})`);
+        
+        if (allReady) {
+          console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
           
-          if (countdown < 0) {
-            clearInterval(countdownInterval);
-            io.to(lobbyId).emit('match_started');
+          // Start countdown
+          let countdown = 5;
+          const countdownInterval = setInterval(() => {
+            io.to(lobbyId).emit('match_starting', { countdown });
+            countdown--;
             
-            // Clean up lobby connections
-            for (const [id, connection] of activeConnections.entries()) {
-              if (connection.currentLobby === lobbyId) {
-                delete connection.currentLobby;
-                delete connection.isReady;
+            if (countdown < 0) {
+              clearInterval(countdownInterval);
+              io.to(lobbyId).emit('match_started');
+              
+              // Clean up lobby connections
+              for (const [id, connection] of activeConnections.entries()) {
+                if (connection.currentLobby === lobbyId) {
+                  delete connection.currentLobby;
+                  connection.isReady = false;
+                }
               }
             }
-          }
-        }, 1000);
+          }, 1000);
+        }
+      } else {
+        // Fallback to socket-only method
+        console.log(`⚠️ Lobby ${lobbyId} not found in API, using socket-only ready check`);
+        const lobbyPlayers = [];
         
-        // Clean up timer
-        delete global.readyTimers[lobbyId];
-      }, 60000); // 1 minute wait
+        for (const [id, connection] of activeConnections.entries()) {
+          if (connection.currentLobby === lobbyId) {
+            const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
+            const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
+            
+            lobbyPlayers.push({
+              playerId: id,
+              username: `Player_${id.slice(0, 6)}`,
+              chickenName: randomChicken,
+              isReady: connection.isReady || false,
+              isAi: false
+            });
+          }
+        }
+        
+        // Check if we have minimum players and all are ready
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
+        const allReady = lobbyPlayers.length >= minPlayers && 
+                         lobbyPlayers.every(p => p.isReady);
+        
+        if (allReady) {
+          console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
+          
+          // Start countdown
+          let countdown = 5;
+          const countdownInterval = setInterval(() => {
+            io.to(lobbyId).emit('match_starting', { countdown });
+            countdown--;
+            
+            if (countdown < 0) {
+              clearInterval(countdownInterval);
+              io.to(lobbyId).emit('match_started');
+              
+              // Clean up lobby connections
+              for (const [id, connection] of activeConnections.entries()) {
+                if (connection.currentLobby === lobbyId) {
+                  delete connection.currentLobby;
+                  connection.isReady = false;
+                }
+              }
+            }
+          }, 1000);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking lobby ready status:', error);
     }
   }
 
