@@ -48,83 +48,86 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
   const displayPlayers = players;
 
   return (
-    // Pointer-events-none allows clicks to pass through to the game scene
-    <div className="absolute inset-0 z-20 pointer-events-none pixel-font text-white">
+    // Fixed positioning with proper z-index and spacing - no overflow
+    <div className="absolute inset-0 z-20 pointer-events-none pixel-font text-white overflow-hidden">
 
-      {/* Top Bar Area */}
-      <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start">
+      {/* Top Bar Area - Better spacing with safe margins */}
+      <div className="absolute top-0 left-0 right-0 p-2 sm:p-4 flex justify-between items-start flex-wrap gap-2">
         
         {/* Top Left: Chickens Left */}
-        <div className="ml-4 bg-black/70 border-2 border-yellow-500/50 rounded-md px-3 py-1 shadow-lg">
-          <span className="text-yellow-400 mr-2">ALIVE:</span>
-          <span className="text-xl font-bold">{chickensLeft}</span> 
-          {/* // TODO: Consider using a chicken icon here */}
+        <div className="bg-black/80 border-2 border-yellow-500/70 rounded-lg px-3 py-2 shadow-xl backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-400 text-xs sm:text-sm font-bold">ALIVE:</span>
+            <span className="text-xl sm:text-2xl font-bold text-white">{chickensLeft}</span> 
+          </div>
         </div>
 
         {/* Top Center: Title */}
-        <div className="absolute left-1/2 top-3 transform -translate-x-1/2 bg-black/70 border-2 border-yellow-500/50 rounded-md px-4 py-1 shadow-lg">
-            <h1 className="text-lg text-yellow-400 font-bold">COCK COMBAT</h1>
+        <div className="bg-black/80 border-2 border-yellow-500/70 rounded-lg px-4 py-2 shadow-xl backdrop-blur-sm">
+          <h1 className="text-lg sm:text-xl text-yellow-400 font-bold tracking-wide">COCK COMBAT</h1>
         </div>
 
-        {/* Top Right: Player List - Redesigned with better aesthetics */}
-        <div className="mr-4 bg-black/70 border-2 border-yellow-500/50 rounded-md px-3 py-2 w-60 text-[9px] shadow-lg">
-          <div className="flex justify-between items-center mb-1.5 border-b border-yellow-500/30 pb-1">
-            <h2 className="text-yellow-400 font-bold text-xs uppercase tracking-wider">Leaderboard</h2>
-            <div className="bg-yellow-500/20 px-1.5 rounded-sm">
-              <span className="text-white text-[8px]">{displayPlayers.length} Players</span>
+        {/* Top Right: Player List - Better spacing and sizing with responsive width */}
+        <div className="bg-black/80 border-2 border-yellow-500/70 rounded-lg px-3 py-2 w-60 sm:w-72 shadow-xl backdrop-blur-sm">
+          <div className="flex justify-between items-center mb-2 border-b border-yellow-500/30 pb-2">
+            <h2 className="text-yellow-400 font-bold text-xs sm:text-sm uppercase tracking-wider">Leaderboard</h2>
+            <div className="bg-yellow-500/20 px-2 py-1 rounded-sm">
+              <span className="text-white text-xs">{displayPlayers.length} Players</span>
             </div>
           </div>
           
-          {displayPlayers.slice(0, 15).map((p, index) => {
-            const playerListHealthColor = getHealthColor(p.hp, p.maxHp);
-            const healthPercent = (p.hp / p.maxHp) * 100;
-            return (
-              <div 
-                key={p.id} 
-                className={`flex justify-between items-center py-0 mb-0.5 ${p.isPlayer ? 'font-bold' : ''} ${p.isAlive ? '' : 'opacity-40'}`}
-              >
-                <div className="flex items-center">
-                  <span className="text-gray-400 w-4 text-right mr-1.5">{index + 1}.</span>
-                  <span className={`${p.isPlayer ? 'text-yellow-300' : 'text-white'} ${!p.isAlive ? 'line-through' : ''} truncate max-w-[90px]`}>
-                    {p.name}
-                  </span>
-                </div>
-                {/* Mini Health Bar */}
-                {p.isAlive && (
-                  <div className="w-8 h-1.5 bg-gray-800 border border-gray-700 rounded-sm overflow-hidden flex-shrink-0">
-                    <div 
-                      className={`h-full ${playerListHealthColor}`}
-                      style={{ width: `${healthPercent}%` }}
-                    ></div>
+          <div className="max-h-48 sm:max-h-80 overflow-y-auto">
+            {displayPlayers.slice(0, 15).map((p, index) => {
+              const playerListHealthColor = getHealthColor(p.hp, p.maxHp);
+              const healthPercent = (p.hp / p.maxHp) * 100;
+              return (
+                <div 
+                  key={p.id} 
+                  className={`flex justify-between items-center py-1 mb-1 ${p.isPlayer ? 'font-bold' : ''} ${p.isAlive ? '' : 'opacity-50'}`}
+                >
+                  <div className="flex items-center flex-1 min-w-0">
+                    <span className="text-gray-400 w-4 sm:w-5 text-right mr-2 text-xs">{index + 1}.</span>
+                    <span className={`${p.isPlayer ? 'text-yellow-300' : 'text-white'} ${!p.isAlive ? 'line-through' : ''} truncate text-xs sm:text-sm`}>
+                      {p.name}
+                    </span>
                   </div>
-                )}
-                {!p.isAlive && <span className="text-red-500 text-[8px] bg-red-900/20 px-1 rounded-sm">KO</span>}
-              </div>
-            );
-          })}
+                  {/* Mini Health Bar */}
+                  {p.isAlive && (
+                    <div className="w-8 sm:w-10 h-2 bg-gray-800 border border-gray-600 rounded-sm overflow-hidden flex-shrink-0 ml-2">
+                      <div 
+                        className={`h-full ${playerListHealthColor} transition-all duration-300`}
+                        style={{ width: `${healthPercent}%` }}
+                      ></div>
+                    </div>
+                  )}
+                  {!p.isAlive && <span className="text-red-500 text-xs bg-red-900/30 px-1 py-0.5 rounded-sm ml-2">KO</span>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Bottom Center: Player Health */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+      {/* Bottom Center: Player Health - Better positioning with safe margins */}
+      <div className="absolute bottom-4 sm:bottom-6 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
         {/* Health Bar */}
-        <div className="w-64 h-5 bg-black/70 border-2 border-yellow-500/50 rounded-md overflow-hidden p-0.5 shadow-lg">
+        <div className="w-64 sm:w-80 h-5 sm:h-6 bg-black/80 border-2 border-yellow-500/70 rounded-lg overflow-hidden p-1 shadow-xl backdrop-blur-sm">
           <div 
-            className={`h-full ${playerHealthBarColor} rounded-sm transition-all duration-300 ease-in-out`}
+            className={`h-full ${playerHealthBarColor} rounded-md transition-all duration-300 ease-in-out`}
             style={{ width: `${playerHealthPercentage}%` }}
           ></div>
-          {/* Optional: Text overlay on bar? */}
-          {/* <span className="absolute inset-0 flex items-center justify-center text-xs font-bold mix-blend-difference">{playerHP} / {maxHP}</span> */}
         </div>
         {/* HP Text Below Bar */}
-        <span className="mt-1 text-sm font-semibold bg-black/70 px-2 py-0.5 rounded border border-yellow-500/50 shadow-lg">
-           {playerHP} / {maxHp} HP
-        </span>
-        {/* // TODO: Consider adding status effect icons near health bar */}
+        <div className="mt-2 text-sm sm:text-base font-bold bg-black/80 border border-yellow-500/70 px-3 py-1 rounded-lg shadow-xl backdrop-blur-sm">
+          <span className="text-white">{playerHP}</span>
+          <span className="text-gray-400 mx-1">/</span>
+          <span className="text-white">{maxHp}</span>
+          <span className="text-yellow-400 ml-2">HP</span>
+        </div>
       </div>
 
-       {/* Bottom Right: Control Panel */}
-      <div className="absolute bottom-6 right-6 mr-4">
+      {/* Bottom Right: Control Panel - Better positioning with safe margins */}
+      <div className="absolute bottom-4 sm:bottom-6 right-2 sm:right-6">
         <ControlPanel />
       </div>
 

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SignatureVerificationError } from '@solana/wallet-adapter-base';
+
+// Custom error class for signature verification
+class SignatureVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignatureVerificationError';
+  }
+}
 
 // This would be a database or cache that stores valid claims
 const pendingWinnings = new Map<string, { amount: number, claimed: boolean, matchId: string }>();
@@ -20,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse the request body
     const body = await request.json();
-    const { walletAddress, amount, matchId } = body;
+    const { walletAddress, amount, signature, matchId } = body;
 
     // Basic validation
     if (!walletAddress || !amount || !matchId) {

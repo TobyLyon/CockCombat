@@ -5,7 +5,8 @@ import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import {
   PhantomWalletAdapter,
-  SolflareWalletAdapter,
+  LedgerWalletAdapter,
+  TorusWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import { clusterApiUrl, Commitment } from "@solana/web3.js";
 
@@ -67,19 +68,48 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
     confirmTransactionInitialTimeout: 60000, // 60 seconds
   }), []);
 
-  // Initialize wallet adapters
-  const wallets = useMemo(
-    () => [
+  // Initialize wallet adapters with deduplication
+  const wallets = useMemo(() => {
+    console.log('🔧 Re-initializing wallet adapters with more aggressive filtering...');
+    
+    const allWallets = [
       new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
-    []
-  );
+      new LedgerWalletAdapter(),
+      new TorusWalletAdapter(),
+    ];
+
+    console.log('📦 Created base wallet adapter instances:', allWallets.map(w => w.name));
+
+    const allowedWalletNames = new Set(['Phantom', 'Ledger', 'Torus']);
+    
+    const filteredWallets = allWallets.filter(wallet => {
+      const isAllowed = allowedWalletNames.has(wallet.name);
+      console.log(`${isAllowed ? '✅' : '🚫'} Filtering: ${wallet.name} is ${isAllowed ? 'ALLOWED' : 'DENIED'}`);
+      return isAllowed;
+    });
+
+    const uniqueWallets = filteredWallets.reduce((acc, current) => {
+        if (!acc.find((item) => item.name === current.name)) {
+            acc.push(current);
+        }
+        return acc;
+    }, [] as any[]);
+
+    console.log(`🔗 Final unique wallet list contains ${uniqueWallets.length} wallet(s):`, uniqueWallets.map(w => w.name));
+
+    return uniqueWallets;
+  }, []);
 
   return (
     <ConnectionProvider endpoint={network.endpoint} config={connectionConfig}>
-      <WalletProvider wallets={wallets} autoConnect={autoConnect}>
-        <WalletModalProvider>{children}</WalletModalProvider>
+      <WalletProvider 
+        wallets={wallets} 
+        autoConnect={autoConnect}
+        localStorageKey="solana-wallet-adapter"
+      >
+        <WalletModalProvider>
+          {children}
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );

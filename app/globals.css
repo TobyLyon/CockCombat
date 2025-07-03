@@ -58,6 +58,13 @@
     image-rendering: pixelated;
     font-smooth: never;
     -webkit-font-smoothing: none;
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+  }
+  
+  /* Ensure no scrolling on arena scenes */
+  html, body {
+    max-width: 100vw;
+    max-height: 100vh;
   }
 }
 

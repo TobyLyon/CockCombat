@@ -6,48 +6,109 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// User profile types
-export type UserProfile = {
-  id: string
+// Define database types
+export type UserProfile = Profile // Add alias for compatibility
+export type Profile = {
   wallet_address: string
-  username: string | null
+  username: string
+  date_created: string
+  last_login: string
+  profile_picture?: string
+  bio?: string
+  total_matches: number
   wins: number
   losses: number
-  cock_earned: number
-  cock_lost: number
-  chickens_owned: string[] // Array of chicken IDs
-  created_at: string
-  updated_at: string
+  win_streak: number
+  max_win_streak: number
+  total_tokens_won: number
+  total_tokens_lost: number
+  total_wagered: number
+  level: number
+  experience: number
+  next_level_xp: number
+  active_chicken_id?: string
+  token_balance: number
+}
+
+export type FunStats = {
+  fluffiness: number
+  attitudeProblem: number
+  eggQuality: string
+  wingspanInches: number
+  squawkVolume: number
+  pecksPerMinute: number
+  broodiness: string
+  favoriteFood: string
+  backtalkLevel: number
+  ninjaTechnique: string
+  intimidationFactor: number
+  karaokeSinging: string
 }
 
 // Chicken types
 export type Chicken = {
   id: string
-  owner_id: string
+  owner_wallet: string
   name: string
+  date_acquired: string
   level: number
+  experience: number
   wins: number
   losses: number
-  attributes: {
-    strength: number
-    speed: number
-    defense: number
-    health: number
-    special: number
-  }
-  appearance: {
-    color: string
-    crest: string
-    texture: string
-  }
-  created_at: string
-  updated_at: string
+  primary_color: string
+  secondary_color: string
+  trim_color: string
+  headgear?: string
+  body_armor?: string
+  weapon?: string
+  accessory?: string
+  fun_stats: FunStats
+  variant: string
+  personality: string
+  catchphrase: string
 }
 
-// Function to get or create a user profile
-export async function getOrCreateProfile(walletAddress: string): Promise<UserProfile | null> {
+export type Match = {
+  id: string
+  match_timestamp: string
+  player1_wallet: string
+  player1_chicken_id: string
+  player1_tokens_wagered: number
+  player2_wallet: string
+  player2_chicken_id: string
+  player2_tokens_wagered: number
+  winner_wallet?: string
+  duration_seconds: number
+  map: string
+  metadata?: any
+}
+
+export type Transaction = {
+  id: string
+  wallet_address: string
+  transaction_type: string
+  amount: number
+  timestamp: string
+  related_entity_id?: string
+  description?: string
+}
+
+export type Achievement = {
+  id: string
+  wallet_address: string
+  achievement_type: string
+  name: string
+  description: string
+  date_unlocked: string
+  icon?: string
+  reward_type?: string
+  reward_amount?: number
+  reward_id?: string
+}
+
+// Function to get a user profile
+export async function getProfile(walletAddress: string): Promise<Profile | null> {
   try {
-    // Check if profile exists
     const { data: existingProfile, error: fetchError } = await supabase
       .from('profiles')
       .select('*')
@@ -59,36 +120,9 @@ export async function getOrCreateProfile(walletAddress: string): Promise<UserPro
       return null
     }
 
-    // Return existing profile if found
-    if (existingProfile) {
-      return existingProfile as UserProfile
-    }
-
-    // Create new profile
-    const { data: newProfile, error: insertError } = await supabase
-      .from('profiles')
-      .insert([
-        {
-          wallet_address: walletAddress,
-          username: null,
-          wins: 0,
-          losses: 0,
-          cock_earned: 0,
-          cock_lost: 0,
-          chickens_owned: []
-        }
-      ])
-      .select()
-      .single()
-
-    if (insertError) {
-      console.error('Error creating profile:', insertError)
-      return null
-    }
-
-    return newProfile as UserProfile
+    return existingProfile as Profile
   } catch (error) {
-    console.error('Unexpected error in getOrCreateProfile:', error)
+    console.error('Unexpected error in getProfile:', error)
     return null
   }
 }
@@ -96,8 +130,8 @@ export async function getOrCreateProfile(walletAddress: string): Promise<UserPro
 // Function to update profile stats
 export async function updateProfileStats(
   profileId: string, 
-  stats: Partial<UserProfile>
-): Promise<UserProfile | null> {
+  stats: Partial<Profile>
+): Promise<Profile | null> {
   try {
     const { data, error } = await supabase
       .from('profiles')
@@ -114,7 +148,7 @@ export async function updateProfileStats(
       return null
     }
 
-    return data as UserProfile
+    return data as Profile
   } catch (error) {
     console.error('Unexpected error in updateProfileStats:', error)
     return null
@@ -122,12 +156,12 @@ export async function updateProfileStats(
 }
 
 // Function to get user's chickens
-export async function getUserChickens(profileId: string): Promise<Chicken[]> {
+export async function getUserChickens(walletAddress: string): Promise<Chicken[]> {
   try {
     const { data, error } = await supabase
       .from('chickens')
       .select('*')
-      .eq('owner_id', profileId)
+      .eq('owner_wallet', walletAddress)
 
     if (error) {
       console.error('Error fetching user chickens:', error)

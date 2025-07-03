@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl, Keypair } from '@solana/web3.js';
+import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 
 // This function creates and executes a payout transaction

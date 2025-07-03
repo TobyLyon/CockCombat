@@ -7,11 +7,11 @@ import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Loader2 } from 'lucide-react';
-import { PlayerStatus } from '@/contexts/GameStateContext';
+import { Player } from '@/hooks/use-battle-state';
 
 interface GameOverProps {
-  winner: PlayerStatus | null;
-  humanPlayer: PlayerStatus | null;
+  winner: Player | null;
+  humanPlayer: Player | null;
   onExit: () => void;
 }
 

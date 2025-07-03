@@ -4,7 +4,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import * as THREE from 'three';
 import { mockPlayers, soundMap } from '@/mocks/game-data';
 import { useAudio } from './AudioContext'; // Import useAudio
-import * as audioConfig from '@/lib/audio-config';
 
 // Define player status interface
 export interface PlayerStatus {
@@ -26,10 +25,10 @@ export interface PlayerStatus {
 }
 
 // Define the possible game states
-export type GameState = 'lobby' | 'queue' | 'battle' | 'game-over' | 'victory';
+export type GameState = "lobby" | "queue" | "battle" | "gameOver" | "winner";
 
 // Define main context type
-export interface GameContextProps {
+interface GameStateContextType {
   gameState: GameState;
   setGameState: (state: GameState) => void;
   volume: number;
@@ -38,11 +37,11 @@ export interface GameContextProps {
   toggleAudio: () => void;
   playerChicken: any; // Define more specifically later
   players: PlayerStatus[];
-  playSound: (soundKey: string, loop?: boolean) => void;
+  playSound: (sound: string) => void;
   handlePlayerDamage: (targetPlayerId: string, damageAmount?: number) => void;
   chickensLeft: number;
   inQueue: boolean;
-  joinQueue: (lobby: any) => void;
+  joinQueue: () => void;
   leaveQueue: () => void;
   startBattle: () => void;
   endBattle: () => void;
@@ -54,11 +53,10 @@ export interface GameContextProps {
   hasInteracted: boolean;
   setHasInteracted: (value: boolean) => void;
   prizeAmount: number; // Track the prize amount for the winner
-  activeLobby: any | null;
 }
 
 // Create the context with default values
-const GameStateContext = createContext<GameContextProps | undefined>(undefined);
+const GameStateContext = createContext<GameStateContextType | undefined>(undefined);
 
 // Define the chickenFeetOffsetY constant
 const chickenFeetOffsetY = 0.7;
@@ -201,7 +199,7 @@ const generateMockOpponents = (count: number) => {
 const initialPlayers = [...mockPlayers];
 
 // Provider component
-export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function GameStateProvider({ children }: { children: React.ReactNode }) {
   // Game state
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [selectedChicken, setSelectedChicken] = useState<any>(null);
@@ -225,18 +223,16 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentMusicTrack, setCurrentMusicTrack] = useState<'background' | 'arena' | null>(null);
 
   // Sound volume normalizations
-  const SOUND_VOLUMES: { [key: string]: number } = {
-    punch: 1.5,
-    hit: 1.5,
-    strong_punch: 1.2,
+  const SOUND_VOLUMES = {
+    punch: 1.5, // Increased from 0.7 to 1.5 for much louder punch sound
+    hit: 1.5, // Added hit sound at the same volume as punch
+    strong_punch: 1.2, // Increased from 0.6 to 1.2
     die: 0.8,
     pickup: 0.7,
     jump: 0.5,
     click: 0.6,
     arena: 0.4,
-    background: 0.3,
-    win: 1.0,
-    lose: 1.0,
+    background: 0.3
   };
 
   // Sound mappings
@@ -250,62 +246,38 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     button: '/sounds/click.mp3',
     arena: '/sounds/arena.mp3',
     background: '/sounds/background.mp3',
-    win: '/sounds/JESUS_CHRIST_2.mp3',
-    lose: '/sounds/die.mp3',
+    background_music: '/sounds/background.mp3',  // Add alias for background music
+    battle_start: '/sounds/arena.mp3',  // Add alias for battle music
+    victory: '/sounds/JESUS_CHRIST_2.MP3'  // Changed to JESUS_CHRIST_2.MP3
   };
 
-  // Use a ref to hold the audio object
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Create a memoized playSound function
-  const playSound = useCallback((soundKey: string, loop = false) => {
-    if (!audioEnabled || !hasInteracted) return;
+  // Initialize background music player
+  const playBackgroundMusic = useCallback((track: 'background' | 'arena') => {
+    const trackPath = `/sounds/${track}.mp3`;
     
-    if (loop) {
-      if (audioRef.current && audioRef.current.src.includes(soundMap[soundKey])) {
-        // If the same looped sound is already playing, do nothing
-        return;
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+    // Create audio element if it doesn't exist
+    if (!backgroundMusicRef.current) {
+      backgroundMusicRef.current = new Audio(trackPath);
+      backgroundMusicRef.current.loop = true;
     }
     
-    const soundPath = soundMap[soundKey];
-    if (!soundPath) return;
-
-    const audio = new Audio(soundPath);
-    audio.loop = loop;
-    
-    const soundVolume = SOUND_VOLUMES[soundKey as keyof typeof SOUND_VOLUMES] || 1.0;
-    audio.volume = volume * soundVolume;
-    
-    audio.play().catch(error => console.error(`Error playing sound: ${soundKey}`, error));
-
-    if (loop) {
-      audioRef.current = audio;
-    }
-  }, [volume, audioEnabled, hasInteracted]);
-  
-  // Effect to handle background music changes based on game state
-  useEffect(() => {
-    const playMusic = (track: 'background' | 'arena') => {
-      playSound(track, true);
+    // Only change source if we're switching tracks
+    if (currentMusicTrack !== track) {
+      backgroundMusicRef.current.src = trackPath;
       setCurrentMusicTrack(track);
-    };
-
-    if (gameState === 'lobby' || gameState === 'queue') {
-      playMusic('background');
-    } else if (gameState === 'battle') {
-      playMusic('arena');
-    } else if (gameState === 'game-over' || gameState === 'victory') {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
-      setCurrentMusicTrack(null);
     }
-  }, [gameState, playSound]);
+    
+    // Set the appropriate volume
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    backgroundMusicRef.current.volume = track === 'background' 
+      ? Math.min(1.0, clampedVolume * 1.5)
+      : clampedVolume;
+    
+    // Play only if audio is enabled
+    if (audioEnabled && hasInteracted) {
+      backgroundMusicRef.current.play().catch(console.error);
+    }
+  }, [volume, audioEnabled, hasInteracted, currentMusicTrack]);
 
   // === DEBUG PERFORMANCE ISSUES ===
   // Store all Three.js objects that need proper cleanup when unmounted
@@ -367,7 +339,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const handlePlayerDamage = (targetPlayerId: string, damageAmount = 1) => {
     let targetPlayer: PlayerStatus | undefined;
     let newHp = 0;
-        
+    
     // Use the functional form of setPlayers to ensure we have the latest state
     setPlayers(currentPlayers => {
       targetPlayer = currentPlayers.find(p => p.id === targetPlayerId);
@@ -381,7 +353,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       if (newHp <= 0) {
         // Player is defeated
-        playSound('die');
+        playSound('death');
         setLastDefeatedChickenId(targetPlayerId);
         
         const updatedPlayers = currentPlayers.map(p =>
@@ -399,7 +371,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             console.log("All players defeated.");
             setPrizeAmount(0);
           }
-          setGameState('game-over');
+          setGameState('gameOver');
         }
         return updatedPlayers;
         
@@ -432,36 +404,135 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => clearInterval(clearHitFlash);
   }, []);
   
+  // --- Simplified playSound for Effects ---
+  const playSound = useCallback((sound: string) => {
+    // Stop command remains
+    if (sound === 'stop_music') {
+      if (backgroundMusicRef.current) {
+        console.log('Stopping music via command');
+        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.currentTime = 0;
+        backgroundMusicRef.current = null;
+      }
+      return;
+    }
+
+    // Check global audio enabled state & interaction
+    if (!audioEnabled || !hasInteracted) return; 
+
+    const soundPath = soundMap[sound];
+    if (!soundPath) {
+        console.warn(`Sound key not found in soundMap: ${sound}`);
+        return;
+    }
+
+    // Exclude background tracks explicitly
+    if (sound === 'battle_start' || sound === 'victory' || sound === 'background_music') {
+        // console.warn(`playSound called for background track key: ${sound}. Background music is now handled automatically.`);
+        return; // Don't play background tracks as effects
+    }
+
+    // Play sound effect using audioRefs pool or create new?
+    // Using new Audio() is simpler and avoids potential issues with rapidly re-triggering the same effect ref
+    try {
+      const audio = new Audio(soundPath); 
+      audio.volume = (SOUND_VOLUMES[sound as keyof typeof SOUND_VOLUMES] || 0.7) * volume;
+      audio.play().catch(e => console.error(`Error playing sound effect ${sound}:`, e));
+    } catch (error) {
+        console.error(`Error creating audio element for ${sound}:`, error);
+    }
+
+  }, [audioEnabled, hasInteracted, volume]);
+
   // Join queue
-  const joinQueue = (lobby: any) => {
-    console.log("Joining queue for lobby:", lobby)
+  const joinQueue = useCallback(() => {
+    setInQueue(true);
     setGameState('queue');
-    playSound('click');
-  };
-  
-  // Leave queue
-  const leaveQueue = () => {
-    setGameState('lobby');
-    playSound('click');
-  };
+    playSound('button');
+    
+    // Generate lobby players if none exist yet
+    if (lobbyPlayers.length === 0) {
+      const ringRadius = 15; // Match the arena radius
+      const positions = generateOpponentPositions(7, ringRadius); // Changed to 7 opponents
+      
+      // Generate random opponents for the lobby with more descriptive names
+      const chickenNames = [
+        "Colonel Cluck", "Feather Fury", "Beak Breaker", 
+        "Wing Commander", "Rooster Rumble", "Hen Havoc",
+        "Talon Terror"
+      ];
+      
+      const opponents = Array.from({ length: 7 }).map((_, index) => { // Changed to 7 opponents
+        // Generate a random color scheme
+        const colors = generateChickenColors();
+        
+        return {
+          id: `opponent-${index + 1}`,
+          name: chickenNames[index], // Add name to the opponent
+          isPlayer: false,
+          position: positions[index].position,
+          rotation: positions[index].rotation,
+          colors,
+          hp: 3,
+          maxHp: 3,
+          isAlive: true,
+          visible: true,
+          isHitFlashing: false,
+          lastHitTime: 0
+        };
+      });
+      
+      setLobbyPlayers(opponents);
+    }
+  }, [playSound, lobbyPlayers.length]);
   
   // Start battle
-  const startBattle = () => {
+  const startBattle = useCallback(() => {
+    console.log('Starting battle with players:', players);
+    
+    // Use the exact chickens from the lobby for the battle
+    const battlePlayers = [
+      // Include the player
+      ...players.filter(p => p.isPlayer),
+      // Include all the lobby chickens with their exact names and appearance
+      ...lobbyPlayers
+    ];
+    
+    // Position ALL chickens (including player) around the ring
+    const ringRadius = 10; // Reduced from 20 to 10 for smaller arena
+    const totalChickens = battlePlayers.length;
+    const positions = generateOpponentPositions(totalChickens, ringRadius);
+    
+    // Update positions for all chickens
+    const positionedPlayers = battlePlayers.map((player, index) => ({
+      ...player,
+      position: positions[index].position,
+      rotation: positions[index].rotation
+    }));
+    
+    // Set initial chickens count
+    setChickensLeft(positionedPlayers.length);
+    
+    // Update players with positioned players
+    setPlayers(positionedPlayers);
+    
+    // Change game state to battle
     setGameState('battle');
-    // Sound for battle start is handled by the music useEffect
-  };
+    playSound('battle_start');
+  }, [players, lobbyPlayers, playSound]);
   
-  // End battle
-  const endBattle = () => {
-    setGameState('game-over');
-    playSound('die');
-  };
+  // Leave queue
+  const leaveQueue = useCallback(() => {
+    setInQueue(false);
+    setGameState('lobby');
+    playSound('button');
+  }, [playSound]);
   
   // Exit battle
-  const exitBattle = () => {
+  const exitBattle = useCallback(() => {
     setGameState('lobby');
-    playSound('click');
-  };
+    playSound('button');
+  }, [playSound]);
   
   // --- Need toggleAudio implementation --- 
   const toggleAudio = useCallback(() => {
@@ -527,6 +598,37 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setLobbyPlayers(positionedPlayers);
   }, [lobbyPlayers.length]);
   
+  // --- New useEffect for Background Music Management ---
+  useEffect(() => {
+    if (!hasInteracted || !audioEnabled) return;
+
+    // Determine target music based on game state
+    let targetTrack: 'background' | 'arena' | null = null;
+    if (gameState === 'battle') {
+      targetTrack = 'arena' as const;
+    } else if (gameState === 'lobby' || gameState === 'queue') {
+      targetTrack = 'background' as const;
+    }
+
+    // If we have a target track, play it
+    if (targetTrack) {
+      playBackgroundMusic(targetTrack);
+    } else if (backgroundMusicRef.current) {
+      // No target track, stop any playing music
+      backgroundMusicRef.current.pause();
+      backgroundMusicRef.current.currentTime = 0;
+    }
+
+    // Cleanup function
+    return () => {
+      if (backgroundMusicRef.current) {
+        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.currentTime = 0;
+      }
+    };
+  }, [gameState, audioEnabled, hasInteracted, playBackgroundMusic]);
+  // --- End Background Music useEffect ---
+  
   // The value provided to the context consumers
   const contextValue = {
     gameState,
@@ -544,7 +646,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     joinQueue,
     leaveQueue,
     startBattle,
-    endBattle,
+    endBattle: exitBattle,
     exitBattle,
     returnToMainMenu: exitBattle,
     lobbyPlayers,
@@ -553,7 +655,6 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     hasInteracted,
     setHasInteracted: () => {}, // Provide empty function
     prizeAmount,
-    activeLobby: null,
   };
   
   // Cleanup Three.js resources when unmounted
@@ -569,7 +670,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 }
 
 // Custom hook to use the game state context
-export const useGameState = () => {
+export function useGameState() {
   const context = useContext(GameStateContext);
   if (context === undefined) {
     throw new Error('useGameState must be used within a GameStateProvider');

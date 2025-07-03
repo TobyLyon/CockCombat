@@ -24,7 +24,6 @@ import {
 } from "@react-three/drei"
 import { PixelChicken } from "../3d/pixel-chicken-viewer"
 import { ArrowLeft } from "lucide-react";
-import GameUI from "./game-ui";
 import { useGameState, PlayerStatus } from "@/contexts/GameStateContext"
 import { ARENA_CONFIG } from "@/mocks/game-data"
 import PoofEffect from '../effects/poof-effect'; // Import the poof effect
@@ -716,55 +715,14 @@ export default React.memo(function EnhancedArenaScene({
 }: EnhancedArenaSceneProps) {
   // Use the game state context for additional state if needed
   const gameStateContext = useGameState();
-  
-  // Game state for UI
-  const [playerHealth, setPlayerHealth] = useState(3);
-  const [remainingPlayers, setRemainingPlayers] = useState(8);
-  const [matchTime, setMatchTime] = useState(180); // 3 minutes
-  const [isWinner, setIsWinner] = useState(false);
-  const [prizePool, setPrizePool] = useState(8); // 1 $COCK per player
-
-  // Update player health from props when it changes
-  useEffect(() => {
-    if (playerChicken) {
-      setPlayerHealth(playerChicken.hp);
-    }
-  }, [playerChicken]);
-
-  // Update remaining players count from props when it changes
-  useEffect(() => {
-    if (players) {
-      const alivePlayers = players.filter(p => p.isAlive).length;
-      setRemainingPlayers(alivePlayers);
-    }
-  }, [players]);
-
-  // Map the gameState to the values expected by GameUI
-  const mappedGameState = useMemo(() => {
-    if (gameState === "battle") return "playing";
-    if (gameState === "gameOver") return "gameOver";
-    return gameState;
-  }, [gameState]);
 
   return (
-    <div className="relative w-full h-full" style={{ backgroundColor: "#87CEEB" }}>
-      {/* Game UI */}
-      <GameUI
-        gameState={mappedGameState}
-        health={playerHealth}
-        remaining={remainingPlayers}
-        time={matchTime}
-        prize={prizePool}
-        peckCooldown={0} // Add this back to fix the type error
-        isWinner={isWinner}
-        onExit={onExit || (() => {})}
-      />
-      
+    <div className="w-full h-full overflow-hidden" style={{ backgroundColor: "#87CEEB" }}>
       <KeyboardControls map={controlsMap}>
         <Canvas 
           shadows 
           camera={{ position: [0, 5, 8], fov: 75 }}
-          style={{ background: "#87CEEB" }} // Set sky blue background
+          style={{ width: "100%", height: "100%", background: "#87CEEB" }}
         >
           {/* Add a blue sky */}
           <color attach="background" args={["#87CEEB"]} />

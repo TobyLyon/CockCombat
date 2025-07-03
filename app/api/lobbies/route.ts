@@ -1,113 +1,163 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
 
-// Define the structure for a lobby player
-export interface LobbyPlayer {
-  playerId: string;
-  chickenId: string;
-  isAi?: boolean;
-  isReady?: boolean;
-}
-
-// Define the structure for a lobby
+// Let's define a standard structure for our lobbies
 export interface Lobby {
   id: string;
   amount: number;
   currency: string;
-  players: LobbyPlayer[];
+  players: { playerId: string; chickenId: string; isAi?: boolean; username?: string }[];
   capacity: number;
-  high_roller: boolean;
+  highRoller: boolean;
   status: 'open' | 'starting' | 'in-progress';
-  match_type: 'ranked' | 'tutorial';
-  is_coming_soon?: boolean;
+  matchType: 'ranked' | 'tutorial';
+  isComingSoon?: boolean;
 }
 
-// Admin client for server-side operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SERVICE_ROLE_KEY!
-);
+// For now, we'll use a simple in-memory store for our lobbies.
+// In a production environment, this would be a database or a cache like Redis.
+export const lobbies: Lobby[] = [
+  { id: 'tutorial-match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
+  { id: 'lobby-0.05', amount: 0.05, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
+  { id: 'lobby-0.1', amount: 0.1, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
+  { id: 'lobby-0.25', amount: 0.25, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
+  { id: 'lobby-0.5', amount: 0.5, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
+  { id: 'lobby-1.0', amount: 1.0, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
+  { id: 'lobby-2.5', amount: 2.5, currency: "SOL", players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
+  { id: 'lobby-5.0', amount: 5.0, currency: "SOL", players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
+  { id: 'lobby-10.0', amount: 10.0, currency: "SOL", players: [], capacity: 2, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
+];
+
+const lobbyTimers = new Map<string, NodeJS.Timeout>();
+
+// Helper function to get profile username
+async function getPlayerUsername(playerId: string): Promise<string> {
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // The `setAll` method was called from a Server Component.
+              // This can be ignored if you have middleware refreshing
+              // user sessions.
+            }
+          },
+        },
+      }
+    );
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('wallet_address', playerId)
+      .single();
+
+    return profile?.username || playerId.slice(0, 8) + '...';
+  } catch (error) {
+    console.error('Error fetching username:', error);
+    return playerId.slice(0, 8) + '...';
+  }
+}
+
+function addAiPlayer(lobbyId: string) {
+  const lobby = lobbies.find(l => l.id === lobbyId);
+  if (lobby && lobby.players.length < lobby.capacity) {
+    const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+    const randomName = aiNames[Math.floor(Math.random() * aiNames.length)];
+    
+    const aiPlayer = {
+      playerId: `ai-${Math.random().toString(36).substring(2, 9)}`,
+      chickenId: 'default-ai-chicken',
+      isAi: true,
+      username: randomName,
+    };
+    lobby.players.push(aiPlayer);
+    console.log(`AI player added to lobby ${lobbyId}. Total players: ${lobby.players.length}`);
+    
+    // If lobby is now full, start the match
+    if (lobby.players.length === lobby.capacity) {
+      lobby.status = 'starting';
+      console.log(`Lobby ${lobbyId} is full and starting.`);
+      if (lobbyTimers.has(lobbyId)) {
+        clearTimeout(lobbyTimers.get(lobbyId)!);
+        lobbyTimers.delete(lobbyId);
+      }
+    }
+  }
+}
 
 // API handler to get the current state of all lobbies
-export async function GET() {
-  const { data, error } = await supabaseAdmin
-    .from('lobbies')
-    .select('*')
-    .order('amount', { ascending: true });
-
-  if (error) {
-    console.error("Error fetching lobbies:", error);
-    return NextResponse.json({ error: "Failed to fetch lobbies" }, { status: 500 });
-  }
-  return NextResponse.json(data);
+export async function GET(req: NextRequest) {
+  return NextResponse.json(lobbies);
 }
 
 // API handler for a player to join a lobby
 export async function POST(req: NextRequest) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const { lobbyId, playerId, chickenId } = await req.json();
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const lobby = lobbies.find(l => l.id === lobbyId);
+
+  if (!lobby) {
+    return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+  }
+
+  if (lobby.players.length >= lobby.capacity) {
+    return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+  }
+
+  // Check if player is already in the lobby
+  const existingPlayer = lobby.players.find(p => p.playerId === playerId);
+  if (existingPlayer) {
+    return NextResponse.json({ error: 'Player already in lobby' }, { status: 400 });
   }
   
-  const { lobbyId, chickenId } = await req.json();
+  // Use the provided playerId or generate a placeholder
+  const actualPlayerId = playerId || `player-${Math.random().toString(36).substring(2, 9)}`;
+  const actualChickenId = chickenId || 'default-chicken';
+  
+  // Get the player's username
+  const username = await getPlayerUsername(actualPlayerId);
+  
+  const player = { 
+    playerId: actualPlayerId, 
+    chickenId: actualChickenId, 
+    username: username 
+  };
+  lobby.players.push(player);
 
-  if (!lobbyId || !chickenId) {
-    return NextResponse.json({ error: 'Lobby ID and Chicken ID are required' }, { status: 400 });
+  console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}`);
+
+  if (lobby.matchType === 'tutorial' && lobby.players.length === 1) {
+    console.log(`Starting AI backfill timer for lobby ${lobbyId}`);
+    const timer = setTimeout(() => {
+      console.log(`AI backfill timer triggered for lobby ${lobbyId}`);
+      while(lobby.players.length < lobby.capacity) {
+        addAiPlayer(lobbyId);
+      }
+      lobbyTimers.delete(lobbyId);
+    }, 60000); // 60 seconds
+    lobbyTimers.set(lobbyId, timer);
   }
 
-  try {
-    // Fetch the current lobby state from the database
-    const { data: lobby, error: fetchError } = await supabaseAdmin
-      .from('lobbies')
-      .select('*')
-      .eq('id', lobbyId)
-      .single();
-
-    if (fetchError || !lobby) {
-      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+  if (lobby.players.length === lobby.capacity) {
+    lobby.status = 'starting';
+    if (lobby.matchType === 'tutorial' && lobbyTimers.has(lobbyId)) {
+      clearTimeout(lobbyTimers.get(lobbyId)!);
+      lobbyTimers.delete(lobbyId);
     }
-
-    if (lobby.players.length >= lobby.capacity) {
-      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
-    }
-    
-    if (lobby.players.some((p: LobbyPlayer) => p.playerId === session.user.id)) {
-      return NextResponse.json({ error: 'You are already in this lobby' }, { status: 400 });
-    }
-
-    // Add the new player to the players array
-    const newPlayer: LobbyPlayer = {
-      playerId: session.user.id,
-      chickenId: chickenId,
-      isReady: false,
-      isAi: false
-    };
-
-    const updatedPlayers = [...lobby.players, newPlayer];
-
-    // Update the lobby in the database
-    const { data: updatedLobby, error: updateError } = await supabaseAdmin
-      .from('lobbies')
-      .update({ players: updatedPlayers })
-      .eq('id', lobbyId)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error("Error updating lobby:", updateError);
-      return NextResponse.json({ error: 'Failed to join lobby' }, { status: 500 });
-    }
-
-    return NextResponse.json(updatedLobby);
-
-  } catch (error) {
-    console.error("Error processing lobby join:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred."
-    return NextResponse.json({ error: "Failed to process join request.", details: errorMessage }, { status: 500 });
   }
+
+  return NextResponse.json(lobby);
 } 

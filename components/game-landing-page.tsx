@@ -9,18 +9,31 @@ import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import Link from "next/link"
+import { useWalletPrompt } from "@/contexts/WalletPromptContext"
+import { useRouter } from "next/navigation"
 
 export default function GameLandingPage() {
   const { connected } = useWallet()
+  const { promptWallet } = useWalletPrompt()
+  const router = useRouter()
   const [showNavigation, setShowNavigation] = useState(false)
   const [audioEnabled, setAudioEnabled] = useState(false)
 
-  // Show game navigation after successful wallet connection
   useEffect(() => {
     if (connected) {
       setShowNavigation(true)
+      // Navigate to arena page after connection
+      router.push("/arena")
     }
-  }, [connected])
+  }, [connected, router])
+
+  const handlePlayNow = () => {
+    if (!connected) {
+      promptWallet()
+    } else {
+      router.push("/arena")
+    }
+  }
 
   // Handle audio toggle
   const toggleAudio = () => {
@@ -131,11 +144,7 @@ export default function GameLandingPage() {
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <Button
                     className="bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold py-3 px-8 rounded-lg text-lg shadow-lg transform transition hover:scale-105"
-                    onClick={() => {
-                      if (!connected) {
-                        document.querySelector("[aria-label='Connect Wallet']")?.click()
-                      }
-                    }}
+                    onClick={handlePlayNow}
                   >
                     PLAY NOW
                   </Button>
@@ -194,21 +203,21 @@ export default function GameLandingPage() {
             BATTLE YOUR WAY TO GLORY
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-6xl mx-auto">
+          <div className="grid grid-cols-3 gap-10 max-w-6xl mx-auto">
             <GameFeatureCard
               title="HYPERREALISTIC COMBAT"
               description="Experience intense voxel chicken battles with stunning graphics and realistic physics."
-              icon="/placeholder.svg?height=100&width=100"
+              icon="⚔️"
             />
             <GameFeatureCard
-              title="BREED CHAMPIONS"
-              description="Collect and breed the ultimate fighting chickens with unique traits and abilities."
-              icon="/placeholder.svg?height=100&width=100"
+              title="WAGER & WIN"
+              description="Put your tokens on the line in high-stakes matches and climb the leaderboard."
+              icon="💰"
             />
             <GameFeatureCard
-              title="EARN REWARDS"
-              description="Win battles, complete quests, and climb the ranks to earn $CLUCK tokens and rare items."
-              icon="/placeholder.svg?height=100&width=100"
+              title="OWN YOUR CHAMPION"
+              description="Mint, train, and customize your unique chicken NFT to dominate the arena."
+              icon="🏆"
             />
           </div>
 
@@ -222,36 +231,33 @@ export default function GameLandingPage() {
 
         {/* Roadmap section */}
         <div className="py-16 px-8">
-          <h2 className="text-4xl font-bold text-center mb-16 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">
+          <h2 className="text-4xl font-bold text-center mb-16 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500">
             ROADMAP
           </h2>
-
-          <div className="max-w-4xl mx-auto relative">
-            {/* Vertical line */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 h-full w-1 bg-gradient-to-b from-purple-500 to-blue-500"></div>
-
+          <div className="relative max-w-4xl mx-auto">
+            <div className="absolute left-1/2 top-0 bottom-0 w-1 bg-purple-700/50 transform -translate-x-1/2"></div>
             <RoadmapItem
               phase="PHASE 1"
-              title="LAUNCH"
-              description="Initial game release with core fighting mechanics and marketplace."
+              title="Launch & Mint"
+              description="Initial chicken minting event and launch of the core battle arena."
               position="left"
             />
             <RoadmapItem
               phase="PHASE 2"
-              title="TOURNAMENTS"
-              description="Weekly and monthly tournaments with prize pools and special rewards."
+              title="Tournaments & Leaderboards"
+              description="Introduction of competitive tournaments and global leaderboards."
               position="right"
             />
             <RoadmapItem
               phase="PHASE 3"
-              title="BREEDING"
-              description="Introduce chicken breeding mechanics to create unique fighters with special abilities."
+              title="Breeding & Customization"
+              description="Breed new chickens with unique traits and expand customization options."
               position="left"
             />
             <RoadmapItem
               phase="PHASE 4"
-              title="GUILDS"
-              description="Form fighting guilds with other players to compete in team tournaments."
+              title="Land Ownership & Economy"
+              description="Own a piece of the arena, build farms, and participate in the game's economy."
               position="right"
             />
           </div>
@@ -336,45 +342,49 @@ export default function GameLandingPage() {
   )
 }
 
-function GameFeatureCard({ title, description, icon }) {
+function GameFeatureCard({ title, description, icon }: { title: string; description: string; icon: string }) {
   return (
     <motion.div
-      className="bg-purple-800/30 backdrop-blur-sm border border-purple-500/50 rounded-lg p-6 hover:border-yellow-400/50 transition-all"
-      whileHover={{ y: -10 }}
+      className="bg-purple-800/30 backdrop-blur-sm border border-purple-500/50 rounded-lg p-6 text-center"
+      whileHover={{ scale: 1.05, y: -5 }}
       transition={{ type: "spring", stiffness: 300 }}
     >
-      <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg p-2 flex items-center justify-center">
-        <Image src={icon || "/placeholder.svg"} width={40} height={40} alt={title} />
-      </div>
-      <h3 className="text-xl font-bold mb-3 text-center text-yellow-400">{title}</h3>
-      <p className="text-purple-200 text-center">{description}</p>
+      <div className="text-4xl mb-4">{icon}</div>
+      <h3 className="font-bold text-xl mb-2 text-yellow-400">{title}</h3>
+      <p className="text-purple-200">{description}</p>
     </motion.div>
   )
 }
 
-function RoadmapItem({ phase, title, description, position }) {
-  return (
-    <div className={`flex mb-16 ${position === "left" ? "justify-start" : "justify-end"}`}>
-      <motion.div
-        className={`w-5/12 bg-purple-800/30 backdrop-blur-sm border border-purple-500/50 rounded-lg p-6 relative ${
-          position === "right" && "ml-auto"
-        }`}
-        initial={{ opacity: 0, x: position === "left" ? -50 : 50 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.5 }}
-      >
-        {/* Connector to timeline */}
-        <div
-          className={`absolute top-1/2 ${
-            position === "left" ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2"
-          } transform -translate-y-1/2 w-4 h-4 rounded-full bg-yellow-400`}
-        ></div>
+function RoadmapItem({
+  phase,
+  title,
+  description,
+  position,
+}: {
+  phase: string
+  title: string
+  description: string
+  position: "left" | "right"
+}) {
+  const alignment = position === "left" ? "text-right -mr-4" : "text-left -ml-4"
+  const contentAlignment = position === "left" ? "items-end" : "items-start"
 
-        <div className="text-sm font-bold text-purple-300 mb-2">{phase}</div>
-        <h3 className="text-xl font-bold mb-3 text-yellow-400">{title}</h3>
-        <p className="text-purple-200">{description}</p>
-      </motion.div>
+  return (
+    <div className={`flex my-8 ${position === "left" ? "justify-start" : "justify-end"}`}>
+      <div className={`w-1/2 px-4 ${position === "left" ? "pr-8" : "pl-8"}`}>
+        <motion.div
+          className="bg-purple-800/30 backdrop-blur-sm border border-purple-500/50 rounded-lg p-6"
+          initial={{ opacity: 0, x: position === "left" ? -50 : 50 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <p className="text-sm font-bold text-yellow-400 mb-2">{phase}</p>
+          <h3 className="text-2xl font-bold mb-3">{title}</h3>
+          <p className="text-purple-200">{description}</p>
+        </motion.div>
+      </div>
     </div>
   )
 }

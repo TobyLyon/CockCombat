@@ -43,8 +43,8 @@ export async function POST(request: Request) {
     // Set the fee payer for the transaction
     transaction.feePayer = playerPubkey;
 
-    // Get a recent blockhash to include in the transaction (using modern API)
-    const { blockhash } = await connection.getLatestBlockhash('finalized');
+    // Get a recent blockhash to include in the transaction
+    const { blockhash } = await connection.getRecentBlockhash();
     transaction.recentBlockhash = blockhash;
 
     // Serialize the transaction without signing it

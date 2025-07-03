@@ -9,6 +9,7 @@ import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2 } from
 import Link from "next/link"
 import EnhancedArenaScene from "./enhanced-arena-scene"
 import WaitingQueue from "./waiting-queue"
+import LobbyRoom from "./lobby-room"
 import { useAudio } from "@/contexts/AudioContext"
 import LoadingPixelChicken from "@/components/ui/loading-pixel-chicken"
 import BattleHUD from './battle-hud';
@@ -18,9 +19,6 @@ import { useGameState, GameState } from "@/contexts/GameStateContext"
 import { Lobby } from "@/app/api/lobbies/route";
 import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
-import supabase from '@/lib/supabase-client'
-import { useProfile } from "@/hooks/use-profile"
-import { toast } from "sonner"
 
 export default function BattleArena() {
   const router = useRouter()
@@ -31,7 +29,7 @@ export default function BattleArena() {
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [joinedLobby, setJoinedLobby] = useState<Lobby | null>(null);
-  const { activeChicken } = useProfile();
+  const [inLobbyRoom, setInLobbyRoom] = useState(false);
   
   // Use the game state context instead of local state
   const { 
@@ -60,15 +58,15 @@ export default function BattleArena() {
   // Check wallet connection on component mount
   useEffect(() => {
     const fetchLobbies = async () => {
+      setIsLoadingLobbies(true);
       try {
         const response = await fetch('/api/lobbies');
-        if (!response.ok) {
-          throw new Error('Failed to fetch lobbies');
+        if (response.ok) {
+          const data = await response.json();
+          setLobbies(data);
         }
-        const data: Lobby[] = await response.json();
-        setLobbies(data);
-      } catch (error) {
-        console.error(error);
+                    } catch (error: unknown) {
+        console.error('Failed to fetch lobbies:', error instanceof Error ? error.message : 'Unknown error');
       } finally {
         setIsLoadingLobbies(false);
       }
@@ -76,12 +74,16 @@ export default function BattleArena() {
 
     fetchLobbies();
 
-    // Set up an interval to poll for lobby updates.
-    // In a real-world app, you'd use WebSockets for this.
-    const interval = setInterval(fetchLobbies, 5000); // Poll every 5 seconds
+    // Reduce polling frequency to prevent constant reloads
+    // Only poll if not in lobby room to avoid interference
+    const interval = setInterval(() => {
+      if (!inLobbyRoom) {
+        fetchLobbies();
+      }
+    }, 10000); // Poll every 10 seconds instead of 5, and only when not in lobby room
 
     return () => clearInterval(interval);
-  }, []);
+  }, [inLobbyRoom]); // Add inLobbyRoom dependency
 
   useEffect(() => {
     const checkWallet = setTimeout(() => {
@@ -124,66 +126,57 @@ export default function BattleArena() {
 
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) {
-      toast.error("Wallet not connected", {
-        description: "Please connect your wallet to join a lobby.",
-      });
-      return;
-    }
-    if (!activeChicken) {
-      toast.error("No active chicken selected!", {
-        description: "Please go to your profile to select an active chicken.",
-        action: {
-          label: "Go to Profile",
-          onClick: () => router.push('/profile'),
-        },
-      });
+      console.error("Wallet not connected");
       return;
     }
 
+    console.log('🎯 Joining lobby:', lobby);
     setIsJoining(lobby.id);
 
     try {
-      // For non-free matches, you might have a wager flow here.
-      // For now, we'll treat all joins similarly.
+      // Generate random chicken for player
+      const randomChickens = ['warrior', 'ninja', 'berserker', 'mage', 'tank', 'assassin', 'paladin', 'archer'];
+      const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
+      console.log('🐔 Assigned random chicken:', randomChicken);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Not authenticated');
-      }
-
+      // Join the lobby (no wager transaction needed yet)
       const joinResponse = await fetch('/api/lobbies', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          chickenId: activeChicken.id,
+          playerId: publicKey.toBase58(),
+          chickenId: randomChicken,
         }),
       });
 
       if (!joinResponse.ok) {
         const errorData = await joinResponse.json();
+        
+        // If player is already in lobby, just show the lobby room
+        if (errorData.error === 'Player already in lobby') {
+          console.log('✅ Player already in lobby, showing lobby room');
+          setJoinedLobby(lobby);
+          setInLobbyRoom(true);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Failed to join lobby');
       }
 
-      const updatedLobby = await joinResponse.json();
+      const joinResult = await joinResponse.json();
+      console.log('✅ Successfully joined lobby:', joinResult);
 
-      // Update the main lobbies list
-      setLobbies(prevLobbies => 
-        prevLobbies.map(l => l.id === updatedLobby.id ? updatedLobby : l)
-      );
-      
-      // THIS IS THE FIX: Set the game state to 'queue' and store the joined lobby.
-      setJoinedLobby(updatedLobby);
-      joinQueue(updatedLobby); // Pass lobby data to the context
+      // Go to lobby room for ready-up phase (wager will be handled there)
+      console.log('🏠 Going to lobby room...');
+      setJoinedLobby(lobby);
+      setInLobbyRoom(true);
 
-    } catch (error) {
-      console.error("Failed to join lobby:", error);
-      toast.error("Failed to join lobby", {
-        description: error instanceof Error ? error.message : "An unknown error occurred.",
-      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("❌ Failed to join lobby:", errorMessage);
+      // Add user-facing error notification here (e.g., a toast)
+      alert(`Failed to join lobby: ${errorMessage}`);
     } finally {
       setIsJoining(null);
     }
@@ -202,101 +195,173 @@ export default function BattleArena() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gray-900 text-white flex flex-col" style={{
+    <div className="h-screen w-screen relative bg-gray-900 text-white flex flex-col overflow-hidden" style={{
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
-      <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
-        {gameState === "lobby" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6">
-            <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-xl p-6 sm:p-8 max-w-5xl w-full text-center shadow-2xl shadow-yellow-500/5">
-              <h2 className="text-4xl sm:text-5xl font-bold mb-2 text-yellow-400 pixel-font">CHOOSE YOUR ARENA</h2>
-              <p className="text-gray-400 mb-8 max-w-lg mx-auto">Select a lobby to wager and fight for the prize pool. Winner takes all!</p>
-              
-              {isLoadingLobbies ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="h-16 w-16 animate-spin text-yellow-400"/>
-                </div>
-              ) : (
-                <motion.div 
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-                  variants={{
-                    hidden: {},
-                    show: {
-                      transition: {
-                        staggerChildren: 0.1,
-                      },
-                    },
-                  }}
-                  initial="hidden"
-                  animate="show"
-                >
-                  {lobbies.map((lobby) => (
-                    <motion.div
-                      key={lobby.id}
-                      variants={{
-                        hidden: { opacity: 0, y: 20 },
-                        show: { opacity: 1, y: 0 },
-                      }}
-                      whileHover={{ scale: 1.05, y: -5 }}
-                      className={`relative overflow-hidden bg-gray-800/50 border rounded-lg flex flex-col justify-between transition-all duration-300 group
-                        ${lobby.high_roller 
-                          ? 'border-red-500/50 hover:border-red-500' 
-                          : 'border-gray-700/50 hover:border-yellow-500'}`
-                      }
-                    >
-                      <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-br from-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity`}></div>
-                      {lobby.high_roller && <div className="absolute inset-0 bg-red-500/10 animate-pulse-slow"></div>}
-                      <div className={`absolute -top-12 -right-12 text-6xl opacity-5 group-hover:opacity-10 transition-opacity duration-300 ${lobby.high_roller ? 'text-red-400' : 'text-yellow-400'}`}>
-                        {lobby.high_roller ? <Flame /> : <Swords />}
-                      </div>
-                      
-                      <div className="p-5 sm:p-6 z-10 flex flex-col flex-grow">
-                        <div className="mb-4 flex-grow">
-                          <p className={`text-sm uppercase tracking-widest ${lobby.high_roller ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {lobby.high_roller ? 'High-Roller' : 'Wager'}
-                          </p>
-                          <h3 className="text-3xl font-bold pixel-font text-white">
-                            {lobby.amount} <span className="text-2xl opacity-80">{lobby.currency}</span>
-                          </h3>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2 text-gray-400">
-                            <Users className="h-4 w-4" />
-                            <span>{lobby.players.length} / {lobby.capacity}</span>
-                          </div>
-                        </div>
-                      </div>
+      <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-hidden">
 
-                      <div className="p-3 bg-black/20 z-10">
-                        <Button 
-                          className={`w-full font-bold text-lg pixel-font transition-all ${
-                            lobby.players.length >= lobby.capacity ? 'bg-gray-600 cursor-not-allowed' :
-                            lobby.high_roller 
-                              ? 'bg-red-600 hover:bg-red-500 text-white' 
-                              : 'bg-yellow-500 hover:bg-yellow-400 text-black'
-                          }`}
-                          onClick={() => handleJoinLobby(lobby)}
-                          disabled={isJoining === lobby.id || lobby.players.length >= lobby.capacity || lobby.is_coming_soon}
-                        >
-                          {isJoining === lobby.id ? (
-                            <Loader2 className="h-6 w-6 animate-spin" />
-                          ) : lobby.is_coming_soon ? (
-                            'Coming Soon'
-                          ) : (
-                            lobby.players.length >= lobby.capacity ? 'Lobby Full' : 'Join Match'
-                          )}
-                        </Button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              )}
+        {gameState === "lobby" && (
+          <div className="flex-1 flex h-full max-h-full gap-4 overflow-hidden">
+            {/* Main Lobby Selection - Left Side (Priority) */}
+            <div className={`transition-all duration-300 ${inLobbyRoom ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 overflow-hidden`}>
+              <div className="p-4 border-b border-gray-700/50 flex-shrink-0">
+                <h1 className="text-3xl lg:text-4xl font-bold text-yellow-400 pixel-font mb-2">BATTLE ARENAS</h1>
+                <p className="text-gray-400 text-sm lg:text-base">Select your arena and dominate the competition</p>
+              </div>
+              
+              <div className="flex-1 p-4 overflow-y-auto">
+                {isLoadingLobbies ? (
+                  <div className="flex justify-center items-center h-64">
+                    <div className="flex flex-col items-center gap-4">
+                      <Loader2 className="h-16 w-16 animate-spin text-yellow-400"/>
+                      <p className="text-gray-400 pixel-font">Loading Arenas...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4 max-w-full">
+                    {lobbies.map((lobby) => (
+                      <motion.div
+                        key={lobby.id}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        className={`relative overflow-hidden bg-gradient-to-br from-gray-800/90 to-gray-900/90 border-2 rounded-xl p-4 lg:p-6 cursor-pointer transition-all duration-300 group backdrop-blur-sm min-w-0
+                          ${lobby.highRoller 
+                            ? 'border-red-500/50 hover:border-red-400 hover:shadow-red-500/20' 
+                            : 'border-gray-600/50 hover:border-yellow-400 hover:shadow-yellow-500/20'} 
+                          ${joinedLobby?.id === lobby.id ? 'ring-2 ring-yellow-400 border-yellow-400' : ''}
+                          hover:shadow-xl`}
+                        onClick={() => !isJoining && handleJoinLobby(lobby)}
+                      >
+                        {/* Glow Effect */}
+                        <div className={`absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${
+                          lobby.highRoller ? 'from-red-500 to-red-600' : 'from-yellow-400 to-yellow-500'
+                        }`}></div>
+                        
+                        {/* High Roller Badge */}
+                        {lobby.highRoller && (
+                          <div className="absolute top-3 right-3 bg-red-600 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                            <Flame className="h-3 w-3" />
+                            VIP
+                          </div>
+                        )}
+                        
+                        {/* Coming Soon Overlay */}
+                        {lobby.isComingSoon && (
+                          <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                            <span className="text-yellow-400 font-bold text-sm lg:text-lg pixel-font">COMING SOON</span>
+                          </div>
+                        )}
+                        
+                        <div className="relative z-10">
+                          {/* Entry Amount */}
+                          <div className="mb-3 lg:mb-4">
+                            <div className={`text-2xl lg:text-3xl font-bold pixel-font ${lobby.highRoller ? 'text-red-400' : 'text-yellow-400'}`}>
+                              {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
+                            </div>
+                            <div className="text-xs lg:text-sm text-gray-400 uppercase tracking-wide">
+                              {lobby.amount === 0 ? 'Tutorial Match' : 'Entry Fee'}
+                            </div>
+                          </div>
+                          
+                          {/* Players Count */}
+                          <div className="flex items-center justify-between mb-3 lg:mb-4">
+                            <div className="flex items-center gap-2 text-gray-300">
+                              <Users className="h-4 w-4" />
+                              <span className="font-semibold text-sm lg:text-base">
+                                {Array.isArray(lobby.players) ? lobby.players.length : lobby.players} / {lobby.capacity}
+                              </span>
+                            </div>
+                            
+                            {/* Status Indicator */}
+                            <div className={`px-2 py-1 rounded-full text-xs font-bold ${
+                              (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity
+                                ? 'bg-red-600/20 text-red-400 border border-red-600/30'
+                                : (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) > 0
+                                ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30'
+                                : 'bg-green-600/20 text-green-400 border border-green-600/30'
+                            }`}>
+                              {(Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity 
+                                ? 'FULL' 
+                                : (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) > 0 
+                                ? 'ACTIVE' 
+                                : 'OPEN'}
+                            </div>
+                          </div>
+                          
+                          {/* Action Button */}
+                          <Button
+                            className={`w-full font-bold py-2 px-3 lg:px-4 rounded-lg transition-all duration-300 border-2 text-sm lg:text-base ${
+                              lobby.isComingSoon
+                                ? 'bg-gray-600 border-gray-700 text-gray-400 cursor-not-allowed'
+                                : isJoining === lobby.id
+                                ? 'bg-blue-600 border-blue-700 text-white'
+                                : joinedLobby?.id === lobby.id
+                                ? 'bg-yellow-600 border-yellow-700 text-black'
+                                : lobby.highRoller 
+                                ? 'bg-red-600/80 hover:bg-red-500 border-red-700 text-white hover:border-red-500' 
+                                : 'bg-yellow-500/80 hover:bg-yellow-400 border-yellow-600 text-black hover:border-yellow-400'
+                            }`}
+                            disabled={isJoining === lobby.id || (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity || lobby.isComingSoon}
+                          >
+                            {lobby.isComingSoon 
+                              ? 'COMING SOON'
+                              : isJoining === lobby.id 
+                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Joining...</>
+                                : joinedLobby?.id === lobby.id
+                                ? '✓ JOINED'
+                                : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'LOBBY FULL' : 'JOIN ARENA')
+                            }
+                          </Button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Lobby Room Details - Right Side (Compact) */}
+            {inLobbyRoom && joinedLobby && (
+              <div className="w-1/3 min-w-80 border-l border-gray-700/50 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-gray-700/50 flex-shrink-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg lg:text-xl font-bold text-yellow-400 pixel-font">LOBBY ROOM</h2>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setInLobbyRoom(false);
+                        setJoinedLobby(null);
+                      }}
+                      className="bg-red-600/20 border-red-600 text-red-400 hover:bg-red-600/30"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-400">
+                    {joinedLobby.amount === 0 ? 'Free Practice' : `${joinedLobby.amount} ${joinedLobby.currency} Wager`}
+                  </p>
+                </div>
+                
+                <div className="flex-1 overflow-hidden">
+                  <LobbyRoom
+                    lobby={joinedLobby}
+                    onLeaveLobby={() => {
+                      setInLobbyRoom(false);
+                      setJoinedLobby(null);
+                    }}
+                    onStartMatch={() => {
+                      setInLobbyRoom(false);
+                      joinQueue();
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {gameState === "queue" && joinedLobby && (
-          <div className="flex-1 flex flex-col items-center justify-center p-6">
+        {gameState === "queue" && joinedLobby && !inLobbyRoom && (
+          <div className="flex-1 flex flex-col items-center justify-center p-4 lg:p-6 max-w-full max-h-full overflow-hidden">
             <WaitingQueue
               lobby={joinedLobby}
               onLeaveQueue={leaveQueue}
@@ -307,60 +372,63 @@ export default function BattleArena() {
         )}
 
         {gameState === "battle" && (
-          <div className="flex-1 relative overflow-hidden">
+          <div className="flex-1 w-full h-full relative overflow-hidden">
             <BattleHUD 
               playerHP={playerHP} 
               chickensLeft={chickensLeft} 
               players={players}
             />
 
-            {/* Add other UI elements here as needed */}
-            <EnhancedArenaScene 
-              gameState={gameState}
-              playerChicken={playerChicken}
-              onExit={exitBattle}
-              onPlayerDamage={handlePlayerDamage}
-              onDrumstickCollected={handleDrumstickCollected}
-              playSound={playSound}
-              players={players}
-            />
+            <div className="absolute inset-0 w-full h-full">
+              <EnhancedArenaScene 
+                gameState={gameState}
+                playerChicken={playerChicken}
+                onExit={exitBattle}
+                onPlayerDamage={handlePlayerDamage}
+                onDrumstickCollected={handleDrumstickCollected}
+                playSound={playSound}
+                players={players}
+              />
+            </div>
           </div>
         )}
         
-        {gameState === "game-over" && (
-          <div className="flex-1 relative">
-            {/* Keep showing the arena in the background */}
-            <EnhancedArenaScene 
-              gameState={gameState}
-              playerChicken={playerChicken}
-              onExit={exitBattle}
-              onPlayerDamage={handlePlayerDamage}
-              onDrumstickCollected={handleDrumstickCollected}
-              playSound={playSound}
-              players={players}
-            />
+        {gameState === "gameOver" && (
+          <div className="flex-1 w-full h-full relative overflow-hidden">
+            <div className="absolute inset-0 w-full h-full">
+              <EnhancedArenaScene 
+                gameState={gameState}
+                playerChicken={playerChicken}
+                onExit={exitBattle}
+                onPlayerDamage={handlePlayerDamage}
+                onDrumstickCollected={handleDrumstickCollected}
+                playSound={playSound}
+                players={players}
+              />
+            </div>
             
             {/* Show game over screen */}
             <GameOver 
-              winner={players.find(p => p.isAlive) || null}
+              winner={isVictorious ? (playerChicken || null) : null}
               humanPlayer={playerChicken || null}
-              onExit={exitBattle} 
+              onExit={exitBattle}
             />
           </div>
         )}
         
-        {gameState === "victory" && (
-          <div className="flex-1 relative">
-            {/* Keep showing the arena in the background */}
-            <EnhancedArenaScene 
-              gameState={gameState}
-              playerChicken={playerChicken}
-              onExit={exitBattle}
-              onPlayerDamage={handlePlayerDamage}
-              onDrumstickCollected={handleDrumstickCollected}
-              playSound={playSound}
-              players={players}
-            />
+        {gameState === "winner" && (
+          <div className="flex-1 w-full h-full relative overflow-hidden">
+            <div className="absolute inset-0 w-full h-full">
+              <EnhancedArenaScene 
+                gameState={gameState}
+                playerChicken={playerChicken}
+                onExit={exitBattle}
+                onPlayerDamage={handlePlayerDamage}
+                onDrumstickCollected={handleDrumstickCollected}
+                playSound={playSound}
+                players={players}
+              />
+            </div>
             
             {/* Show winner celebration screen */}
             <WinnerCelebration />
@@ -368,8 +436,8 @@ export default function BattleArena() {
         )}
       </main>
 
-      {gameState !== "battle" && gameState !== "game-over" && gameState !== "victory" && (
-        <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs">
+      {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
+        <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs flex-shrink-0">
           <p> {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
         </footer>
       )}

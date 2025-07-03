@@ -31,6 +31,11 @@ const gameRooms = new Map<string, GameRoom>();
 // Global variable to store the Socket.io instance, typed
 let io: SocketIOServer | undefined;
 
+// This is a new function to get the IO instance
+export function getIoInstance() {
+  return io;
+}
+
 // Define a type for the NextApiResponse with socket properties
 interface SocketApiResponse extends NextApiResponse {
   socket: NetSocket & {
@@ -59,22 +64,21 @@ function initializeSocketIO(server: AugmentedHttpServer): SocketIOServer {
      console.log(`--> Client Connected: ${socket.id}`);
      activeConnections.set(socket.id, { socket, status: "idle" });
 
-     // Join Queue Handler
-     socket.on("join_queue", (playerData: any) => {
-       console.log(`<- Player ${socket.id} joined queue`);
-       activeConnections.set(socket.id, { socket, status: "queued", playerData, joinedAt: Date.now() });
-       matchPlayers(io); // Pass io instance
+     // Handler for clients to join a lobby-specific room
+     socket.on("join_lobby_room", (lobbyId: string) => {
+       if (lobbyId) {
+         console.log(`<- Client ${socket.id} is joining lobby room: ${lobbyId}`);
+         socket.join(lobbyId);
+       }
      });
 
-     // Leave Queue Handler
-     socket.on("leave_queue", () => {
-        console.log(`<- Player ${socket.id} left queue`);
-        const connection = activeConnections.get(socket.id);
-        if (connection?.status === "queued") {
-           connection.status = "idle";
-           activeConnections.set(socket.id, connection);
-        }
-     });
+     // Handler for clients to leave a lobby-specific room
+     socket.on("leave_lobby_room", (lobbyId: string) => {
+      if (lobbyId) {
+        console.log(`<- Client ${socket.id} is leaving lobby room: ${lobbyId}`);
+        socket.leave(lobbyId);
+      }
+    });
 
      // Spectate Match Handler
      socket.on("spectate_match", ({ matchId }: { matchId: string }) => {
@@ -151,7 +155,8 @@ function initializeSocketIO(server: AugmentedHttpServer): SocketIOServer {
   return io;
 }
 
-// Match players in the queue
+// Match players in the queue - THIS FUNCTION IS NOW DEPRECATED AND WILL BE REMOVED.
+/*
 function matchPlayers(io: SocketIOServer) {
   const queuedPlayers: (ConnectionData & { id: string })[] = [];
 
@@ -207,6 +212,7 @@ function matchPlayers(io: SocketIOServer) {
     }
   }
 }
+*/
 
 // Initialize game state
 function initializeGameState(player1: ConnectionData & { id: string }, player2: ConnectionData & { id: string }) {
@@ -337,7 +343,8 @@ export default function handler(req: any, res: SocketApiResponse) {
   if (!res.socket.server.io) {
     console.log(" Attaching Socket.IO to server...");
     // Pass the HttpServer instance directly and attach io to it
-    res.socket.server.io = initializeSocketIO(res.socket.server);
+    io = initializeSocketIO(res.socket.server); // Assign to global io
+    res.socket.server.io = io;
      console.log(" Socket.IO attached and event listeners set up.");
   } else {
     console.log("Socket.IO already attached.");

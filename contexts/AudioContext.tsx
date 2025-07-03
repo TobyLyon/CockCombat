@@ -49,63 +49,58 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [volume, setVolume] = useState(0.05); // 10% volume default - Halved from 0.1
   const [currentMusicTrack, setCurrentMusicTrack] = useState<string | null>(null);
   
-  // References to audio elements
+  // A single, stable audio element for background music.
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
   
-  // Handle user interaction to enable audio
+  // Create the audio element once on mount (client-side).
   useEffect(() => {
-    const handleInteraction = () => {
-      if (!hasInteracted) {
-        setHasInteracted(true);
-        
-        // Try to play silent audio to unblock audio context
-        try {
-          const audio = new Audio();
-          audio.volume = 0;
-          audio.play().catch(() => {});
-        } catch (e) {
-          console.error("Error initializing audio:", e);
-        }
+    backgroundMusicRef.current = new Audio();
+    backgroundMusicRef.current.loop = true;
+    const audioEl = backgroundMusicRef.current;
+    return () => {
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = '';
       }
     };
-    
-    window.addEventListener('click', handleInteraction);
-    window.addEventListener('touchstart', handleInteraction);
-    window.addEventListener('keydown', handleInteraction);
-    
+  }, []);
+  
+  // Handle user interaction to enable audio playback.
+  useEffect(() => {
+    const handleInteraction = () => setHasInteracted(true);
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true });
+    window.addEventListener('keydown', handleInteraction, { once: true });
     return () => {
       window.removeEventListener('click', handleInteraction);
       window.removeEventListener('touchstart', handleInteraction);
       window.removeEventListener('keydown', handleInteraction);
     };
-  }, [hasInteracted]);
+  }, []);
   
-  // Toggle audio enabled state
-  const toggleAudio = useCallback(() => {
-    setAudioEnabled(prev => !prev);
-    // The actual play/pause logic will be handled by effects listening to audioEnabled,
-    // such as the useEffect in ProfilePage.tsx or a centralized effect in AudioContext itself
-    // if music playback needs to be managed more globally (e.g., persisting across pages).
-  }, [setAudioEnabled]); // setAudioEnabled is stable and typically doesn't need to be a dependency
-  
-  // Clean up audio when unmounting
+  // Dedicated effect to apply volume changes from the slider.
   useEffect(() => {
-    return () => {
-      // Clean up background music
-      if (backgroundMusicRef.current) {
-        backgroundMusicRef.current.pause();
-        backgroundMusicRef.current.src = '';
-      }
-      
-      // Clean up all sound effects
-      Object.values(audioRefs.current).forEach(audio => {
-        audio.pause();
-        audio.src = '';
-      });
-      
-      audioRefs.current = {};
-    };
+    const audio = backgroundMusicRef.current;
+    if (audio) {
+      audio.volume = SOUND_VOLUMES.music * volume;
+    }
+  }, [volume]);
+  
+  // Dedicated effect to handle the master audio toggle (pause/resume).
+  useEffect(() => {
+    const audio = backgroundMusicRef.current;
+    if (!audio) return;
+
+    if (audioEnabled && audio.src && hasInteracted) {
+      audio.play().catch((e) => console.error("Error resuming music:", e));
+    } else {
+      audio.pause();
+    }
+  }, [audioEnabled, hasInteracted]);
+  
+  const toggleAudio = useCallback(() => {
+    setAudioEnabled((prev) => !prev);
   }, []);
   
   // Play a sound effect
@@ -128,7 +123,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       audio.play()
         .then(() => {
           audio.addEventListener('ended', () => {
-            audio.remove(); // Clean up the audio element
+            // @ts-ignore
+            audio.remove();
           });
         })
         .catch(e => console.error(`Error playing sound (${sound}):`, e));
@@ -139,61 +135,42 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   
   // Play background music
   const playMusic = useCallback((musicPath: string) => {
-    if (!audioEnabled || !hasInteracted) return;
-    
-    // If this track is already playing, don't restart it
-    if (currentMusicTrack === musicPath && backgroundMusicRef.current) return;
-    
-    try {
-      // Stop any current music
-      if (backgroundMusicRef.current) {
-        backgroundMusicRef.current.pause();
-        backgroundMusicRef.current.src = '';
-      }
-      
-      // Create a new audio element for music
-      const audio = new Audio(musicPath);
-      backgroundMusicRef.current = audio;
-      
-      // Set up audio properties
-      audio.loop = true;
-      audio.volume = SOUND_VOLUMES.music * volume;
-      
-      // Play the music
-      audio.play()
-        .then(() => {
-          setCurrentMusicTrack(musicPath);
-        })
-        .catch(e => {
-          console.error(`Error playing music (${musicPath}):`, e);
-          setCurrentMusicTrack(null);
-        });
-    } catch (error) {
-      console.error('Error playing background music:', error);
-      setCurrentMusicTrack(null);
+    const audio = backgroundMusicRef.current;
+    if (!hasInteracted || !audio || currentMusicTrack === musicPath) {
+      return;
     }
-  }, [audioEnabled, hasInteracted, volume, currentMusicTrack]);
+
+    setCurrentMusicTrack(musicPath);
+    audio.src = musicPath;
+
+    if (audioEnabled) {
+      audio.play().catch((e) => console.error(`Error playing music (${musicPath}):`, e));
+    }
+  }, [audioEnabled, hasInteracted, currentMusicTrack]);
   
   // Stop the current music
   const stopMusic = useCallback(() => {
-    if (backgroundMusicRef.current) {
-      backgroundMusicRef.current.pause();
-      backgroundMusicRef.current.src = '';
+    const audio = backgroundMusicRef.current;
+    if (audio) {
+      audio.pause();
+      audio.src = '';
       setCurrentMusicTrack(null);
     }
   }, []);
   
   // Pause the current music
   const pauseMusic = useCallback(() => {
-    if (backgroundMusicRef.current) {
-      backgroundMusicRef.current.pause();
+    const audio = backgroundMusicRef.current;
+    if (audio) {
+      audio.pause();
     }
   }, []);
   
   // Resume the current music
   const resumeMusic = useCallback(() => {
-    if (backgroundMusicRef.current && audioEnabled && hasInteracted) {
-      backgroundMusicRef.current.play().catch(e => console.error("Error resuming music:", e));
+    const audio = backgroundMusicRef.current;
+    if (audio && audio.src && audioEnabled && hasInteracted) {
+      audio.play().catch((e) => console.error("Error resuming music:", e));
     }
   }, [audioEnabled, hasInteracted]);
   
@@ -250,32 +227,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [audioEnabled, hasInteracted, playSound]);
   
   // Play a random sound from an array of sounds
-  const playRandomSound = useCallback((sounds: string[], options?: { minDelay?: number; maxDelay?: number }) => {
-    if (!audioEnabled || !hasInteracted || sounds.length === 0) return;
-    
-    // Default options
-    const { minDelay = 0, maxDelay = 0 } = options || {};
-    
-    // Select a random sound
-    const randomIndex = Math.floor(Math.random() * sounds.length);
-    const selectedSound = sounds[randomIndex];
-    
-    if (minDelay === 0 && maxDelay === 0) {
-      // Play immediately
-      playSound(selectedSound);
-    } else {
-      // Calculate random delay between min and max
-      const delay = minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1));
-      playSoundWithDelay(selectedSound, delay);
-    }
-  }, [audioEnabled, hasInteracted, playSound, playSoundWithDelay]);
-  
-  // Update background music volume when global volume changes
-  useEffect(() => {
-    if (backgroundMusicRef.current) {
-      backgroundMusicRef.current.volume = SOUND_VOLUMES.music * volume;
-    }
-  }, [volume]);
+  const playRandomSound = useCallback(
+    (
+      sounds: string[],
+      options: { minDelay?: number; maxDelay?: number } = {}
+    ) => {
+      if (!audioEnabled || !hasInteracted) return
+
+      const { minDelay = 0, maxDelay = 0 } = options
+      const delay = minDelay + Math.random() * (maxDelay - minDelay)
+      const randomSound = sounds[Math.floor(Math.random() * sounds.length)]
+
+      setTimeout(() => {
+        playSound(randomSound)
+      }, delay)
+    },
+    [audioEnabled, hasInteracted, playSound]
+  )
   
   // Expose the context value
   const contextValue: AudioContextType = {

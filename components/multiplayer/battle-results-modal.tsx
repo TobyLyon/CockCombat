@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useProfile } from "@/hooks/use-profile"
+import { useProfile } from "@/contexts/ProfileContext"
 import { useAudio } from "@/contexts/AudioContext"
 import confetti from "canvas-confetti"
 import { useEffect, useState } from "react"

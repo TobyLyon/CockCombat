@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProfileService } from '@/lib/profile-service';
-import { Match } from '@/lib/supabase-client';
+import { Match } from '@/lib/supabase';
 
 /**
  * Record a new match for a wallet
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { walletAddress: string } }
+  { params }: { params: Promise<{ walletAddress: string }> }
 ) {
   try {
-    const { walletAddress } = params;
+    const { walletAddress } = await params;
     
     if (!walletAddress) {
       return NextResponse.json(
@@ -48,10 +48,10 @@ export async function POST(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { walletAddress: string } }
+  { params }: { params: Promise<{ walletAddress: string }> }
 ) {
   try {
-    const { walletAddress } = params;
+    const { walletAddress } = await params;
     
     if (!walletAddress) {
       return NextResponse.json(

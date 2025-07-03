@@ -1,5 +1,5 @@
-import MarketplacePage from "@/components/pages/marketplace-page"
+import Marketplace from "@/components/marketplace/marketplace"
 
-export default function Marketplace() {
-  return <MarketplacePage />
+export default function MarketplacePage() {
+  return <Marketplace />
 }

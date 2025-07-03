@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProfileService } from '@/lib/profile-service';
-import { Chicken } from '@/lib/supabase-client';
+import { Chicken } from '@/lib/supabase';
 
 /**
  * Get all chickens for a wallet
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { walletAddress: string } }
+  { params }: { params: Promise<{ walletAddress: string }> }
 ) {
   try {
-    const { walletAddress } = params;
+    const { walletAddress } = await params;
     
     if (!walletAddress) {
       return NextResponse.json(
@@ -36,10 +36,10 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { walletAddress: string } }
+  { params }: { params: Promise<{ walletAddress: string }> }
 ) {
   try {
-    const { walletAddress } = params;
+    const { walletAddress } = await params;
     
     if (!walletAddress) {
       return NextResponse.json(

@@ -8,15 +8,14 @@ interface ControlPanelProps {
 
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   return (
-    <div className="bg-black/70 border-2 border-yellow-500/50 rounded-md px-3 py-2 ml-4 pixel-font text-white text-xs shadow-lg">
-      <div className="flex justify-between items-center mb-1.5 border-b border-yellow-500/30 pb-1">
+    <div className="bg-black/80 border-2 border-yellow-500/70 rounded-lg px-4 py-3 pixel-font text-white text-sm shadow-xl backdrop-blur-sm pointer-events-auto">
+      <div className="flex justify-between items-center mb-2 border-b border-yellow-500/30 pb-2">
         <p className="text-yellow-400 font-bold uppercase tracking-wider">CONTROLS</p>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <p><span className="font-semibold text-orange-400 w-16 inline-block">WASD:</span> Move</p>
         <p><span className="font-semibold text-orange-400 w-16 inline-block">Space:</span> Attack</p>
-        {/* Add other controls here later if needed */}
-        {/* <p><span className="font-semibold text-orange-400">Shift:</span> Dodge</p> */}
+        <p><span className="font-semibold text-orange-400 w-16 inline-block">Shift:</span> Jump</p>
       </div>
     </div>
   );

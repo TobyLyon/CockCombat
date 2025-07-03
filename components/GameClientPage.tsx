@@ -5,4 +5,4 @@ const PixelGameInterface = dynamic(() => import("@/components/pixel-game-interfa
 
 export default function GameClientPage() {
   return <PixelGameInterface />;
-}
+} 

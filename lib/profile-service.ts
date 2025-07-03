@@ -1,4 +1,4 @@
-import supabase, { Profile, Chicken, Match, Transaction, Achievement, FunStats } from './supabase-client'
+import { supabase, Profile, Chicken, Match, Transaction, Achievement, FunStats } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
 
 /**
@@ -31,18 +31,25 @@ export class ProfileService {
   /**
    * Create a new profile
    */
-  static async createProfile(walletAddress: string, username: string) {
+  static async createProfile(walletAddress: string, username: string): Promise<Profile | null> {
+    console.log(`Creating profile for ${walletAddress} with username ${username}`);
     try {
-      const { data, error } = await supabase.functions.invoke('create-profile', {
-        // The body can be empty as the function gets the user from the auth header
-      })
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          wallet_address: walletAddress,
+          username: username,
+        })
+        .select()
 
-      if (error) throw error;
-      
-      return data;
-    } catch (error: any) {
-        console.error('Detailed error creating profile via Edge Function:', error.message);
+      if (error) {
         throw error;
+      }
+      
+      return data ? data[0] : null;
+    } catch (error: any) {
+      console.error('Detailed error creating profile:', JSON.stringify(error, null, 2));
+      throw error;
     }
   }
 

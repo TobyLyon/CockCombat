@@ -1,37 +1,25 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import PixelChickenViewer from "@/components/3d/pixel-chicken-viewer"
 import { useRouter } from "next/navigation"
-import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
 import { useAudio } from "@/contexts/AudioContext"
 import { useWallet } from "@solana/wallet-adapter-react"
-import { useWalletAuth } from "@/hooks/use-wallet-auth"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { useProfile } from "@/contexts/ProfileContext"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 
 export default function PixelGameInterface() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("play") // play, about, controls
   const { audioEnabled, volume, playSound } = useAudio()
-  const { connected } = useWallet()
-  const { 
-    authenticated, 
-    loading: authLoading, 
-    authenticate, 
-    skipSigning, 
-    disableSigning, 
-    setDisableSigning 
-  } = useWalletAuth()
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
-  const [destinationAfterLogin, setDestinationAfterLogin] = useState("")
+  const { connected, publicKey } = useWallet()
+  const { setVisible } = useWalletModal()
+  const { profile, needsSetup, setNeedsSetup, refreshProfile } = useProfile()
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
 
   // Play click sound on any left mouse click
   useEffect(() => {
@@ -42,42 +30,52 @@ export default function PixelGameInterface() {
     return () => window.removeEventListener('mousedown', handleClick)
   }, [audioEnabled, volume, playSound])
 
-  // Navigation with wallet check
-  const navigate = (path: string) => {
-    if (connected && authenticated) {
-      playSound("button")
+  const handleNavigation = async (path: string) => {
+    playSound("button")
+    
+    // Step 1: Connect wallet if not already connected
+    if (!connected) {
+      setPendingNavigation(path) // Store the intended path
+      setVisible(true)
+      toast.info("Please connect your wallet to continue.", {
+        duration: 3000,
+      })
+      return
+    }
+
+    setIsNavigating(true)
+    
+    try {
+      // Step 2: Check for profile and prompt for setup if needed
+      if (needsSetup || !profile) {
+        toast.info("Please create your profile to enter the arena.", {
+          duration: 4000,
+        })
+        setNeedsSetup(true)
+        setIsNavigating(false)
+        return
+      }
+
+      // Step 3: All checks passed, navigate to the page
+      toast.success("Entering the arena...", { duration: 1000 })
       router.push(path)
-    } else if (connected && !authenticated) {
-      // Already connected but not authenticated
-      playSound("button")
-      setDestinationAfterLogin(path)
-      setShowLoginPrompt(true)
-    } else {
-      // Not connected
-      playSound("button")
-      setDestinationAfterLogin(path)
-      setShowLoginPrompt(true)
+    } catch (error) {
+      console.error("Navigation error:", error)
+      toast.error("An unexpected error occurred. Please try again.")
+    } finally {
+      setIsNavigating(false)
     }
   }
 
-  // Handler for when wallet is connected
+  // Auto-navigate after wallet connection
   useEffect(() => {
-    if (connected && authenticated && destinationAfterLogin) {
-      router.push(destinationAfterLogin)
-      setDestinationAfterLogin("")
-      setShowLoginPrompt(false)
+    if (connected && pendingNavigation) {
+      // Wallet just connected, continue with pending navigation
+      const path = pendingNavigation
+      setPendingNavigation(null) // Clear pending navigation
+      handleNavigation(path)
     }
-  }, [connected, authenticated, destinationAfterLogin, router])
-
-  // Handle skipping the signing process
-  const handleSkipSigning = () => {
-    skipSigning();
-    if (destinationAfterLogin) {
-      router.push(destinationAfterLogin);
-      setDestinationAfterLogin("");
-      setShowLoginPrompt(false);
-    }
-  };
+  }, [connected, pendingNavigation])
 
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-[#3a8c4f] flex flex-col">
@@ -212,25 +210,26 @@ export default function PixelGameInterface() {
                   <div className="grid grid-cols-2 gap-3">
                     <Button
                       className="bg-[#ff4500] hover:bg-[#ff6347] text-white font-bold py-3 px-6 rounded border-b-4 border-[#8B0000] hover:border-[#ff4500] transition-all pixel-font pixel-shadow"
-                      onClick={() => navigate("/arena")}
+                      onClick={() => handleNavigation("/arena")}
+                      disabled={isNavigating}
                     >
-                      ARENA
+                      {isNavigating ? <Loader2 className="animate-spin" /> : "ARENA"}
                     </Button>
                     <Button
                       className="bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold py-3 px-6 rounded border-b-4 border-[#1e40af] hover:border-[#3b82f6] transition-all pixel-font pixel-shadow"
-                      onClick={() => navigate("/spectate")}
+                      onClick={() => handleNavigation("/spectate")}
                     >
                       SPECTATE
                     </Button>
                     <Button
                       className="bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold py-3 px-6 rounded border-b-4 border-[#15803d] hover:border-[#22c55e] transition-all pixel-font pixel-shadow"
-                      onClick={() => navigate("/marketplace")}
+                      onClick={() => handleNavigation("/marketplace")}
                     >
                       MARKET
                     </Button>
                     <Button
                       className="bg-[#eab308] hover:bg-[#ca8a04] text-white font-bold py-3 px-6 rounded border-b-4 border-[#a16207] hover:border-[#eab308] transition-all pixel-font pixel-shadow"
-                      onClick={() => navigate("/profile")}
+                      onClick={() => handleNavigation("/profile")}
                     >
                       MY COCKS
                     </Button>
@@ -276,112 +275,6 @@ export default function PixelGameInterface() {
       <footer className="relative z-10 p-3 bg-[#222222] border-t-4 border-[#111111] text-white text-center text-xs">
         <p>&copy; {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
       </footer>
-
-      {/* Login Prompt Dialog */}
-      <Dialog 
-        open={showLoginPrompt && (!connected || !authenticated)} 
-        onOpenChange={() => {
-          // Only allow closing if already authenticated
-          if (connected && authenticated) {
-            setShowLoginPrompt(false);
-          } else if (!connected) {
-            // Allow closing for non-connected users
-            setShowLoginPrompt(false);
-          }
-        }}
-      >
-        <DialogContent className="bg-[#333333] border-4 border-[#222222] text-white">
-          <DialogHeader>
-            <DialogTitle className="text-yellow-400 text-xl pixel-font">
-              {!connected ? "CONNECT YOUR WALLET" : !authenticated ? "AUTHENTICATE YOUR WALLET" : "AUTHENTICATION SUCCESSFUL"}
-            </DialogTitle>
-            <DialogDescription className="text-gray-300">
-              {!connected 
-                ? "You need to connect your Solana wallet to access this feature." 
-                : !authenticated 
-                ? "Please sign the message to verify you own this wallet address." 
-                : "Your wallet has been authenticated successfully!"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 my-4">
-            {!connected && (
-              <div className="flex justify-center">
-                <WalletMultiButton 
-                  onClickSound={() => playSound("click")} 
-                />
-              </div>
-            )}
-            
-            {connected && !authenticated && (
-              <div className="flex flex-col gap-3 items-center justify-center">
-                {!disableSigning && (
-                  <Button 
-                    className="bg-[#fbbf24] hover:bg-[#f59e0b] text-[#333333] font-bold py-2 px-4 rounded border-b-4 border-[#d97706] transition-all"
-                    onClick={authenticate}
-                    disabled={authLoading}
-                  >
-                    {authLoading ? "Waiting for signature..." : "Sign Message"}
-                  </Button>
-                )}
-                
-                {!authLoading && (
-                  <div className="text-center mt-2">
-                    <p className="text-sm text-gray-400 mb-2">
-                      Having trouble signing? Some wallets may not support message signing.
-                    </p>
-                    <Button 
-                      variant="ghost"
-                      className="text-yellow-400 hover:text-yellow-300 hover:bg-[#444444]"
-                      onClick={handleSkipSigning}
-                    >
-                      Continue without signing
-                    </Button>
-                    
-                    <div className="mt-4 p-3 bg-[#222222] rounded-md">
-                      <p className="text-sm text-gray-300 mb-2 font-bold">Experiencing issues with wallet?</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="disable-signing"
-                          checked={disableSigning}
-                          onChange={() => setDisableSigning(!disableSigning)}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor="disable-signing" className="text-sm text-gray-300">
-                          Permanently disable signature requests
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {connected && authenticated && destinationAfterLogin && (
-              <div className="flex justify-center">
-                <Button 
-                  className="bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold py-2 px-4 rounded border-b-4 border-[#15803d] transition-all"
-                  onClick={() => {
-                    router.push(destinationAfterLogin)
-                    setDestinationAfterLogin("")
-                    setShowLoginPrompt(false)
-                  }}
-                >
-                  Continue to {destinationAfterLogin.replace('/', '')}
-                </Button>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="flex justify-between">
-            <Button 
-              className="bg-[#444444] hover:bg-[#555555] text-white"
-              onClick={() => setShowLoginPrompt(false)}
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

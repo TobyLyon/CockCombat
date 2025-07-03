@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { WalletMultiButton as SolanaWalletMultiButton } from "@solana/wallet-adapter-react-ui"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Copy, Check, LogOut, Wallet } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { Copy, Check, LogOut, Wallet, User } from "lucide-react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export interface WalletMultiButtonProps {
   onClickSound?: () => void;
@@ -21,7 +22,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     disconnect, 
     wallet: selectedWallet,
   } = useWallet()
-  
+  const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
@@ -47,6 +48,11 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
       console.error("Disconnect error:", err)
       toast.error("Failed to disconnect wallet")
     }
+  }
+
+  const handleProfileClick = () => {
+    if (onClickSound) onClickSound()
+    router.push("/profile")
   }
 
   // If not connected, show the native Solana wallet button
@@ -81,7 +87,12 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
           {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
           {copied ? "Copied" : "Copy Address"}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer hover:bg-[#444444] flex items-center">
+        <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer hover:bg-[#444444] flex items-center">
+          <User className="mr-2 h-4 w-4" />
+          My Profile
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-[#555555]" />
+        <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer hover:bg-[#444444] flex items-center text-red-400 hover:!text-red-400">
           <LogOut className="mr-2 h-4 w-4" />
           Disconnect
         </DropdownMenuItem>

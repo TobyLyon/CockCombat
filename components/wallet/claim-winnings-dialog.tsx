@@ -6,7 +6,7 @@ import { Trophy, X, Check, Loader2, AlertCircle } from "lucide-react"
 import { useToken } from "@/hooks/use-token"
 import Image from "next/image"
 import { useWallet } from "@/hooks/use-wallet"
-import { useProfile } from "@/hooks/use-profile"
+import { useProfile } from "@/contexts/ProfileContext"
 import { ProfileService } from "@/lib/profile-service"
 
 interface ClaimWinningsDialogProps {
