@@ -43,12 +43,22 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       socket.emit('join_lobby_room', lobby.id);
       
-      // Request current lobby state after a short delay to ensure join is complete
-      setTimeout(() => {
+      // Request current lobby state after joining
+      const requestLobbyState = () => {
+        console.log(`📋 Requesting lobby state for: ${lobby.id}`);
         socket.emit('get_lobby_state', lobby.id);
-      }, 100);
+      };
+      
+      // Request immediately and after a delay to ensure join is complete
+      requestLobbyState();
+      const stateTimer = setTimeout(requestLobbyState, 200);
+      
+      // Also set a periodic refresh every 5 seconds to keep lobby in sync
+      const refreshInterval = setInterval(requestLobbyState, 5000);
 
       return () => {
+        clearTimeout(stateTimer);
+        clearInterval(refreshInterval);
         console.log(`🚪 Leaving lobby room: ${lobby.id}`);
         socket.emit('leave_lobby_room', lobby.id);
       };
@@ -62,7 +72,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
       setLobbyData(updatedLobby);
-      setPlayers(updatedLobby.players || []);
+      
+      // Update players list with the lobby data
+      if (updatedLobby.players) {
+        setPlayers(updatedLobby.players);
+      }
     };
 
     const handlePlayerJoined = (data: { playerId: string, username: string, chickenName?: string, isReady: boolean, isAi: boolean }) => {
@@ -118,6 +132,27 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
       socket.off('match_started', handleMatchStarted);
     };
   }, [socket, onStartMatch]);
+
+  // Initial lobby data setup - ensure current player is included
+  useEffect(() => {
+    if (publicKey && lobbyData.players) {
+      const currentPlayerInLobby = lobbyData.players.find(p => p.playerId === publicKey.toString());
+      
+      if (currentPlayerInLobby) {
+        // Convert lobby players to display format, ensuring current player is included
+        const displayPlayers = lobbyData.players.map(player => ({
+          playerId: player.playerId,
+          username: player.username || player.playerId.slice(0, 8) + '...',
+          chickenName: player.chickenId || 'Default',
+          isReady: false,
+          isAi: player.isAi || false
+        }));
+        
+        setPlayers(displayPlayers);
+        console.log('🎯 Set initial players from lobby data:', displayPlayers);
+      }
+    }
+  }, [publicKey, lobbyData]);
 
   // Countdown effect
   useEffect(() => {

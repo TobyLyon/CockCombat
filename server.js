@@ -37,6 +37,9 @@ app.prepare().then(() => {
     },
   });
 
+  // Store the socket instance globally so API routes can access it
+  global.socketIo = io;
+
   console.log('🚀 Socket.io server initialized');
 
   // Socket.io connection handling

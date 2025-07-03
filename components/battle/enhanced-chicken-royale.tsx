@@ -232,17 +232,21 @@ export default function EnhancedChickenRoyale({ onExit, playerChicken = defaultC
   }, [gameState, remainingPlayers])
   
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full overflow-hidden">
       <div className="w-full h-full">
         <Canvas 
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: '100%', display: 'block' }}
           shadows
-          camera={{ fov: 75, near: 0.1, far: 50000 }} // Increased far clipping plane
+          camera={{ fov: 75, near: 0.1, far: 50000 }}
+          gl={{ 
+            antialias: true, 
+            alpha: false,
+            preserveDrawingBuffer: false
+          }}
         >
-          <color attach="background" args={['#87CEEB']} /> {/* Sky Blue - more vibrant */}
-          <fog attach="fog" args={['#87CEEB', 30, 500]} /> {/* Add fog with same color as background */}
+          <color attach="background" args={['#87CEEB']} />
+          <fog attach="fog" args={['#87CEEB', 30, 500]} />
           <Suspense fallback={<Html center>Loading Arena...</Html>}>
-            {/* Use the enhanced arena scene with all our improvements */}
             <EnhancedArenaScene
               gameState={gameState}
               playerPosition={playerPosition}
@@ -254,26 +258,26 @@ export default function EnhancedChickenRoyale({ onExit, playerChicken = defaultC
           </Suspense>
         </Canvas>
         
-        {/* Game UI Overlay */}
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+        {/* Game UI Overlay - Better positioning */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <GameUI
             gameState={gameState}
             health={playerHealth}
             remaining={remainingPlayers}
             time={timeRemaining}
-            prize={0} // Default value for now
-            peckCooldown={0} // Default value for now
+            prize={0}
+            peckCooldown={0}
             isWinner={gameState === "gameover" && remainingPlayers === 1}
             onExit={onExit}
           />
         </div>
         
-        {/* Controls Help */}
-        <div className="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 p-2 rounded">
-          <p>W: Move forward</p>
-          <p>A/D: Rotate left/right</p>
-          <p>Space: Peck (attack)</p>
-          <p>Shift: Sprint</p>
+        {/* Controls Help - Better responsive positioning */}
+        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 text-white bg-black/80 backdrop-blur-sm p-2 sm:p-3 rounded-lg border border-yellow-500/50 text-xs sm:text-sm pixel-font">
+          <p className="mb-1"><span className="text-yellow-400 font-bold">W:</span> Move forward</p>
+          <p className="mb-1"><span className="text-yellow-400 font-bold">A/D:</span> Rotate left/right</p>
+          <p className="mb-1"><span className="text-yellow-400 font-bold">Space:</span> Peck (attack)</p>
+          <p><span className="text-yellow-400 font-bold">Shift:</span> Sprint</p>
         </div>
       </div>
     </div>

@@ -55,6 +55,23 @@ export default function BattleArena() {
   // Check if player is victorious (player is alive and all others are dead)
   const isVictorious = Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);
 
+  // Apply arena-specific CSS classes for full-screen experience
+  useEffect(() => {
+    document.body.classList.add('arena-active');
+    const arenaDiv = document.querySelector('.battle-arena-container');
+    if (arenaDiv) {
+      arenaDiv.classList.add('arena-mode');
+    }
+    
+    return () => {
+      document.body.classList.remove('arena-active');
+      const arenaDiv = document.querySelector('.battle-arena-container');
+      if (arenaDiv) {
+        arenaDiv.classList.remove('arena-mode');
+      }
+    };
+  }, []);
+
   // Check wallet connection on component mount
   useEffect(() => {
     const fetchLobbies = async () => {
@@ -195,10 +212,22 @@ export default function BattleArena() {
   }
 
   return (
-    <div className="h-screen w-screen relative bg-gray-900 text-white flex flex-col overflow-hidden" style={{
+    <div className="battle-arena-container fixed inset-0 bg-gray-900 text-white flex flex-col overflow-hidden z-50" style={{
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
       <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-hidden">
+        {/* Navigation Bar - Hidden in Arena */}
+        <div className="hidden">
+          <div className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+            <Link href="/" className="flex items-center gap-2 text-yellow-400 hover:text-yellow-300 transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+              Back to Menu
+            </Link>
+            <div className="flex items-center gap-4">
+              <WalletMultiButton />
+            </div>
+          </div>
+        </div>
 
         {gameState === "lobby" && (
           <div className="flex-1 flex h-full max-h-full gap-4 overflow-hidden">
@@ -409,8 +438,8 @@ export default function BattleArena() {
             
             {/* Show game over screen */}
             <GameOver 
-              winner={isVictorious ? (playerChicken || null) : null}
-              humanPlayer={playerChicken || null}
+              winner={isVictorious ? (playerChicken as any || null) : null}
+              humanPlayer={playerChicken as any || null}
               onExit={exitBattle}
             />
           </div>

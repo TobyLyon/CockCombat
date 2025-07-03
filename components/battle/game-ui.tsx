@@ -94,96 +94,97 @@ export default function GameUI({
   }, []);
 
   return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none pixel-font">
-      {/* Exit button */}
+    <div className="absolute top-0 left-0 w-full h-full pointer-events-none pixel-font overflow-hidden">
+      {/* Exit button - Better responsive positioning */}
       {(gameState === "playing" || gameState === "gameOver") && (
         <motion.div 
-          className="absolute top-4 left-4 pointer-events-auto"
+          className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-auto z-30"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.5 }}
         >
           <Button
-            className="bg-[#ff4500] hover:bg-[#ff6347] text-white font-bold py-2 px-4 rounded border-b-4 border-[#8B0000] hover:border-[#ff4500] transition-all flex items-center gap-2 pixel-font"
+            className="bg-[#ff4500] hover:bg-[#ff6347] text-white font-bold py-1 sm:py-2 px-2 sm:px-4 rounded border-b-4 border-[#8B0000] hover:border-[#ff4500] transition-all flex items-center gap-1 sm:gap-2 pixel-font text-xs sm:text-sm"
             onClick={() => setShowExitConfirm(true)}
           >
-            <ArrowLeft className="h-4 w-4" />
-            EXIT ARENA
+            <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">EXIT ARENA</span>
+            <span className="sm:hidden">EXIT</span>
           </Button>
         </motion.div>
       )}
 
-      {/* Game HUD - Top Center */}
+      {/* Game HUD - Top Center - Better responsive spacing */}
       {(gameState === "playing" || gameState === "gameOver") && (
         <motion.div 
-          className="absolute top-4 left-1/2 transform -translate-x-1/2 flex justify-center items-start gap-4"
+          className="absolute top-2 sm:top-4 left-1/2 transform -translate-x-1/2 flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-4"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <div className="bg-black/70 p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-yellow-400" />
+          <div className="bg-black/80 p-2 sm:p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 sm:gap-2">
+            <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             <div>
               <div className="text-yellow-400 font-bold text-xs">Prize Pool</div>
-              <div className="text-white text-lg">{prize} $COCK</div>
+              <div className="text-white text-sm sm:text-lg">{prize} $COCK</div>
             </div>
           </div>
 
-          <div className="bg-black/70 p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-2">
-            <Clock className="h-5 w-5 text-yellow-400" />
+          <div className="bg-black/80 p-2 sm:p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 sm:gap-2">
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             <div>
               <div className="text-yellow-400 font-bold text-xs">Time</div>
-              <div className="text-white text-lg">
+              <div className="text-white text-sm sm:text-lg">
                 {Math.floor(time / 60)}:{(time % 60).toString().padStart(2, "0")}
               </div>
             </div>
           </div>
 
-          <div className="bg-black/70 p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-2">
-            <Users className="h-5 w-5 text-yellow-400" />
+          <div className="bg-black/80 p-2 sm:p-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 sm:gap-2">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             <div>
               <div className="text-yellow-400 font-bold text-xs">Remaining</div>
-              <div className="text-white text-lg">{remaining}/15</div>
+              <div className="text-white text-sm sm:text-lg">{remaining}/15</div>
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* Spinning Coin GIF in the bottom-left corner */}
+      {/* Spinning Coin GIF in the bottom-left corner - Better responsive positioning */}
       {gameState === "playing" && (
         <motion.div 
-          className="absolute bottom-4 left-4 pointer-events-auto z-10"
+          className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 pointer-events-auto z-10"
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
         >
-          <div className="bg-black/60 p-2 rounded-lg border-2 border-yellow-500">
+          <div className="bg-black/60 p-1 sm:p-2 rounded-lg border-2 border-yellow-500">
             <img 
               src="/images/cock_combat_coin_spin.gif" 
               alt="$COCK Coin" 
-              className="w-20 h-20 object-contain"
+              className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain"
             />
             <div className="text-yellow-400 text-xs text-center mt-1 font-bold pixel-font">$COCK</div>
           </div>
         </motion.div>
       )}
 
-      {/* Player health and peck cooldown - Bottom Center */}
+      {/* Player health and peck cooldown - Bottom Center - Better responsive spacing */}
       {gameState === "playing" && (
         <motion.div 
-          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2"
+          className="absolute bottom-2 sm:bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-1 sm:gap-2"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
           {/* Health Hearts */}
-          <div className="bg-black/70 p-2 px-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1.5">
+          <div className="bg-black/80 p-1 sm:p-2 px-2 sm:px-3 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 sm:gap-1.5">
             {renderHearts(health)}
           </div>
 
           {/* Peck Cooldown */}
           {peckCooldown > 0 && (
-            <div className="bg-black/70 p-1 px-2 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 text-xs">
+            <div className="bg-black/80 p-1 px-2 rounded-lg border border-yellow-500 pointer-events-auto flex items-center gap-1 text-xs">
               <Zap className="h-3 w-3 text-yellow-400" />
               <div className="text-yellow-400 pixel-font">PECK: {peckCooldown.toFixed(1)}s</div>
             </div>
@@ -191,10 +192,10 @@ export default function GameUI({
         </motion.div>
       )}
 
-      {/* Controls help toggle - Bottom Right */}
+      {/* Controls help toggle - Bottom Right - Better responsive positioning */}
       {gameState === "playing" && (
         <motion.div 
-          className="absolute bottom-4 right-4 pointer-events-auto"
+          className="absolute bottom-2 sm:bottom-4 right-2 sm:right-4 pointer-events-auto z-10"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}

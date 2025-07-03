@@ -2,6 +2,22 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+// Import the socket.io instance
+let io: any = null;
+
+// Function to get the io instance from the running server
+async function getSocketInstance() {
+  if (!io) {
+    try {
+      // Access the global socket instance stored by server.js
+      io = (global as any).socketIo;
+    } catch (error) {
+      console.log('Socket.IO not available during build time, this is normal');
+    }
+  }
+  return io;
+}
+
 // Let's define a standard structure for our lobbies
 export interface Lobby {
   id: string;
@@ -86,6 +102,43 @@ function addAiPlayer(lobbyId: string) {
     lobby.players.push(aiPlayer);
     console.log(`AI player added to lobby ${lobbyId}. Total players: ${lobby.players.length}`);
     
+    // Broadcast AI player join via Socket.IO
+    getSocketInstance().then(socketIo => {
+      if (socketIo) {
+        // Broadcast AI player joined
+        socketIo.to(lobbyId).emit('player_joined_lobby', {
+          playerId: aiPlayer.playerId,
+          username: aiPlayer.username,
+          chickenName: aiPlayer.chickenId,
+          isReady: true, // AI players are always ready
+          isAi: true,
+          timestamp: Date.now()
+        });
+
+        // Broadcast full lobby update
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : false, // AI players are always ready
+          isAi: p.isAi || false
+        }));
+        
+        socketIo.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        });
+
+        console.log(`🤖 Broadcasted AI player join to lobby room ${lobbyId}`);
+      }
+    }).catch(error => {
+      console.error('❌ Failed to broadcast AI player join:', error);
+    });
+    
     // If lobby is now full, start the match
     if (lobby.players.length === lobby.capacity) {
       lobby.status = 'starting';
@@ -120,6 +173,33 @@ export async function POST(req: NextRequest) {
   // Check if player is already in the lobby
   const existingPlayer = lobby.players.find(p => p.playerId === playerId);
   if (existingPlayer) {
+    // Get socket instance and broadcast current lobby state
+    try {
+      const socketIo = await getSocketInstance();
+      if (socketIo) {
+        // Convert lobby players to socket format with usernames
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: false,
+          isAi: p.isAi || false
+        }));
+        
+        // Broadcast current state to the lobby room
+        socketIo.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        });
+      }
+    } catch (error) {
+      console.log('Could not broadcast lobby state:', error);
+    }
+    
     return NextResponse.json({ error: 'Player already in lobby' }, { status: 400 });
   }
   
@@ -138,6 +218,46 @@ export async function POST(req: NextRequest) {
   lobby.players.push(player);
 
   console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}`);
+
+  // Broadcast the player join event via Socket.IO
+  try {
+    const socketIo = await getSocketInstance();
+    if (socketIo) {
+      // Broadcast to all players in the lobby room that a new player joined
+      socketIo.to(lobbyId).emit('player_joined_lobby', {
+        playerId: actualPlayerId,
+        username: username,
+        chickenName: actualChickenId,
+        isReady: false,
+        isAi: false,
+        timestamp: Date.now()
+      });
+
+      // Also broadcast the full lobby update
+      const lobbyPlayers = lobby.players.map(p => ({
+        playerId: p.playerId,
+        username: p.username || p.playerId.slice(0, 8) + '...',
+        chickenName: p.chickenId || 'Default',
+        isReady: false,
+        isAi: p.isAi || false
+      }));
+      
+      socketIo.to(lobbyId).emit('lobby_updated', {
+        id: lobbyId,
+        players: lobbyPlayers,
+        capacity: lobby.capacity,
+        amount: lobby.amount,
+        currency: lobby.currency,
+        matchType: lobby.matchType
+      });
+
+      console.log(`🔄 Broadcasted player join to lobby room ${lobbyId}`);
+    } else {
+      console.log('⚠️ Socket.IO not available - player join not broadcasted');
+    }
+  } catch (error) {
+    console.error('❌ Failed to broadcast player join:', error);
+  }
 
   if (lobby.matchType === 'tutorial' && lobby.players.length === 1) {
     console.log(`Starting AI backfill timer for lobby ${lobbyId}`);

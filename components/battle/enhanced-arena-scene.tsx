@@ -699,55 +699,6 @@ function SceneContent({
   );
 }
 
-// Optimize main component with React.memo
-export default React.memo(function EnhancedArenaScene({ 
-  gameState, 
-  playerChicken,
-  playerPosition,
-  playerRotation,
-  isJumping,
-  isPecking,
-  onExit,
-  playSound,
-  onPlayerDamage,
-  players,
-  onDrumstickCollected // Destructure callback
-}: EnhancedArenaSceneProps) {
-  // Use the game state context for additional state if needed
-  const gameStateContext = useGameState();
-
-  return (
-    <div className="w-full h-full overflow-hidden" style={{ backgroundColor: "#87CEEB" }}>
-      <KeyboardControls map={controlsMap}>
-        <Canvas 
-          shadows 
-          camera={{ position: [0, 5, 8], fov: 75 }}
-          style={{ width: "100%", height: "100%", background: "#87CEEB" }}
-        >
-          {/* Add a blue sky */}
-          <color attach="background" args={["#87CEEB"]} />
-          
-          <Suspense fallback={null}>
-            <SceneContent 
-              playerChicken={playerChicken} 
-              gameState={gameState}
-              playerPosition={playerPosition}
-              playerRotation={playerRotation}
-              isJumping={isJumping}
-              isPecking={isPecking}
-              onExit={onExit}
-              playSound={playSound}
-              onPlayerDamage={onPlayerDamage}
-              players={players}
-              onDrumstickCollected={onDrumstickCollected} // Pass callback down
-            />
-          </Suspense>
-        </Canvas>
-      </KeyboardControls>
-    </div>
-  );
-});
-
 // BarbedWireFence component
 const BarbedWireFence = React.memo(() => {
     const posts = 24;
@@ -846,3 +797,84 @@ function ChickenInstances({
       </>
     );
 }
+
+// Optimize main component with React.memo
+export default React.memo(function EnhancedArenaScene({ 
+  gameState, 
+  playerChicken,
+  playerPosition,
+  playerRotation,
+  isJumping,
+  isPecking,
+  onExit,
+  playSound,
+  onPlayerDamage,
+  players,
+  onDrumstickCollected
+}: EnhancedArenaSceneProps) {
+  
+  // Ensure all required props have defaults
+  const safeGameState = gameState || GameState.PREVIEW;
+  const safePlayerChicken = playerChicken || {
+    id: "player",
+    name: "Player",
+    position: { x: 0, y: 0.85, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    colors: {
+      body: '#e63946',
+      beak: '#ffb703',
+      comb: '#e63946',
+      legs: '#ffb703',
+      tail: '#e63946',
+      eyes: '#ffffff',
+      pupils: '#000000'
+    }
+  };
+  
+  const safePlayers = players || [];
+  const safePlayerPosition = playerPosition || new THREE.Vector3(0, 0.85, 0);
+  const safePlayerRotation = playerRotation || new THREE.Euler(0, 0, 0);
+  
+  return (
+    <div className="w-full h-full overflow-hidden">
+      <KeyboardControls map={controlsMap}>
+        <Canvas 
+          style={{ width: '100%', height: '100%', display: 'block' }}
+          shadows
+          camera={{ 
+            fov: 75, 
+            near: 0.1, 
+            far: 50000,
+            position: [0, 10, 20] 
+          }}
+          gl={{ 
+            antialias: true,
+            alpha: false,
+            preserveDrawingBuffer: false,
+            powerPreference: "high-performance"
+          }}
+          dpr={[1, 2]}
+        >
+          <color attach="background" args={['#87CEEB']} />
+          <fog attach="fog" args={['#87CEEB', 30, 500]} />
+          
+          <Suspense fallback={<Html center className="text-white">Loading Arena...</Html>}>
+            <SceneContent
+              gameState={safeGameState}
+              playerChicken={safePlayerChicken}
+              playerPosition={safePlayerPosition}
+              playerRotation={safePlayerRotation}
+              isJumping={isJumping}
+              isPecking={isPecking}
+              onExit={onExit}
+              playSound={playSound}
+              onPlayerDamage={onPlayerDamage}
+              players={safePlayers}
+              onDrumstickCollected={onDrumstickCollected}
+            />
+          </Suspense>
+        </Canvas>
+      </KeyboardControls>
+    </div>
+  );
+});
