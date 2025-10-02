@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { lobbies, lobbyTimers, type Lobby } from '@/lib/lobbies';
 
 // Import the socket.io instance
 let io: any = null;
@@ -17,35 +18,6 @@ async function getSocketInstance() {
   }
   return io;
 }
-
-// Let's define a standard structure for our lobbies
-export interface Lobby {
-  id: string;
-  amount: number;
-  currency: string;
-  players: { playerId: string; chickenId: string; isAi?: boolean; username?: string }[];
-  capacity: number;
-  highRoller: boolean;
-  status: 'open' | 'starting' | 'in-progress';
-  matchType: 'ranked' | 'tutorial';
-  isComingSoon?: boolean;
-}
-
-// For now, we'll use a simple in-memory store for our lobbies.
-// In a production environment, this would be a database or a cache like Redis.
-export const lobbies: Lobby[] = [
-  { id: 'tutorial-match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
-  { id: 'lobby-0.05', amount: 0.05, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'lobby-0.1', amount: 0.1, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'lobby-0.25', amount: 0.25, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'lobby-0.5', amount: 0.5, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'lobby-1.0', amount: 1.0, currency: "SOL", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
-  { id: 'lobby-2.5', amount: 2.5, currency: "SOL", players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
-  { id: 'lobby-5.0', amount: 5.0, currency: "SOL", players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
-  { id: 'lobby-10.0', amount: 10.0, currency: "SOL", players: [], capacity: 2, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
-];
-
-const lobbyTimers = new Map<string, NodeJS.Timeout>();
 
 // Helper function to get profile username
 async function getPlayerUsername(playerId: string): Promise<string> {
@@ -259,16 +231,24 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
+  // Tutorial lobbies: quickly and deterministically backfill AI to ensure stable start
   if (lobby.matchType === 'tutorial' && lobby.players.length === 1) {
-    console.log(`Starting AI backfill timer for lobby ${lobbyId}`);
-    const timer = setTimeout(() => {
-      console.log(`AI backfill timer triggered for lobby ${lobbyId}`);
-      while(lobby.players.length < lobby.capacity) {
-        addAiPlayer(lobbyId);
-      }
-      lobbyTimers.delete(lobbyId);
-    }, 60000); // 60 seconds
-    lobbyTimers.set(lobbyId, timer);
+    if (!lobbyTimers.has(lobbyId)) {
+      console.log(`⏳ Scheduling fast AI backfill for tutorial lobby ${lobbyId}`);
+      const timer = setTimeout(() => {
+        try {
+          // Fill remaining slots with AI opponents (AI are auto-ready)
+          while (lobby.players.length < lobby.capacity) {
+            addAiPlayer(lobbyId);
+          }
+        } finally {
+          lobbyTimers.delete(lobbyId);
+        }
+      }, 500); // fast backfill for smooth UX
+      lobbyTimers.set(lobbyId, timer);
+    } else {
+      console.log(`AI backfill already scheduled for ${lobbyId}`);
+    }
   }
 
   if (lobby.players.length === lobby.capacity) {

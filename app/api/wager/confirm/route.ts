@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { lobbies } from '../../lobbies/route';
+import { lobbies } from '@/lib/lobbies';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();

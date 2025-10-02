@@ -50,9 +50,12 @@ export default function PixelChickenViewer() {
             }}
             shadows
           >
-            {/* Scene lighting: increase brightness */}
-            <ambientLight intensity={2.0} />
-            <pointLight position={[6, 10, 6]} intensity={2.6} castShadow />
+            {/* Scene lighting: enhanced with multiple lights for better shading */}
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[5, 8, 5]} intensity={1.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+            <pointLight position={[-4, 6, 4]} intensity={0.8} color="#ffa500" />
+            <spotLight position={[0, 10, 8]} angle={0.3} penumbra={0.5} intensity={1.2} castShadow />
+            <hemisphereLight args={['#87CEEB', '#8B7355', 0.4]} />
             {/* Chicken follows mouse movement */}
             <PixelChickenWithMouseFollow />
           </Canvas>
@@ -280,20 +283,16 @@ export function PixelChicken({
     // This reduces dependency on frame rate and improves performance
     
     // --- Body Animation ---
-    if (!disableBobbing && !isPecking) {
-      chickenRef.current.position.y = Math.sin(time * 1.2) * 0.05;
-      chickenRef.current.rotation.z = Math.sin(time * 0.4) * 0.02;
-    } else {
-      chickenRef.current.position.y = 0.05;
-      chickenRef.current.rotation.z = 0;
-    }
+    // Remove vertical/body bobbing entirely per request
+    chickenRef.current.position.y = 0;
+    chickenRef.current.rotation.z = 0;
 
-    // Head tracking - OPTIMIZED
-    if (headRef.current && neckRef.current && headTarget) {
+    // Head tracking - disabled during peck animation to avoid fighting transforms
+    if (headRef.current && neckRef.current && headTarget && !isPeckAnimating) {
       const targetRotationX = Math.max(-0.4, Math.min(0.4, -headTarget.y * 0.5));
       const targetRotationY = Math.max(-0.4, Math.min(0.4, headTarget.x * 0.5));
-      const headBob = Math.sin(time * 1.5) * 0.03;
-      headRef.current.position.y = 0.05 + headBob;
+      // Removed head bobbing - keep static Y position
+      headRef.current.position.y = 0.05;
       const lerpFactor = Math.min(1, delta * 5);
       headRef.current.rotation.y += (targetRotationY - headRef.current.rotation.y) * lerpFactor;
       headRef.current.rotation.x += (targetRotationX - headRef.current.rotation.x) * lerpFactor;
@@ -311,20 +310,24 @@ export function PixelChicken({
       const newProgress = Math.min(1, elapsed / peckDuration);
       setPeckProgress(newProgress);
       
-      if (neckRef.current && headRef.current && beakRef.current) {
+      if (neckRef.current && headRef.current) {
+        // Directional peck straight forward, no vertical angling
+        const baseNeckZ = 0.1
+        const baseHeadZ = 0.45
         if (newProgress < 0.5) { // Attacking phase
-          const peckAmount = newProgress * 2; 
-          neckRef.current.rotation.x = -0.9 * peckAmount; // More pronounced nod
-          neckRef.current.position.z = 0.1 + (0.35 * peckAmount); // Neck lunges forward from its base Z (0.1)
-          headRef.current.position.z = 0.1 + (0.1 * peckAmount); // Head has slight additional thrust from neck's Z (0.1)
-          // Beak can stay relative or also thrust slightly
-          // beakRef.current.position.z = 0.5 + 0.1 * peckAmount; 
+          const peckAmount = newProgress * 2;
+          // Push neck and head straight forward on Z axis only
+          neckRef.current.position.z = baseNeckZ + 0.4 * peckAmount;
+          headRef.current.position.z = baseHeadZ + 0.15 * peckAmount;
+          // No rotation to avoid clipping
+          neckRef.current.rotation.x = 0;
+          headRef.current.rotation.x = 0;
         } else { // Returning phase
           const returnAmount = (1 - newProgress) * 2; // Symmetrical return
-          neckRef.current.rotation.x = -0.9 * returnAmount;
-          neckRef.current.position.z = 0.1 + (0.35 * returnAmount);
-          headRef.current.position.z = 0.1 + (0.1 * returnAmount);
-          // beakRef.current.position.z = 0.5 + 0.1 * returnAmount;
+          neckRef.current.position.z = baseNeckZ + 0.4 * returnAmount;
+          headRef.current.position.z = baseHeadZ + 0.15 * returnAmount;
+          neckRef.current.rotation.x = 0;
+          headRef.current.rotation.x = 0;
         }
       }
       
@@ -335,19 +338,13 @@ export function PixelChicken({
     } else {
       // Lerp back to resting state
       if (neckRef.current) {
-        neckRef.current.rotation.x = THREE.MathUtils.lerp(neckRef.current.rotation.x, 0, 0.8);
         neckRef.current.position.z = THREE.MathUtils.lerp(neckRef.current.position.z, 0.1, 0.8); // Neck resting Z
       }
       if (headRef.current) {
-        headRef.current.position.z = THREE.MathUtils.lerp(headRef.current.position.z, 0.1, 0.8); // Head resting Z relative to neck
+        headRef.current.position.z = THREE.MathUtils.lerp(headRef.current.position.z, 0.45, 0.8); // Resting Z (updated to match new forward position)
         if (!headTarget) {
-            headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, 0, 0.8);
+          headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, 0, 0.8);
         }
-        // No need to lerp beakRef.current.position.z if it's static relative to head during non-peck
-        // If beak animation was added above, lerp it back here:
-        // if (beakRef.current) {
-        //   beakRef.current.position.z = THREE.MathUtils.lerp(beakRef.current.position.z, 0.5, 0.8);
-        // }
       }
     }
 
@@ -494,8 +491,8 @@ export function PixelChicken({
 
       {/* Neck pivot point */}
       <group ref={neckRef} position={[0, 1.55, 0.1]}>
-        {/* Head - Pixelated cube (now relative to neckRef) */}
-        <group ref={headRef} position={[0, 0.05, 0.1]}>
+        {/* Head - Pixelated cube (now relative to neckRef) - pushed forward on Z */}
+        <group ref={headRef} position={[0, 0.05, 0.45]}>
           <mesh castShadow>
             <boxGeometry args={[0.8, 0.8, 0.8]} />
             <primitive object={createMaterial('body')} />
@@ -508,7 +505,7 @@ export function PixelChicken({
           {/* Beak */}
           <group ref={beakRef} position={[0, 0, 0.5]}>
             <mesh castShadow>
-              <boxGeometry args={[0.4, 0.4, 0.4]} />
+              <boxGeometry args={[0.3, 0.3, 0.3]} />
               <primitive object={createMaterial('beak')} />
             </mesh>
           </group>

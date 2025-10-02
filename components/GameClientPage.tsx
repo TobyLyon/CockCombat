@@ -1,7 +1,5 @@
 "use client";
-import dynamic from "next/dynamic";
-
-const PixelGameInterface = dynamic(() => import("@/components/pixel-game-interface"), { ssr: false });
+import PixelGameInterface from "@/components/pixel-game-interface";
 
 export default function GameClientPage() {
   return <PixelGameInterface />;

@@ -34,7 +34,13 @@ const defaultChickenData = {
   level: 1,
 };
 
-export default function EnhancedChickenRoyale({ onExit, playerChicken = defaultChickenData }: { onExit: () => void, playerChicken?: any }) {
+export default function EnhancedChickenRoyale({ 
+  onExit, 
+  playerChicken = defaultChickenData 
+}: { 
+  onExit: (result: { winner: string; isPlayerWinner: boolean; prizeAmount: number }) => void
+  playerChicken?: any 
+}) {
   // Game state
   const [gameState, setGameState] = useState("playing") // playing, gameover
   const [playerPosition, setPlayerPosition] = useState(new THREE.Vector3(0, 2.0, 0))
@@ -203,12 +209,17 @@ export default function EnhancedChickenRoyale({ onExit, playerChicken = defaultC
   useEffect(() => {
     if (gameState === "gameover") {
       const timer = setTimeout(() => {
-        onExit()
+        const isPlayerWinner = playerHealth > 0 && remainingPlayers === 1
+        onExit({
+          winner: isPlayerWinner ? 'player' : 'ai',
+          isPlayerWinner: isPlayerWinner,
+          prizeAmount: remainingPlayers * 10, // Prize based on # of players
+        })
       }, 5000)
       
       return () => clearTimeout(timer)
     }
-  }, [gameState, onExit])
+  }, [gameState, onExit, playerHealth, remainingPlayers])
   
   // Handle player being defeated
   useEffect(() => {

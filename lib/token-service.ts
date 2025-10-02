@@ -14,19 +14,22 @@ import {
   getAssociatedTokenAddress,
   createTransferInstruction,
   createMintToInstruction,
+  createInitializeMint2Instruction,
   getMint,
   getAccount,
   TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  MINT_SIZE,
+  getMinimumBalanceForRentExemptMint
 } from '@solana/spl-token';
 import { toast } from 'sonner';
 
 // The mint address for our custom $COCK token
-// This will be set once the token is created
-let COCK_TOKEN_MINT_ADDRESS: string | null = null;
+// Get from environment variable or null
+let COCK_TOKEN_MINT_ADDRESS: string | null = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || null;
 
-// Set to environment variable in production
-const TOKEN_DECIMALS = 6;
+// Token decimals from environment or default to 6
+const TOKEN_DECIMALS = parseInt(process.env.NEXT_PUBLIC_TOKEN_DECIMALS || '6', 10);
 
 // Max number of retries for transactions
 const MAX_RETRIES = 3;
@@ -92,7 +95,7 @@ export function toDisplayAmount(rawAmount: number): number {
 }
 
 /**
- * Create a new SPL token
+ * Create a new SPL token (MODERN API)
  * @param connection Solana connection
  * @param payer The wallet that will sign and pay for the transaction
  * @param totalSupply The total supply of tokens to create
@@ -104,9 +107,14 @@ export async function createToken(
   totalSupply: number
 ): Promise<string> {
   try {
-    // Create a new mint account
+    // Create a new mint keypair
     const mintKeypair = Keypair.generate();
-    const mintRent = await connection.getMinimumBalanceForRentExemption(82);
+    
+    // Get minimum balance for rent exemption
+    const mintRent = await getMinimumBalanceForRentExemptMint(connection);
+
+    console.log(`🪙 Creating $COCK token with ${totalSupply} supply...`);
+    console.log(`   Mint address: ${mintKeypair.publicKey.toBase58()}`);
 
     // Create instructions
     const instructions: TransactionInstruction[] = [];
@@ -116,19 +124,19 @@ export async function createToken(
       SystemProgram.createAccount({
         fromPubkey: payer.publicKey,
         newAccountPubkey: mintKeypair.publicKey,
-        space: 82,
+        space: MINT_SIZE,
         lamports: mintRent,
         programId: TOKEN_PROGRAM_ID
       })
     );
 
-    // Add instruction to initialize the mint
+    // Add instruction to initialize the mint (using modern API)
     instructions.push(
-      createInitializeMintInstruction(
+      createInitializeMint2Instruction(
         mintKeypair.publicKey,
         TOKEN_DECIMALS,
         payer.publicKey,
-        payer.publicKey,
+        payer.publicKey, // freeze authority
         TOKEN_PROGRAM_ID
       )
     );
@@ -169,14 +177,20 @@ export async function createToken(
     // Create and send transaction
     const transaction = new Transaction().add(...instructions);
     transaction.feePayer = payer.publicKey;
-    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    const { blockhash } = await connection.getLatestBlockhash('finalized');
+    transaction.recentBlockhash = blockhash;
 
     // Sign the transaction
     const signedTransaction = await payer.signTransaction(transaction);
     signedTransaction.partialSign(mintKeypair);
 
     // Send the transaction
-    const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+    
+    console.log(`📡 Token creation transaction sent: ${signature}`);
     
     // Wait for confirmation with timeout and retries
     await confirmTransaction(connection, signature, 'confirmed', MAX_RETRIES, TRANSACTION_TIMEOUT);
@@ -184,10 +198,12 @@ export async function createToken(
     // Store the mint address
     COCK_TOKEN_MINT_ADDRESS = mintKeypair.publicKey.toString();
     
+    console.log(`✅ Token created successfully: ${COCK_TOKEN_MINT_ADDRESS}`);
     toast.success(`Successfully created $COCK token with ${totalSupply} supply`);
+    
     return COCK_TOKEN_MINT_ADDRESS;
   } catch (error) {
-    console.error('Error creating token:', error);
+    console.error('❌ Error creating token:', error);
     toast.error(`Failed to create token: ${getErrorMessage(error)}`);
     throw error;
   }
@@ -235,25 +251,8 @@ export async function getTokenBalance(connection: Connection, walletAddress: str
   }
 }
 
-/**
- * Helper function to create initialize mint instruction
- */
-function createInitializeMintInstruction(
-  mint: PublicKey,
-  decimals: number,
-  mintAuthority: PublicKey,
-  freezeAuthority: PublicKey,
-  programId = TOKEN_PROGRAM_ID
-): TransactionInstruction {
-  const keys = [
-    { pubkey: mint, isSigner: false, isWritable: true },
-    { pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false }
-  ];
-  
-  const data = Buffer.from([0, decimals, ...mintAuthority.toBytes(), 1, ...freezeAuthority.toBytes()]);
-  
-  return new TransactionInstruction({ keys, programId, data });
-}
+// Removed deprecated createInitializeMintInstruction helper
+// Now using createInitializeMint2Instruction from @solana/spl-token
 
 /**
  * Helper function to confirm a transaction with retries
@@ -309,9 +308,9 @@ function getErrorMessage(error: any): string {
 }
 
 /**
- * Transfer tokens from one wallet to another
+ * Transfer tokens from one wallet to another (MODERN API)
  * @param connection Solana connection
- * @param payer The wallet that will pay for the transaction
+ * @param payer The wallet keypair that will sign the transaction
  * @param fromWallet The source wallet address
  * @param toWallet The destination wallet address
  * @param amount The amount of tokens to transfer (in $COCK, not native units)
@@ -319,7 +318,7 @@ function getErrorMessage(error: any): string {
  */
 export async function transferTokens(
   connection: Connection,
-  payer: any,
+  payer: Keypair,
   fromWallet: string,
   toWallet: string,
   amount: number
@@ -333,74 +332,89 @@ export async function transferTokens(
     const fromWalletPublicKey = new PublicKey(fromWallet);
     const toWalletPublicKey = new PublicKey(toWallet);
 
-    // Create token instance
-    const token = new Token(
-      connection,
+    console.log(`💸 Transferring ${amount} $COCK from ${fromWallet} to ${toWallet}`);
+
+    // Get associated token accounts
+    const fromTokenAccount = await getAssociatedTokenAddress(
       mintPublicKey,
+      fromWalletPublicKey,
+      false,
       TOKEN_PROGRAM_ID,
-      payer
+      ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    // Get the associated token accounts
-    const fromTokenAccount = await token.getOrCreateAssociatedAccountInfo(
-      fromWalletPublicKey
+    const toTokenAccount = await getAssociatedTokenAddress(
+      mintPublicKey,
+      toWalletPublicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    // Get or create the destination token account
-    let toTokenAccount;
+    const transaction = new Transaction();
+
+    // Check if destination token account exists
     try {
-      toTokenAccount = await token.getOrCreateAssociatedAccountInfo(
-        toWalletPublicKey
-      );
+      await getAccount(connection, toTokenAccount, 'confirmed', TOKEN_PROGRAM_ID);
     } catch (error) {
-      // Create associated token account if it doesn't exist
-      const transaction = new Transaction();
+      // Account doesn't exist, create it
+      console.log(`Creating token account for ${toWallet}...`);
       transaction.add(
-        Token.createAssociatedTokenAccountInstruction(
-          ASSOCIATED_TOKEN_PROGRAM_ID,
-          TOKEN_PROGRAM_ID,
-          mintPublicKey,
-          toWalletPublicKey,
+        createAssociatedTokenAccountInstruction(
           payer.publicKey,
-          payer.publicKey
+          toTokenAccount,
+          toWalletPublicKey,
+          mintPublicKey,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
         )
-      );
-      
-      await connection.sendTransaction(transaction, [payer]);
-      
-      toTokenAccount = await token.getOrCreateAssociatedAccountInfo(
-        toWalletPublicKey
       );
     }
 
-    // Transfer tokens
-    const signature = await token.transfer(
-      fromTokenAccount.address,
-      toTokenAccount.address,
-      payer.publicKey,
-      [],
-      amount * Math.pow(10, TOKEN_DECIMALS)
+    // Add transfer instruction
+    const rawAmount = toRawAmount(amount);
+    transaction.add(
+      createTransferInstruction(
+        fromTokenAccount,
+        toTokenAccount,
+        fromWalletPublicKey,
+        rawAmount,
+        [],
+        TOKEN_PROGRAM_ID
+      )
     );
 
+    // Send transaction
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [payer],
+      {
+        commitment: 'confirmed',
+        maxRetries: 3,
+      }
+    );
+
+    console.log(`✅ Token transfer successful: ${signature}`);
     return signature;
   } catch (error) {
-    console.error('Error transferring tokens:', error);
+    console.error('❌ Error transferring tokens:', error);
     toast.error('Failed to transfer tokens');
     throw error;
   }
 }
 
 /**
- * Airdrop tokens to a wallet
+ * Airdrop tokens to a wallet (mint new tokens) (MODERN API)
  * @param connection Solana connection
- * @param payer The wallet that will pay for the transaction
+ * @param mintAuthority The mint authority keypair
  * @param targetWallet The wallet to receive the tokens
  * @param amount The amount of tokens to airdrop
  * @returns The transaction signature
  */
 export async function airdropTokens(
   connection: Connection,
-  payer: any,
+  mintAuthority: Keypair,
   targetWallet: string,
   amount: number
 ): Promise<string> {
@@ -412,52 +426,66 @@ export async function airdropTokens(
     const mintPublicKey = new PublicKey(COCK_TOKEN_MINT_ADDRESS);
     const targetWalletPublicKey = new PublicKey(targetWallet);
 
-    // Create token instance
-    const token = new Token(
-      connection,
+    console.log(`🪂 Airdropping ${amount} $COCK to ${targetWallet}`);
+
+    // Get target token account
+    const targetTokenAccount = await getAssociatedTokenAddress(
       mintPublicKey,
+      targetWalletPublicKey,
+      false,
       TOKEN_PROGRAM_ID,
-      payer
+      ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    // Get or create the target token account
-    let targetTokenAccount;
+    const transaction = new Transaction();
+
+    // Check if target token account exists
     try {
-      targetTokenAccount = await token.getOrCreateAssociatedAccountInfo(
-        targetWalletPublicKey
-      );
+      await getAccount(connection, targetTokenAccount, 'confirmed', TOKEN_PROGRAM_ID);
     } catch (error) {
-      // Create associated token account if it doesn't exist
-      const transaction = new Transaction();
+      // Account doesn't exist, create it
+      console.log(`Creating token account for ${targetWallet}...`);
       transaction.add(
-        Token.createAssociatedTokenAccountInstruction(
-          ASSOCIATED_TOKEN_PROGRAM_ID,
-          TOKEN_PROGRAM_ID,
-          mintPublicKey,
+        createAssociatedTokenAccountInstruction(
+          mintAuthority.publicKey,
+          targetTokenAccount,
           targetWalletPublicKey,
-          payer.publicKey,
-          payer.publicKey
+          mintPublicKey,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
         )
-      );
-      
-      await connection.sendTransaction(transaction, [payer]);
-      
-      targetTokenAccount = await token.getOrCreateAssociatedAccountInfo(
-        targetWalletPublicKey
       );
     }
 
-    // Mint tokens directly to the target account
-    const signature = await token.mintTo(
-      targetTokenAccount.address,
-      payer.publicKey,
-      [],
-      amount * Math.pow(10, TOKEN_DECIMALS)
+    // Add mint instruction
+    const rawAmount = toRawAmount(amount);
+    transaction.add(
+      createMintToInstruction(
+        mintPublicKey,
+        targetTokenAccount,
+        mintAuthority.publicKey,
+        rawAmount,
+        [],
+        TOKEN_PROGRAM_ID
+      )
     );
 
+    // Send transaction
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [mintAuthority],
+      {
+        commitment: 'confirmed',
+        maxRetries: 3,
+      }
+    );
+
+    console.log(`✅ Airdrop successful: ${signature}`);
+    toast.success(`Airdropped ${amount} $COCK to ${targetWallet}`);
     return signature;
   } catch (error) {
-    console.error('Error airdropping tokens:', error);
+    console.error('❌ Error airdropping tokens:', error);
     toast.error('Failed to airdrop tokens');
     throw error;
   }

@@ -1,8 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { lobbies, Lobby } from '../../lobbies/route';
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { lobbies, type Lobby } from '@/lib/lobbies';
+import { getConnection } from '@/lib/solana-config';
+import { escrowService } from '@/lib/escrow-service';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -35,20 +37,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Lobby not found" }, { status: 404 });
     }
 
-    const prizePoolWallet = process.env.PRIZE_POOL_WALLET;
-    if (!prizePoolWallet) {
-      console.error("PRIZE_POOL_WALLET is not set in .env.local");
-      return NextResponse.json({ error: "Server configuration error: Prize pool wallet is not set." }, { status: 500 });
+    // Tutorial matches are free
+    if (lobby.matchType === 'tutorial' || lobby.amount === 0) {
+      return NextResponse.json({ 
+        message: "No wager required for tutorial matches",
+        isFree: true,
+      });
     }
 
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+    // Get connection and escrow wallet
+    const connection = getConnection();
+    escrowService.setConnection(connection);
+    const escrowWallet = await escrowService.getNextWallet();
+
     const playerPubkey = new PublicKey(session.user.id);
-    const prizePoolPubkey = new PublicKey(prizePoolWallet);
 
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: playerPubkey,
-        toPubkey: prizePoolPubkey,
+        toPubkey: escrowWallet.publicKey,
         lamports: lobby.amount * LAMPORTS_PER_SOL,
       })
     );

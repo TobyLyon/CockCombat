@@ -52,6 +52,21 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   // A single, stable audio element for background music.
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
+
+  // Gracefully ignore benign play() promise rejections (race with pause/load, autoplay)
+  const isBenignPlayError = (error: unknown) => {
+    const anyErr = error as any;
+    const name = anyErr?.name as string | undefined;
+    const message: string = (anyErr?.message || String(anyErr || '')).toString();
+    if (!message) return false;
+    return (
+      message.includes('The play() request was interrupted') ||
+      message.includes('interrupted by a call to pause') ||
+      message.includes('interrupted by a new load request') ||
+      name === 'AbortError' ||
+      name === 'NotAllowedError'
+    );
+  };
   
   // Create the audio element once on mount (client-side).
   useEffect(() => {
@@ -93,7 +108,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (!audio) return;
 
     if (audioEnabled && audio.src && hasInteracted) {
-      audio.play().catch((e) => console.error("Error resuming music:", e));
+      audio.play().catch((e) => {
+        if (!isBenignPlayError(e)) console.error("Error resuming music:", e);
+      });
     } else {
       audio.pause();
     }
@@ -144,7 +161,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     audio.src = musicPath;
 
     if (audioEnabled) {
-      audio.play().catch((e) => console.error(`Error playing music (${musicPath}):`, e));
+      audio.play().catch((e) => {
+        if (!isBenignPlayError(e)) console.error(`Error playing music (${musicPath}):`, e);
+      });
     }
   }, [audioEnabled, hasInteracted, currentMusicTrack]);
   
@@ -170,7 +189,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const resumeMusic = useCallback(() => {
     const audio = backgroundMusicRef.current;
     if (audio && audio.src && audioEnabled && hasInteracted) {
-      audio.play().catch((e) => console.error("Error resuming music:", e));
+      audio.play().catch((e) => {
+        if (!isBenignPlayError(e)) console.error("Error resuming music:", e);
+      });
     }
   }, [audioEnabled, hasInteracted]);
   
@@ -191,7 +212,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       audio.volume = 0.7 * volume;
       
       // Play the sound
-      audio.play().catch(e => console.error(`Error playing looped sound (${soundPath}):`, e));
+      audio.play().catch(e => { if (!isBenignPlayError(e)) console.error(`Error playing looped sound (${soundPath}):`, e); });
       
       // Set up loop with seamless playback if loop duration provided
       let interval: NodeJS.Timeout | null = null;
@@ -199,7 +220,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         interval = setInterval(() => {
           if (audioEnabled) {
             audio.currentTime = 0;
-            audio.play().catch(e => console.error(`Error looping sound (${soundPath}):`, e));
+            audio.play().catch(e => { if (!isBenignPlayError(e)) console.error(`Error looping sound (${soundPath}):`, e); });
           }
         }, loopDuration);
       }

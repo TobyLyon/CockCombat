@@ -1,7 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
+import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber"
+import * as THREE from "three"
+import { TextureLoader } from "three"
+import { PixelChicken } from "@/components/3d/pixel-chicken-viewer"
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import PixelChickenViewer from "@/components/3d/pixel-chicken-viewer"
 import { useRouter } from "next/navigation"
 import { useAudio } from "@/contexts/AudioContext"
@@ -10,16 +15,65 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+// Removed WalletMultiButton in favor of a minimal connect button for consistent styling
+
+// Animated chicken in background
+interface AnimatedChicken {
+  id: number
+  x: number
+  y: number
+  speed: number
+  direction: number
+  size: number
+  color: string
+  animation: 'walking' | 'pecking' | 'idle'
+  animationTimer: number
+}
 
 export default function PixelGameInterface() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState("play") // play, about, controls
   const { audioEnabled, volume, playSound } = useAudio()
   const { connected, publicKey } = useWallet()
   const { setVisible } = useWalletModal()
   const { profile, needsSetup, setNeedsSetup, refreshProfile } = useProfile()
   const [isNavigating, setIsNavigating] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  
+  // Background chickens (sprite placeholders kept for sky-level ambience)
+  const [backgroundChickens, setBackgroundChickens] = useState<AnimatedChicken[]>([])
+  const animationFrameRef = useRef<number>()
+  
+  // Scene cycle state for real 3D chickens in the background
+  const [sceneIndex, setSceneIndex] = useState(0)
+  const sceneTimerRef = useRef<number | null>(null)
+  const sceneStartAtRef = useRef<number>(Date.now())
+  const sceneEndAtRef = useRef<number>(Date.now() + 8000)
+
+  // Color palettes for chickens (keeps your orange but adds variety)
+  const CHICKEN_PALETTES = [
+    // Classic orange
+    { body: "#f97316", comb: "#ef4444", beak: "#FFD600", legs: "#FFD600", tail: "#6366f1", eyes: "#ffffff", pupils: "#222222" },
+    // Gold
+    { body: "#f59e0b", comb: "#b91c1c", beak: "#fbbf24", legs: "#fbbf24", tail: "#7c3aed", eyes: "#ffffff", pupils: "#111827" },
+    // White
+    { body: "#f8fafc", comb: "#dc2626", beak: "#facc15", legs: "#facc15", tail: "#3b82f6", eyes: "#ffffff", pupils: "#111827" },
+    // Black
+    { body: "#1f2937", comb: "#ef4444", beak: "#f59e0b", legs: "#f59e0b", tail: "#10b981", eyes: "#e5e7eb", pupils: "#000000" },
+    // Blue
+    { body: "#60a5fa", comb: "#ef4444", beak: "#fbbf24", legs: "#fbbf24", tail: "#111827", eyes: "#ffffff", pupils: "#1f2937" },
+    // Emerald
+    { body: "#10b981", comb: "#dc2626", beak: "#fbbf24", legs: "#fbbf24", tail: "#2563eb", eyes: "#ffffff", pupils: "#111827" }
+  ] as Array<{[k:string]: string}>
+  // Timed flock sprint event controller
+  interface FlockEvent {
+    ids: number[]
+    endAt: number
+    direction: number // degrees, 0 = right, 180 = left
+    y: number // track height band
+    speed: number // temporary speed override
+  }
+  const flockRef = useRef<FlockEvent | null>(null)
+  const flockTimerRef = useRef<number | null>(null)
 
   // Play click sound on any left mouse click
   useEffect(() => {
@@ -33,30 +87,12 @@ export default function PixelGameInterface() {
   const handleNavigation = async (path: string) => {
     playSound("button")
     
-    // Step 1: Connect wallet if not already connected
-    if (!connected) {
-      setPendingNavigation(path) // Store the intended path
-      setVisible(true)
-      toast.info("Please connect your wallet to continue.", {
-        duration: 3000,
-      })
-      return
-    }
-
+    // Allow viewing lobbies without wallet connection
+    // Only require wallet for actually joining matches (handled in lobby component)
     setIsNavigating(true)
     
     try {
-      // Step 2: Check for profile and prompt for setup if needed
-      if (needsSetup || !profile) {
-        toast.info("Please create your profile to enter the arena.", {
-          duration: 4000,
-        })
-        setNeedsSetup(true)
-        setIsNavigating(false)
-        return
-      }
-
-      // Step 3: All checks passed, navigate to the page
+      // Navigate directly to lobbies - no wallet check needed for viewing
       toast.success("Entering the arena...", { duration: 1000 })
       router.push(path)
     } catch (error) {
@@ -67,214 +103,1000 @@ export default function PixelGameInterface() {
     }
   }
 
+  // Initialize background chickens
+  useEffect(() => {
+    const colors = ['#e63946', '#f77f00', '#fcbf49', '#eae2b7', '#d4a373', '#8b4513']
+    const chickens: AnimatedChicken[] = Array.from({ length: 8 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: 50 + Math.random() * 30, // Keep them in the grass area
+      speed: 0.02 + Math.random() * 0.03,
+      direction: Math.random() * 360,
+      size: 40 + Math.random() * 30,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      animation: Math.random() > 0.7 ? 'pecking' : 'walking' as 'walking' | 'pecking' | 'idle',
+      animationTimer: Math.random() * 5000
+    }))
+    setBackgroundChickens(chickens)
+  }, [])
+
+  // Schedule periodic flock sprint events (every 12–20s)
+  useEffect(() => {
+    const scheduleNext = () => {
+      const delay = 12000 + Math.random() * 8000 // 12–20s
+      flockTimerRef.current = window.setTimeout(() => {
+        // Choose 3–6 unique chickens to sprint together
+        setBackgroundChickens(prev => {
+          const idsPool = prev.map(c => c.id)
+          const count = Math.min(6, Math.max(3, Math.floor(Math.random() * 6)))
+          const chosen: number[] = []
+          while (chosen.length < count && idsPool.length) {
+            const idx = Math.floor(Math.random() * idsPool.length)
+            chosen.push(idsPool[idx])
+            idsPool.splice(idx, 1)
+          }
+          // Create flock event across the back field
+          const direction = Math.random() > 0.5 ? 0 : 180
+          const y = 52 + Math.random() * 6 // keep a tight band near back field
+          const speed = 0.08 + Math.random() * 0.05
+          flockRef.current = {
+            ids: chosen,
+            endAt: Date.now() + (3000 + Math.random() * 2500), // 3–5.5s sprint
+            direction,
+            y,
+            speed
+          }
+          return prev
+        })
+        scheduleNext()
+      }, delay)
+    }
+    scheduleNext()
+    return () => {
+      if (flockTimerRef.current) window.clearTimeout(flockTimerRef.current)
+      flockTimerRef.current = null
+      flockRef.current = null
+    }
+  }, [])
+
+  // Animate background chickens
+  useEffect(() => {
+    const animate = () => {
+      const now = Date.now()
+      const activeFlock = flockRef.current && now < flockRef.current.endAt ? flockRef.current : null
+      if (flockRef.current && !activeFlock) {
+        // Flock event finished
+        flockRef.current = null
+      }
+      setBackgroundChickens(prev => prev.map(chicken => {
+        let { x, y, direction, speed, animation, animationTimer } = chicken
+        // Apply flock overrides if this chicken is in the current event
+        if (activeFlock && activeFlock.ids.includes(chicken.id)) {
+          // Force walking during sprint
+          animation = 'walking'
+          // Tighten Y band toward event Y
+          y = y + (activeFlock.y - y) * 0.15
+          // Align direction
+          direction = activeFlock.direction
+          // Temporarily increase speed
+          speed = activeFlock.speed
+        }
+        
+        // Update animation state
+        animationTimer -= 16 // ~60fps
+        if (animationTimer <= 0) {
+          const rand = Math.random()
+          animation = rand > 0.7 ? 'pecking' : rand > 0.3 ? 'walking' : 'idle'
+          animationTimer = 2000 + Math.random() * 3000
+          
+          // Change direction occasionally
+          if (Math.random() > 0.7) {
+            direction = Math.random() * 360
+          }
+        }
+        
+        // Move only when walking
+        if (animation === 'walking') {
+          x += Math.cos(direction * Math.PI / 180) * speed
+          y += Math.sin(direction * Math.PI / 180) * speed
+          
+          // Bounce off edges
+          if (x < 5 || x > 95) direction = 180 - direction
+          if (y < 45 || y > 85) direction = -direction
+          
+          x = Math.max(5, Math.min(95, x))
+          y = Math.max(45, Math.min(85, y))
+        }
+        
+        return { ...chicken, x, y, direction, speed, animation, animationTimer }
+      }))
+      
+      animationFrameRef.current = requestAnimationFrame(animate)
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(animate)
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [])
+
   // Auto-navigate after wallet connection
   useEffect(() => {
     if (connected && pendingNavigation) {
-      // Wallet just connected, continue with pending navigation
       const path = pendingNavigation
-      setPendingNavigation(null) // Clear pending navigation
+      setPendingNavigation(null)
       handleNavigation(path)
     }
   }, [connected, pendingNavigation])
 
+  // Cycle scenes every 7–10 seconds; record start/end for camera progress
+  useEffect(() => {
+    const schedule = () => {
+      const delay = 7000 + Math.random() * 3000
+      const now = Date.now()
+      sceneStartAtRef.current = now
+      sceneEndAtRef.current = now + delay
+      if (sceneTimerRef.current) window.clearTimeout(sceneTimerRef.current)
+      sceneTimerRef.current = window.setTimeout(() => {
+        setSceneIndex((i) => (i + 1) % 3)
+        schedule()
+      }, delay)
+    }
+    schedule()
+    return () => { if (sceneTimerRef.current) window.clearTimeout(sceneTimerRef.current) }
+  }, [])
+
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-[#3a8c4f] flex flex-col">
-      {/* Pixel art background */}
-      <div className="absolute inset-0 z-0">
-        {/* Sky */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#87CEEB] to-[#ADD8E6] h-1/2"></div>
-
-        {/* Grass */}
-        <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-b from-[#4a9c5f] to-[#3a8c4f]"></div>
-
-        {/* Sun */}
-        <div className="absolute top-[5%] right-[8%] w-20 h-20 bg-yellow-300 rounded-full shadow-lg z-10 animate-pulse" style={{ animationDuration: '4s' }}></div>
-
-        {/* Animated clouds (always visible, slower, more variety) */}
-        <div className="absolute top-[10%] left-[2%] w-24 h-8 bg-white rounded-full animate-cloud-move" style={{ animationDuration: '70s' }}></div>
-        <div className="absolute top-[15%] left-[18%] w-16 h-6 bg-white rounded-full animate-cloud-move" style={{ animationDuration: '80s', animationDelay: '10s' }}></div>
-        <div className="absolute top-[8%] left-[35%] w-20 h-7 bg-white rounded-full animate-cloud-move" style={{ animationDuration: '65s', animationDelay: '20s' }}></div>
-        <div className="absolute top-[12%] left-[55%] w-24 h-8 bg-white rounded-full animate-cloud-move" style={{ animationDuration: '75s', animationDelay: '25s' }}></div>
-        <div className="absolute top-[18%] left-[70%] w-16 h-6 bg-white rounded-full animate-cloud-move" style={{ animationDuration: '60s', animationDelay: '40s' }}></div>
-        <div className="absolute top-[22%] left-[50%] w-28 h-10 bg-white rounded-full opacity-80 animate-cloud-move" style={{ animationDuration: '68s', animationDelay: '35s' }}></div>
-        <div className="absolute top-[25%] left-[80%] w-20 h-7 bg-white rounded-full opacity-70 animate-cloud-move" style={{ animationDuration: '77s', animationDelay: '55s' }}></div>
-        <div className="absolute top-[28%] left-[60%] w-24 h-8 bg-white rounded-full opacity-60 animate-cloud-move" style={{ animationDuration: '72s', animationDelay: '60s' }}></div>
-        {/* Pixel trees (grounded, varied, z-0) */}
-        <div className="absolute bottom-[44%] left-[7%] w-16 h-24 flex flex-col items-center z-0">
-          <div className="w-16 h-16 bg-[#2e7d32] rounded-md"></div>
-          <div className="w-12 h-12 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-8 h-8 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-4 h-8 bg-[#8B4513] -mt-2"></div>
-        </div>
-        <div className="absolute bottom-[44%] left-[17%] w-10 h-16 flex flex-col items-center z-0">
-          <div className="w-10 h-10 bg-[#388e3c] rounded-md"></div>
-          <div className="w-6 h-6 bg-[#388e3c] rounded-md -mt-1"></div>
-          <div className="w-3 h-6 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[44%] left-[26%] w-8 h-12 flex flex-col items-center z-0">
-          <div className="w-8 h-8 bg-[#43a047] rounded-md"></div>
-          <div className="w-2 h-4 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[44%] left-[38%] w-14 h-20 flex flex-col items-center z-0">
-          <div className="w-14 h-14 bg-[#388e3c] rounded-md"></div>
-          <div className="w-10 h-10 bg-[#388e3c] rounded-md -mt-1"></div>
-          <div className="w-3 h-6 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[44%] right-[7%] w-16 h-24 flex flex-col items-center z-0">
-          <div className="w-16 h-16 bg-[#2e7d32] rounded-md"></div>
-          <div className="w-12 h-12 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-8 h-8 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-4 h-8 bg-[#8B4513] -mt-2"></div>
-        </div>
-        <div className="absolute bottom-[44%] right-[17%] w-10 h-16 flex flex-col items-center z-0">
-          <div className="w-10 h-10 bg-[#388e3c] rounded-md"></div>
-          <div className="w-6 h-6 bg-[#388e3c] rounded-md -mt-1"></div>
-          <div className="w-3 h-6 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[44%] right-[26%] w-8 h-12 flex flex-col items-center z-0">
-          <div className="w-8 h-8 bg-[#43a047] rounded-md"></div>
-          <div className="w-2 h-4 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[44%] right-[38%] w-14 h-20 flex flex-col items-center z-0">
-          <div className="w-14 h-14 bg-[#388e3c] rounded-md"></div>
-          <div className="w-10 h-10 bg-[#388e3c] rounded-md -mt-1"></div>
-          <div className="w-3 h-6 bg-[#8B4513] -mt-1"></div>
-        </div>
-        <div className="absolute bottom-[50%] left-[5%] w-16 h-24 flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#2e7d32] rounded-md"></div>
-          <div className="w-12 h-12 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-8 h-8 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-4 h-8 bg-[#8B4513] -mt-2"></div>
+    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-b from-[#87CEEB] via-[#B0D4E3] to-[#E8F4F8] flex flex-col">
+      {/* Epic Title */}
+      <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
+        <h1 className="text-7xl md:text-8xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font">
+          COCK COMBAT
+        </h1>
+        <p className="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
+          Battle Royale on Solana
+        </p>
         </div>
 
-        <div className="absolute bottom-[50%] right-[5%] w-16 h-24 flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#2e7d32] rounded-md"></div>
-          <div className="w-12 h-12 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-8 h-8 bg-[#2e7d32] rounded-md -mt-2"></div>
-          <div className="w-4 h-8 bg-[#8B4513] -mt-2"></div>
-        </div>
-
-        {/* Arena circle */}
-        <div className="absolute bottom-[10%] left-1/2 transform -translate-x-1/2 w-[80vw] h-[30vh] bg-[#8B4513] rounded-full"></div>
-        <div className="absolute bottom-[11%] left-1/2 transform -translate-x-1/2 w-[75vw] h-[28vh] bg-[#D2B48C] rounded-full"></div>
+      {/* 3D Scene Background - cycles through mini-scenes of real chickens */}
+      <div className="absolute inset-0 z-10 pointer-events-none" aria-hidden style={{ filter: 'blur(2px)' }}>
+        <Canvas 
+          camera={{ position: [0, 2.2, 6], fov: 45 }}
+          style={{ width: '100%', height: '100%' }}
+          dpr={[1, 1.5]}
+          gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
+          onCreated={({ gl, events }) => {
+            try {
+              const canvas = gl.getContext()?.canvas as HTMLCanvasElement | undefined
+              canvas?.addEventListener('webglcontextlost', (e) => e.preventDefault(), false)
+            } catch {}
+          }}
+          shadows
+        >
+          <CinematicCamera 
+            index={sceneIndex}
+            getProgress={() => {
+              const now = Date.now()
+              const start = sceneStartAtRef.current
+              const end = sceneEndAtRef.current
+              const duration = Math.max(1, end - start)
+              const t = Math.max(0, Math.min(1, (now - start) / duration))
+              // Smoothstep
+              return t * t * (3 - 2 * t)
+            }}
+          />
+          <color attach="background" args={['#87CEEB']} />
+          <ambientLight intensity={0.9} />
+          <directionalLight position={[8, 12, 6]} intensity={1.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-far={50} shadow-camera-left={-15} shadow-camera-right={15} shadow-camera-top={15} shadow-camera-bottom={-15} />
+          <hemisphereLight args={['#87CEEB', '#4a7c29', 0.3]} />
+          <fog attach="fog" args={['#B0D4E3', 12, 35]} />
+          <SceneCycle index={sceneIndex} onComplete={() => setSceneIndex((i) => (i + 1) % 3)} />
+        </Canvas>
       </div>
 
-      {/* Main content */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 overflow-hidden">
-        <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-12 w-full h-full">
-          {/* Chicken */}
-          <div className="flex items-center justify-center mb-6 md:mb-0">
-            <div className="w-full h-full max-w-[420px] max-h-[420px]">
+      {/* Center - Mouse-following chicken in foreground */}
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+        <div className="w-[300px] h-[300px] md:w-[400px] md:h-[400px]">
               <PixelChickenViewer />
             </div>
           </div>
-          {/* Menu */}
-          <div className="bg-[#222222] border-4 border-[#111111] rounded-lg p-6 max-w-md w-full shadow-lg min-h-[400px] flex flex-col justify-between items-center transition-all duration-300">
-            <div className="tabs flex mb-4 border-b-2 border-[#111111] w-full">
-              <button
-                className={`px-4 py-2 ${activeTab === "play" ? "bg-[#444444] text-yellow-300 font-bold" : "text-gray-300 hover:bg-[#333333]"} rounded-t-lg transition-colors`}
-                style={{ minWidth: 0, flex: 1 }}
-                onClick={() => {
-                  setActiveTab("play")
-                }}
-              >
-                Play
-              </button>
-              <button
-                className={`px-4 py-2 ${activeTab === "about" ? "bg-[#444444] text-yellow-300 font-bold" : "text-gray-300 hover:bg-[#333333]"} rounded-t-lg transition-colors`}
-                style={{ minWidth: 0, flex: 1 }}
-                onClick={() => {
-                  setActiveTab("about")
-                }}
-              >
-                About
-              </button>
-              <button
-                className={`px-4 py-2 ${activeTab === "controls" ? "bg-[#444444] text-yellow-300 font-bold" : "text-gray-300 hover:bg-[#333333]"} rounded-t-lg transition-colors`}
-                style={{ minWidth: 0, flex: 1 }}
-                onClick={() => {
-                  setActiveTab("controls")
-                }}
-              >
-                Controls
-              </button>
-            </div>
-            <div className="flex-1 flex flex-col justify-center w-full">
-              {activeTab === "play" && (
-                <div className="text-white w-full">
-                  <h2 className="text-xl font-bold mb-4 text-yellow-400 pixel-font">ENTER THE ARENA</h2>
-                  <p className="mb-6 text-gray-300">
-                    Connect your Solana wallet to start battling with your champion chickens!
-                  </p>
 
-                  <div className="grid grid-cols-2 gap-3">
+      {/* Minimal UI - Bottom Center: two equal buttons side-by-side, no containers */}
+      <div className="absolute bottom-48 left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-4">
+        {/* Real Solana wallet connect button */}
+        <WalletMultiButton />
+        
+        {/* Lobbies button */}
                     <Button
-                      className="bg-[#ff4500] hover:bg-[#ff6347] text-white font-bold py-3 px-6 rounded border-b-4 border-[#8B0000] hover:border-[#ff4500] transition-all pixel-font pixel-shadow"
+          className="h-12 px-6 text-base font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white"
                       onClick={() => handleNavigation("/arena")}
                       disabled={isNavigating}
                     >
-                      {isNavigating ? <Loader2 className="animate-spin" /> : "ARENA"}
-                    </Button>
-                    <Button
-                      className="bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold py-3 px-6 rounded border-b-4 border-[#1e40af] hover:border-[#3b82f6] transition-all pixel-font pixel-shadow"
-                      onClick={() => handleNavigation("/spectate")}
-                    >
-                      SPECTATE
-                    </Button>
-                    <Button
-                      className="bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold py-3 px-6 rounded border-b-4 border-[#15803d] hover:border-[#22c55e] transition-all pixel-font pixel-shadow"
-                      onClick={() => handleNavigation("/marketplace")}
-                    >
-                      MARKET
-                    </Button>
-                    <Button
-                      className="bg-[#eab308] hover:bg-[#ca8a04] text-white font-bold py-3 px-6 rounded border-b-4 border-[#a16207] hover:border-[#eab308] transition-all pixel-font pixel-shadow"
-                      onClick={() => handleNavigation("/profile")}
-                    >
-                      MY COCKS
+          {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
                     </Button>
                   </div>
-                </div>
-              )}
-              {activeTab === "about" && (
-                <div className="text-white w-full">
-                  <h2 className="text-xl font-bold mb-4 text-yellow-400 pixel-font">ABOUT THE GAME</h2>
-                  <p className="mb-4 text-gray-300">
-                    Cock Combat is the ultimate voxel chicken fighting arena on Solana blockchain.
-                  </p>
-                  <p className="mb-4 text-gray-300">
-                    Battle for glory, bet on champions, and build your feathered empire in this 8-bit inspired fighting
-                    game.
-                  </p>
-                  <p className="text-gray-300">
-                    Each chicken is a unique NFT tied to your wallet until it meets its demise in the arena.
-                  </p>
-                </div>
-              )}
-              {activeTab === "controls" && (
-                <div className="text-white w-full">
-                  <h2 className="text-xl font-bold mb-4 text-yellow-400 pixel-font">GAME CONTROLS</h2>
-                  <div className="grid grid-cols-2 gap-2 text-gray-300">
-                    <div className="font-bold">Movement:</div>
-                    <div>WASD / Arrow Keys</div>
-                    <div className="font-bold">Attack:</div>
-                    <div>Space / Left Click</div>
-                    <div className="font-bold">Special Move:</div>
-                    <div>Right Click / E</div>
-                    <div className="font-bold">Taunt:</div>
-                    <div>T</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
 
-      {/* Game footer */}
-      <footer className="relative z-10 p-3 bg-[#222222] border-t-4 border-[#111111] text-white text-center text-xs">
-        <p>&copy; {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
-      </footer>
     </div>
+  )
+}
+
+// SceneCycle renders short background clips of real 3D chickens
+function SceneCycle({ index, onComplete }: { index: number; onComplete: () => void }) {
+  // Timed transitions inside scenes if needed
+  useFrame(({ clock }) => {
+    // Could add per-scene timed transitions here
+  })
+
+  const commonChickenProps = {
+    rotation: [0, 0, 0] as [number, number, number],
+    disableBobbing: false,
+    isPecking: false,
+    isWalking: false,
+    isJumping: false,
+    isPlayer: false,
+    health: 3,
+    maxHealth: 3,
+  }
+
+  // Predeclare refs for all scenes to avoid conditional hook usage
+  const arenaC1Ref = useRef<THREE.Group>(null)
+  const arenaC2Ref = useRef<THREE.Group>(null)
+  const arenaC3Ref = useRef<THREE.Group>(null)
+
+  const forestF1Ref = useRef<THREE.Group>(null)
+  const forestF2Ref = useRef<THREE.Group>(null)
+  const forestF3Ref = useRef<THREE.Group>(null)
+
+  const farmP1Ref = useRef<THREE.Group>(null)
+  const farmI1Ref = useRef<THREE.Group>(null)
+  const farmP2Ref = useRef<THREE.Group>(null)
+  const farmI2Ref = useRef<THREE.Group>(null)
+
+  if (index === 0) {
+    // Scene 1: Arena - wide spacing, no overlaps
+    return (
+      <group>
+        <ArenaEnvironment />
+        {/* Pecking left foreground - well outside ring */}
+        <group ref={arenaC1Ref} position={new THREE.Vector3(-6.5, 0.6, 0.5)} rotation={[0, -0.8, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(0)} />
+        </group>
+        {/* Idle right foreground - clear space */}
+        <group ref={arenaC2Ref} position={new THREE.Vector3(7.0, 0.6, -0.5)} rotation={[0, -2.5, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} colors={paletteByIndex(1)} />
+        </group>
+        {/* Walking far background - completely separate path */}
+        <WalkingChicken start={[8.0, 0.6, -6.5]} end={[-8.0, 0.6, -7.0]} duration={8} paletteIndex={2} avoidRefs={[arenaC1Ref, arenaC2Ref, arenaC3Ref]} avoidDist={3.0} />
+        {/* Pecking deep background left - isolated */}
+        <group ref={arenaC3Ref} position={new THREE.Vector3(-7.5, 0.6, -6.0)} rotation={[0, 1.5, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(3)} />
+        </group>
+        <SeparationController refs={[arenaC1Ref, arenaC2Ref, arenaC3Ref]} minDist={3.5} strength={0.1} clampY={0.6} obstacleFn={(p) => avoidArenaRing(p)} />
+      </group>
+    )
+  }
+
+  if (index === 1) {
+    // Scene 2: Forest - chickens well-spread in clearings
+    return (
+      <group>
+        <ForestEnvironment />
+        {/* Walking wide diagonal - completely clear path */}
+        <WalkingChicken start={[-6.0, 0.6, -1.0]} end={[6.0, 0.6, -1.5]} duration={9} paletteIndex={3} obstacleFn={obstacleFieldForest} avoidRefs={[forestF1Ref, forestF2Ref, forestF3Ref]} avoidDist={3.5} />
+        {/* Pecking right clearing - isolated */}
+        <group ref={forestF1Ref} position={new THREE.Vector3(3.0, 0.6, -4.0)} rotation={[0, 1.2, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(4)} />
+        </group>
+        {/* Idle deep left - away from action */}
+        <group ref={forestF2Ref} position={new THREE.Vector3(-4.5, 0.6, -4.5)} rotation={[0, -2.2, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} colors={paletteByIndex(5)} />
+        </group>
+        {/* Curious center clearing - lots of space */}
+        <CuriousChicken position={[0.2, 0.6, -2.8]} paletteIndex={1} rotation={[0, -0.5, 0]} />
+        {/* Pecking left foreground - clear zone */}
+        <group ref={forestF3Ref} position={new THREE.Vector3(-5.5, 0.6, -0.8)} rotation={[0, -1.8, 0]}>
+          <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(0)} />
+        </group>
+        <SeparationController refs={[forestF1Ref, forestF2Ref, forestF3Ref]} minDist={3.5} strength={0.1} clampY={0.6} />
+      </group>
+    )
+  }
+
+  // Scene 3: Farm yard - extreme spacing, natural placement
+  return (
+    <group>
+      <FarmyardEnvironment />
+      {/* Curious near foreground left - lots of space */}
+      <CuriousChicken position={[-5.0, 0.6, -0.5]} paletteIndex={5} rotation={[0, -2.2, 0]} />
+      {/* Pecking far left - isolated near hay */}
+      <group ref={farmP1Ref} position={new THREE.Vector3(-6.5, 0.6, -3.0)} rotation={[0, 1.5, 0]}>
+        <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(0)} />
+      </group>
+      {/* Idle far right - well clear of fence */}
+      <group ref={farmI1Ref} position={new THREE.Vector3(6.0, 0.6, -2.5)} rotation={[0, 2.3, 0]}>
+        <PixelChicken position={[0, 0, 0]} {...commonChickenProps} colors={paletteByIndex(2)} />
+      </group>
+      {/* Walking deep background - separate from all others */}
+      <WalkingChicken start={[-7.0, 0.6, -5.0]} end={[4.0, 0.6, -4.5]} duration={8} paletteIndex={4} obstacleFn={obstacleFieldFarm} avoidRefs={[farmP1Ref, farmI1Ref, farmP2Ref, farmI2Ref]} avoidDist={3.5} />
+      {/* Pecking center open area - clear of trough */}
+      <group ref={farmP2Ref} position={new THREE.Vector3(-0.5, 0.6, -3.2)} rotation={[0, -2.8, 0]}>
+        <PixelChicken position={[0, 0, 0]} {...commonChickenProps} isPecking={true} colors={paletteByIndex(3)} />
+      </group>
+      {/* Idle right foreground - wide clearance */}
+      <group ref={farmI2Ref} position={new THREE.Vector3(4.5, 0.6, -0.8)} rotation={[0, 0.8, 0]}>
+        <PixelChicken position={[0, 0, 0]} {...commonChickenProps} colors={paletteByIndex(1)} />
+      </group>
+      <SeparationController refs={[farmP1Ref, farmI1Ref, farmP2Ref, farmI2Ref]} minDist={3.5} strength={0.1} clampY={0.6} obstacleFn={obstacleFieldFarm} />
+    </group>
+  )
+}
+
+// Moves and aims the main camera on spline-like tracks per scene
+function CinematicCamera({ index, getProgress }: { index: number; getProgress: () => number }) {
+  const { camera } = useThree()
+  useFrame(() => {
+    const t = getProgress()
+    // Define per-scene camera rails (start -> end)
+    let fromPos: THREE.Vector3
+    let toPos: THREE.Vector3
+    let fromLook: THREE.Vector3
+    let toLook: THREE.Vector3
+    if (index === 0) {
+      fromPos = new THREE.Vector3(-3.5, 2.0, 4.5)
+      toPos = new THREE.Vector3(3.2, 2.0, 4.2)
+      fromLook = new THREE.Vector3(0, 0.8, -1.3)
+      toLook = new THREE.Vector3(0.2, 0.8, -1.3)
+    } else if (index === 1) {
+      fromPos = new THREE.Vector3(0, 1.8, 5.6)
+      toPos = new THREE.Vector3(0, 2.6, 3.8)
+      fromLook = new THREE.Vector3(0, 0.7, -1.5)
+      toLook = new THREE.Vector3(0, 0.9, -1.5)
+    } else {
+      // Farmyard: frame the barn prominently
+      fromPos = new THREE.Vector3(3.0, 2.4, 6.8)
+      toPos = new THREE.Vector3(-3.0, 2.6, 6.2)
+      fromLook = new THREE.Vector3(0, 1.6, -7.0)
+      toLook = new THREE.Vector3(0, 1.6, -7.0)
+    }
+    const pos = fromPos.clone().lerp(toPos, t)
+    const look = fromLook.clone().lerp(toLook, t)
+    camera.position.copy(pos)
+    camera.lookAt(look)
+  })
+  return null
+}
+
+function WalkingChicken({ start, end, duration, paletteIndex, obstacleFn, avoidRefs, avoidDist = 0.9 }: { start: [number, number, number]; end: [number, number, number]; duration: number; paletteIndex: number; obstacleFn?: (p: THREE.Vector3) => THREE.Vector3; avoidRefs?: React.RefObject<THREE.Group>[]; avoidDist?: number }) {
+  const ref = useRef<THREE.Group>(null)
+  const startVec = new THREE.Vector3(...start)
+  const endVec = new THREE.Vector3(...end)
+  const total = duration
+  const startTimeRef = useRef<number | null>(null)
+  const avoidOffsetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0))
+  
+  useFrame(({ clock }) => {
+    // Initialize start time on first frame
+    if (startTimeRef.current === null) {
+      startTimeRef.current = clock.getElapsedTime()
+    }
+    
+    const elapsed = clock.getElapsedTime() - startTimeRef.current
+    // Clamp t to [0, 1] - no looping, just freeze at end
+    const t = Math.min(1, elapsed / total)
+    
+    let next = startVec.clone().lerp(endVec, t)
+    next.y = 0.6
+    
+    if (obstacleFn) {
+      next = obstacleFn(next)
+      next.y = 0.6
+    }
+    
+    // Smoothed avoidance to prevent erratic pathing
+    if (avoidRefs && avoidRefs.length) {
+      const desired = new THREE.Vector3(0, 0, 0)
+      const maxPush = 0.6 // absolute cap on avoidance push magnitude
+      avoidRefs.forEach(r => {
+        const o = r.current
+        if (!o) return
+        const delta = next.clone().sub(o.position)
+        delta.y = 0
+        const dist2D = Math.max(0.0001, Math.hypot(delta.x, delta.z))
+        if (dist2D < avoidDist) {
+          const overlap = (avoidDist - dist2D) / avoidDist // 0..1
+          // Quadratic falloff for gentle steering far away, stronger when close
+          const push = Math.min(maxPush, overlap * overlap * maxPush)
+          delta.normalize().multiplyScalar(push)
+          desired.add(delta)
+        }
+      })
+      // Limit instantaneous change and smooth over time
+      desired.clampLength(0, 0.15) // per-frame cap to avoid sudden jumps
+      avoidOffsetRef.current.lerp(desired, 0.12)
+      next.add(avoidOffsetRef.current)
+    }
+    
+    if (ref.current) {
+      ref.current.position.copy(next)
+      const dir = endVec.clone().sub(startVec).normalize()
+      const angle = Math.atan2(dir.x, dir.z)
+      ref.current.rotation.y = angle
+      
+      // Stop walking animation when reached end
+      if (t >= 1) {
+        // Chicken stops walking at destination
+      }
+    }
+  })
+  
+  return (
+    <group ref={ref} position={[0, 0, 0]}>
+      <PixelChicken position={[0, 0, 0]} rotation={[0, 0, 0]} isWalking={true} disableBobbing={false} health={3} maxHealth={3} isPlayer={false} colors={paletteByIndex(paletteIndex)} />
+    </group>
+  )
+}
+
+function CuriousChicken({ position, paletteIndex, rotation }: { position: [number, number, number]; paletteIndex: number; rotation?: [number, number, number] }) {
+  const ref = useRef<THREE.Group>(null)
+  const lookTimer = useRef(0)
+  const headTarget = useRef({ x: 0, y: 0 })
+  const actionTimer = useRef(0)
+  const [action, setAction] = useState<'idle' | 'pecking'>('idle')
+  
+  useFrame((_, delta) => {
+    // Look around behavior
+    lookTimer.current -= delta
+    if (lookTimer.current <= 0) {
+      headTarget.current.x = -0.5 + Math.random()
+      headTarget.current.y = -0.5 + Math.random()
+      lookTimer.current = 1 + Math.random() * 1.5
+    }
+    
+    // Random action switching (idle <-> pecking)
+    actionTimer.current -= delta
+    if (actionTimer.current <= 0) {
+      setAction(prev => prev === 'idle' ? 'pecking' : 'idle')
+      actionTimer.current = 2 + Math.random() * 3
+    }
+  })
+  
+  return (
+    <group ref={ref} position={position} rotation={rotation || [0, 0, 0]}>
+      <PixelChicken 
+        position={[0, 0, 0]} 
+        rotation={[0, 0, 0]} 
+        disableBobbing={false} 
+        isPlayer={false} 
+        health={3} 
+        maxHealth={3} 
+        colors={paletteByIndex(paletteIndex)} 
+        isPecking={action === 'pecking'}
+      />
+    </group>
+  )
+}
+
+// Enhanced separation controller with hard collisions - no overlap allowed
+function SeparationController({ refs, minDist, strength, clampY, obstacleFn }: { refs: React.RefObject<THREE.Group>[]; minDist: number; strength: number; clampY?: number; obstacleFn?: (p: THREE.Vector3) => THREE.Vector3 }) {
+  useFrame(() => {
+    // Iterate multiple times for harder collision resolution
+    for (let iter = 0; iter < 3; iter++) {
+      const positions = refs.map(r => r.current?.position.clone() || new THREE.Vector3())
+      for (let i = 0; i < refs.length; i++) {
+        const ri = refs[i].current
+        if (!ri) continue
+        let pos = ri.position.clone()
+        
+        // Pairwise hard separation - 2D collision in XZ plane
+        for (let j = 0; j < refs.length; j++) {
+          if (i === j) continue
+          const rj = refs[j].current
+          if (!rj) continue
+          
+          const delta = pos.clone().sub(rj.position)
+          delta.y = 0 // Only consider horizontal distance
+          const dist = Math.max(0.0001, delta.length())
+          
+          if (dist < minDist) {
+            // Hard push - exponential force as chickens get closer
+            const overlap = minDist - dist
+            const pushStrength = strength * (1 + overlap * 2)
+            delta.normalize().multiplyScalar(overlap * pushStrength)
+            pos.add(delta)
+          }
+        }
+        
+        // Clamp Y
+        if (typeof clampY === 'number') pos.y = clampY
+        
+        // Obstacles adjustment
+        if (obstacleFn) {
+          pos = obstacleFn(pos)
+          pos.y = clampY || pos.y
+        }
+        
+        ri.position.copy(pos)
+      }
+    }
+  })
+  return null
+}
+
+// Arena obstacle avoidance: keep chickens outside of fence radius centered at (0,-2.0)
+function avoidArenaRing(p: THREE.Vector3) {
+  const center = new THREE.Vector3(0, p.y, -2.0)
+  const fenceRadius = 5.8 // Slightly larger than fence at 5.5 to keep chickens clear
+  const v = p.clone().sub(center)
+  v.y = 0
+  const d = Math.max(0.0001, v.length())
+  if (d < fenceRadius) {
+    v.normalize().multiplyScalar(fenceRadius)
+    const adjusted = center.clone().add(v)
+    adjusted.y = p.y
+    return adjusted
+  }
+  return p
+}
+
+// Farm boundaries: keep in front of fence z > -4.2
+function clampFarmBoundaries(p: THREE.Vector3) {
+  if (p.z < -4.2) p.z = -4.2
+  return p
+}
+
+// Forest obstacle steering: avoid tree trunks and the fallen log by pushing out radially
+function obstacleFieldForest(p: THREE.Vector3) {
+  const trunks = [
+    new THREE.Vector3(-4.5, p.y, -3.0), new THREE.Vector3(4.2, p.y, -3.5),
+    new THREE.Vector3(-5.5, p.y, -5.5), new THREE.Vector3(5.0, p.y, -5.2),
+    new THREE.Vector3(-3.5, p.y, -7.0), new THREE.Vector3(3.8, p.y, -7.5),
+    new THREE.Vector3(0.5, p.y, -8.5), new THREE.Vector3(-6, p.y, -1.5),
+    new THREE.Vector3(6.2, p.y, -2)
+  ]
+  let out = p.clone()
+  const trunkRadius = 0.6
+  trunks.forEach(center => {
+    const v = out.clone().sub(center)
+    const d = v.length()
+    if (d < trunkRadius) {
+      v.normalize().multiplyScalar(trunkRadius)
+      out = center.clone().add(v)
+    }
+  })
+  // Fallen log at approx [-2.5, -1.5], radius-like push
+  const logCenter = new THREE.Vector3(-2.5, p.y, -1.5)
+  const v = out.clone().sub(logCenter)
+  if (v.length() < 0.7) {
+    v.normalize().multiplyScalar(0.7)
+    out = logCenter.clone().add(v)
+  }
+  return out
+}
+
+// Farm obstacle steering: avoid barn face, fence rail line, water trough, hay bales
+function obstacleFieldFarm(p: THREE.Vector3) {
+  let out = p.clone()
+  // Keep in front of fence
+  if (out.z < -4.0) out.z = -4.0
+  // Avoid barn face at z ~ -8 spanning x in [-4,4]
+  if (out.z < -6.8 && Math.abs(out.x) < 4.5) {
+    out.z = -6.8
+  }
+  // Avoid water trough at ~ [1.8, -1.2]
+  const trough = new THREE.Vector3(1.8, p.y, -1.2)
+  let v = out.clone().sub(trough)
+  if (v.length() < 1.1) {
+    v.normalize().multiplyScalar(1.1)
+    out = trough.clone().add(v)
+  }
+  // Avoid hay bales with larger radius
+  const hay = [new THREE.Vector3(-3.2, p.y, -2.0), new THREE.Vector3(3.5, p.y, -2.5), new THREE.Vector3(-4.2, p.y, -3.5)]
+  hay.forEach(h => {
+    const dv = out.clone().sub(h)
+    if (dv.length() < 1.1) {
+      dv.normalize().multiplyScalar(1.1)
+      out = h.clone().add(dv)
+    }
+  })
+  return out
+}
+
+// Simple cloud planes moving across the sky
+function Clouds({ y = 6, count = 5, speed = 0.003 }: { y?: number; count?: number; speed?: number }) {
+  const refs = useRef<THREE.Mesh[]>([])
+  // Initialize random positions
+  const inited = useRef(false)
+  useFrame((state, delta) => {
+    if (!inited.current) {
+      refs.current.forEach((m, i) => {
+        if (!m) return
+        m.position.set(-10 + Math.random() * 20, y + Math.random() * 1.5, -6 + Math.random() * 4)
+        m.scale.set(1 + Math.random() * 2, 0.6 + Math.random() * 0.6, 1)
+      })
+      inited.current = true
+    }
+    refs.current.forEach((m, i) => {
+      if (!m) return
+      m.position.x += speed * (0.5 + (i % 3) * 0.3)
+      if (m.position.x > 12) m.position.x = -12
+    })
+  })
+  return (
+    <group>
+      {Array.from({ length: count }).map((_, i) => (
+        <mesh key={i} ref={(el) => { if (el) refs.current[i] = el }} position={[0, y, -6]} rotation={[-0.1, 0, 0]}>
+          <planeGeometry args={[2.4, 1.2]} />
+          <meshStandardMaterial color="#ffffff" transparent opacity={0.75} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function paletteByIndex(i: number) {
+  const PALETTES = [
+    { body: "#f97316", comb: "#ef4444", beak: "#FFD600", legs: "#FFD600", tail: "#6366f1", eyes: "#ffffff", pupils: "#222222" },
+    { body: "#f59e0b", comb: "#b91c1c", beak: "#fbbf24", legs: "#fbbf24", tail: "#7c3aed", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#f8fafc", comb: "#dc2626", beak: "#facc15", legs: "#facc15", tail: "#3b82f6", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#1f2937", comb: "#ef4444", beak: "#f59e0b", legs: "#f59e0b", tail: "#10b981", eyes: "#e5e7eb", pupils: "#000000" },
+    { body: "#60a5fa", comb: "#ef4444", beak: "#fbbf24", legs: "#fbbf24", tail: "#111827", eyes: "#ffffff", pupils: "#1f2937" },
+    { body: "#10b981", comb: "#dc2626", beak: "#fbbf24", legs: "#fbbf24", tail: "#2563eb", eyes: "#ffffff", pupils: "#111827" }
+  ]
+  const idx = ((i % PALETTES.length) + PALETTES.length) % PALETTES.length
+  return PALETTES[idx]
+}
+
+// Arena Environment - minimal, clean, with textures
+function ArenaEnvironment() {
+  let dirtTexture, sandTexture
+  try {
+    // Load dirt without Suspense to avoid hard crashes if asset fails
+    dirtTexture = useMemo(() => {
+      const loader = new TextureLoader()
+      let tex: THREE.Texture | null = null
+      try {
+        tex = loader.load(
+          '/textures/pixel-dirt.png',
+          (t) => {
+            t.wrapS = t.wrapT = THREE.RepeatWrapping
+            t.repeat.set(20, 20)
+            t.colorSpace = THREE.SRGBColorSpace
+          },
+          undefined,
+          () => {
+            // Fallback: mutate to brown canvas
+            const canvas = document.createElement('canvas')
+            canvas.width = 4; canvas.height = 4
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.fillStyle = '#8B7355'
+              ctx.fillRect(0, 0, 4, 4)
+            }
+            if (tex) {
+              tex.image = canvas
+              tex.needsUpdate = true
+              tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+              tex.repeat.set(20, 20)
+              tex.colorSpace = THREE.SRGBColorSpace
+            }
+          }
+        )
+      } catch {}
+      return tex as THREE.Texture
+    }, [])
+    sandTexture = useLoader(TextureLoader, '/textures/stone/sandy_gravel_02_diff_4k.jpg')
+    
+    // Configure texture repeating for tiling
+    sandTexture.wrapS = sandTexture.wrapT = THREE.RepeatWrapping
+    sandTexture.repeat.set(2, 2)
+  } catch (e) {
+    console.warn('Texture loading failed, using fallback colors', e)
+  }
+  
+  return (
+    <group>
+      {/* Ground - textured dirt floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[50, 50]} />
+        <meshStandardMaterial map={dirtTexture || undefined} color="#8B7355" roughness={0.9} />
+      </mesh>
+      
+      {/* Ring floor - textured sand circle (minimal, no obstructions) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -2.0]} receiveShadow>
+        <circleGeometry args={[4, 32]} />
+        <meshStandardMaterial map={sandTexture || undefined} color="#D2B48C" roughness={0.95} />
+      </mesh>
+      
+      {/* Wooden fence surrounding the arena - circular rails with texture */}
+      <group position={[0, 0, -2.0]}>
+        {/* Bottom rail ring - rotated to be horizontal */}
+        <mesh position={[0, 0.4, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+          <torusGeometry args={[5.5, 0.08, 8, 48]} />
+          <meshStandardMaterial map={dirtTexture || undefined} color="#8B4513" roughness={0.85} />
+        </mesh>
+        {/* Top rail ring - rotated to be horizontal */}
+        <mesh position={[0, 0.9, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+          <torusGeometry args={[5.5, 0.08, 8, 48]} />
+          <meshStandardMaterial map={dirtTexture || undefined} color="#8B4513" roughness={0.85} />
+        </mesh>
+        {/* Support posts around the circle */}
+        {Array.from({ length: 16 }).map((_, i) => {
+          const angle = (i / 16) * Math.PI * 2
+          const x = Math.cos(angle) * 5.5
+          const z = Math.sin(angle) * 5.5
+          return (
+            <mesh key={`post-${i}`} position={[x, 0.7, z]} castShadow receiveShadow>
+              <cylinderGeometry args={[0.1, 0.1, 1.4, 8]} />
+              <meshStandardMaterial map={sandTexture || undefined} color="#6b4423" roughness={0.9} />
+            </mesh>
+          )
+        })}
+      </group>
+    </group>
+  )
+}
+
+// Forest Environment - trees, grass, natural lighting with textures
+function ForestEnvironment() {
+  let grassTexture, barkTexture
+  try {
+    grassTexture = useLoader(TextureLoader, '/textures/grass/coast_sand_rocks_02_diff_4k.jpg')
+    barkTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+    
+    // Configure texture repeating for tiling
+    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
+    grassTexture.repeat.set(15, 15)
+    barkTexture.wrapS = barkTexture.wrapT = THREE.RepeatWrapping
+    barkTexture.repeat.set(1, 3)
+  } catch (e) {
+    console.warn('Forest texture loading failed, using fallback', e)
+  }
+  
+  return (
+    <group>
+      {/* Grass ground - large plane with texture */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[60, 60]} />
+        <meshStandardMaterial 
+          map={grassTexture || undefined} 
+          color="#4caf50" 
+          emissive="#2e7d32" 
+          emissiveIntensity={0.15}
+          roughness={0.95} 
+        />
+      </mesh>
+      
+      {/* Darker grass patches for variety */}
+      {[[-4, -2.5], [5, -4], [-3, -6], [4, -7]].map(([x, z], i) => (
+        <mesh key={`patch-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.01, z]} receiveShadow>
+          <circleGeometry args={[1.2, 16]} />
+          <meshStandardMaterial color="#2f6838" roughness={0.95} />
+        </mesh>
+      ))}
+      
+      {/* Trees scattered around - varied sizes */}
+      {[
+        [-4.5, -3.0, 1.0], [4.2, -3.5, 0.9], [-5.5, -5.5, 1.1], [5.0, -5.2, 0.85], 
+        [-3.5, -7.0, 0.95], [3.8, -7.5, 1.05], [0.5, -8.5, 1.15], [-6, -1.5, 0.9], [6.2, -2, 1.0]
+      ].map(([x, z, scale], i) => (
+        <group key={`tree-${i}`} position={[x, 0, z]} scale={[scale, scale, scale]}>
+          {/* Tree trunk with bark texture */}
+          <mesh castShadow position={[0, 1.4, 0]}>
+            <cylinderGeometry args={[0.25, 0.32, 2.8, 10]} />
+            <meshStandardMaterial map={barkTexture || undefined} color="#4a2511" roughness={0.9} />
+          </mesh>
+          {/* Foliage - layered fuller canopy */}
+          <mesh position={[0, 2.8, 0]} castShadow>
+            <coneGeometry args={[1.1, 1.8, 10]} />
+            <meshStandardMaterial color="#2d5016" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 3.6, 0]} castShadow>
+            <coneGeometry args={[0.85, 1.5, 10]} />
+            <meshStandardMaterial color="#3a6b1f" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 4.3, 0]} castShadow>
+            <coneGeometry args={[0.55, 1.0, 8]} />
+            <meshStandardMaterial color="#4a7c29" roughness={0.75} />
+          </mesh>
+        </group>
+      ))}
+      
+      {/* Bushes - more varied placement */}
+      {[[-2.2, -1.2, 0.5], [2.5, -1.8, 0.6], [-3.0, -2.8, 0.55], [3.2, -3.2, 0.65], [-1.8, -4.5, 0.5], [2.0, -4.8, 0.6]].map(([x, z, scale], i) => (
+        <mesh key={`bush-${i}`} position={[x, 0.35 * scale, z]} castShadow scale={[scale, scale, scale]}>
+          <sphereGeometry args={[0.5, 10, 8]} />
+          <meshStandardMaterial color="#4a7c29" roughness={0.85} />
+        </mesh>
+      ))}
+      
+      {/* Fallen log with bark texture */}
+      <mesh position={[-2.5, 0.2, -1.5]} rotation={[0, 0.4, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.22, 0.22, 2.5, 10]} />
+        <meshStandardMaterial map={barkTexture || undefined} color="#5a3a1a" roughness={0.9} />
+      </mesh>
+    </group>
+  )
+}
+
+// Farmyard Environment - barn, fence, hay bales with textures
+function FarmyardEnvironment() {
+  let dirtTexture, woodTexture, roofTexture
+  try {
+    // Load dirt without Suspense to avoid hard crashes if asset fails
+    dirtTexture = useMemo(() => {
+      const loader = new TextureLoader()
+      let tex: THREE.Texture | null = null
+      try {
+        tex = loader.load(
+          '/textures/pixel-dirt.png',
+          (t) => {
+            t.wrapS = t.wrapT = THREE.RepeatWrapping
+            t.repeat.set(18, 18)
+            t.colorSpace = THREE.SRGBColorSpace
+          },
+          undefined,
+          () => {
+            const canvas = document.createElement('canvas')
+            canvas.width = 4; canvas.height = 4
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.fillStyle = '#8B7355'
+              ctx.fillRect(0, 0, 4, 4)
+            }
+            if (tex) {
+              tex.image = canvas
+              tex.needsUpdate = true
+              tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+              tex.repeat.set(18, 18)
+              tex.colorSpace = THREE.SRGBColorSpace
+            }
+          }
+        )
+      } catch {}
+      return tex as THREE.Texture
+    }, [])
+    woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+    roofTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+    
+    // Configure texture repeating
+    woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping
+    woodTexture.repeat.set(2, 4)
+    roofTexture.wrapS = roofTexture.wrapT = THREE.RepeatWrapping
+    roofTexture.repeat.set(3, 1)
+  } catch (e) {
+    console.warn('Farm texture loading failed, using fallback', e)
+  }
+  
+  return (
+    <group>
+      {/* Dirt ground - large extending with texture */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[55, 55]} />
+        <meshStandardMaterial map={dirtTexture || undefined} color="#8B7355" roughness={0.95} />
+      </mesh>
+      
+      {/* Barn backdrop - realistic gable roof and framed doors */}
+      <group position={[0, 0, -8]}>
+        {/* Main barn box with wood texture */}
+        <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 1.2]} />
+          <meshStandardMaterial map={woodTexture || undefined} color="#8B2500" roughness={0.85} />
+        </mesh>
+        {/* Door frame */}
+        <group position={[0, 1.2, 0.61]}>
+          {/* Frame border */}
+          <mesh position={[0, 0, 0]} castShadow>
+            <boxGeometry args={[2.4, 2.6, 0.1]} />
+            <meshStandardMaterial color="#5a1a00" roughness={0.9} />
+          </mesh>
+          {/* Double doors inside frame */}
+          <mesh position={[-0.6, 0, 0.08]} castShadow>
+            <boxGeometry args={[1.1, 2.2, 0.08]} />
+            <meshStandardMaterial color="#703a17" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.6, 0, 0.08]} castShadow>
+            <boxGeometry args={[1.1, 2.2, 0.08]} />
+            <meshStandardMaterial color="#703a17" roughness={0.9} />
+          </mesh>
+        </group>
+        {/* Gable roof: clean pitched roof with texture (lowered to meet barn body) */}
+        <group position={[0, 4.7, 0]}>
+          {/* Left roof slope with shingles */}
+          <mesh position={[-2.2, 0.8, 0]} rotation={[0, 0, 0.52]} castShadow receiveShadow>
+            <boxGeometry args={[4.8, 0.15, 1.6]} />
+            <meshStandardMaterial map={roofTexture || undefined} color="#654321" roughness={0.9} />
+          </mesh>
+          {/* Right roof slope with shingles */}
+          <mesh position={[2.2, 0.8, 0]} rotation={[0, 0, -0.52]} castShadow receiveShadow>
+            <boxGeometry args={[4.8, 0.15, 1.6]} />
+            <meshStandardMaterial map={roofTexture || undefined} color="#654321" roughness={0.9} />
+          </mesh>
+          {/* Ridge cap - wooden beam */}
+          <mesh position={[0, 2.15, 0]} castShadow>
+            <boxGeometry args={[0.25, 0.2, 1.65]} />
+            <meshStandardMaterial color="#5a3a1a" roughness={0.9} />
+          </mesh>
+        </group>
+        {/* Windows */}
+        <mesh position={[-2.5, 3.5, 0.65]} castShadow>
+          <boxGeometry args={[0.8, 0.6, 0.1]} />
+          <meshStandardMaterial color="#222" roughness={0.5} />
+        </mesh>
+        <mesh position={[2.5, 3.5, 0.65]} castShadow>
+          <boxGeometry args={[0.8, 0.6, 0.1]} />
+          <meshStandardMaterial color="#222" roughness={0.5} />
+        </mesh>
+      </group>
+      
+      {/* Fence line - continuous wooden fence */}
+      {[-5, -3.5, -2, -0.5, 1, 2.5, 4].map((x, i) => {
+        const nextX = i < 6 ? [-3.5, -2, -0.5, 1, 2.5, 4, 5.5][i + 1] : x + 1.5
+        const midX = (x + nextX) / 2
+        const railLength = nextX - x
+        return (
+          <group key={`fence-${i}`} position={[x, 0, -4.5]}>
+            {/* Fence post with texture */}
+            <mesh castShadow receiveShadow position={[0, 0.7, 0]}>
+              <cylinderGeometry args={[0.1, 0.1, 1.4, 8]} />
+              <meshStandardMaterial map={woodTexture || undefined} color="#6b4423" roughness={0.9} />
+            </mesh>
+            {/* Horizontal rails connecting to next post */}
+            {i < 6 && (
+              <>
+                <mesh position={[railLength / 2, 0.55, 0]} castShadow>
+                  <boxGeometry args={[railLength, 0.1, 0.1]} />
+                  <meshStandardMaterial color="#8B4513" roughness={0.85} />
+                </mesh>
+                <mesh position={[railLength / 2, 0.9, 0]} castShadow>
+                  <boxGeometry args={[railLength, 0.1, 0.1]} />
+                  <meshStandardMaterial color="#8B4513" roughness={0.85} />
+                </mesh>
+              </>
+            )}
+          </group>
+        )
+      })}
+      
+      {/* Hay bales - stacked and scattered */}
+      <group position={[-3.2, 0, -2.0]}>
+        <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.8, 0.7, 1.0]} />
+          <meshStandardMaterial color="#DAA520" roughness={0.95} />
+        </mesh>
+        <mesh position={[0, 1.05, 0.1]} castShadow receiveShadow>
+          <boxGeometry args={[0.75, 0.65, 0.95]} />
+          <meshStandardMaterial color="#D4AA3A" roughness={0.95} />
+        </mesh>
+      </group>
+      <mesh position={[3.5, 0.35, -2.5]} castShadow receiveShadow>
+        <boxGeometry args={[0.8, 0.7, 1.0]} />
+        <meshStandardMaterial color="#DAA520" roughness={0.95} />
+      </mesh>
+      <mesh position={[-4.2, 0.35, -3.5]} castShadow receiveShadow>
+        <boxGeometry args={[0.75, 0.65, 0.95]} />
+        <meshStandardMaterial color="#D4AA3A" roughness={0.95} />
+      </mesh>
+      
+      {/* Water trough - larger, more detailed */}
+      <group position={[1.8, 0, -1.2]}>
+        <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.6, 0.5, 0.7]} />
+          <meshStandardMaterial color="#708090" roughness={0.6} metalness={0.3} />
+        </mesh>
+        {/* Water inside */}
+        <mesh position={[0, 0.45, 0]}>
+          <boxGeometry args={[1.5, 0.05, 0.65]} />
+          <meshStandardMaterial color="#4682B4" roughness={0.2} metalness={0.5} transparent opacity={0.8} />
+        </mesh>
+      </group>
+      
+      {/* Feed bucket */}
+      <mesh position={[-1.5, 0.2, -0.5]} castShadow>
+        <cylinderGeometry args={[0.25, 0.22, 0.4, 12]} />
+        <meshStandardMaterial color="#8B7355" roughness={0.8} />
+      </mesh>
+    </group>
   )
 }

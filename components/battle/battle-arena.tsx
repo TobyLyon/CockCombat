@@ -1,17 +1,17 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
 import { useWallet } from "@solana/wallet-adapter-react"
+import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Button } from "@/components/ui/button"
-import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2 } from "lucide-react"
+import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import EnhancedArenaScene from "./enhanced-arena-scene"
 import WaitingQueue from "./waiting-queue"
 import LobbyRoom from "./lobby-room"
 import { useAudio } from "@/contexts/AudioContext"
-import LoadingPixelChicken from "@/components/ui/loading-pixel-chicken"
 import BattleHUD from './battle-hud';
 import GameOver from './game-over';
 import WinnerCelebration from './winner-celebration';
@@ -19,17 +19,25 @@ import { useGameState, GameState } from "@/contexts/GameStateContext"
 import { Lobby } from "@/app/api/lobbies/route";
 import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
+import ArenaBackground from "./arena-background"
+import { toast } from "sonner"
 
 export default function BattleArena() {
   const router = useRouter()
-  const { connected, publicKey, sendTransaction } = useWallet()
+  const { publicKey } = useWallet()
+  const { setVisible } = useWalletModal()
   const { audioEnabled, volume } = useAudio()
-  const [walletChecked, setWalletChecked] = useState(false)
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [joinedLobby, setJoinedLobby] = useState<Lobby | null>(null);
   const [inLobbyRoom, setInLobbyRoom] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'ranked' | 'tutorial'>('all');
+  const [hasLoadedLobbies, setHasLoadedLobbies] = useState(false);
+  const fetchControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+  const [guestId, setGuestId] = useState<string | null>(null);
+  const [isPortrait, setIsPortrait] = useState(false);
   
   // Use the game state context instead of local state
   const { 
@@ -55,37 +63,82 @@ export default function BattleArena() {
   // Check if player is victorious (player is alive and all others are dead)
   const isVictorious = Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);
 
-  // Apply arena-specific CSS classes for full-screen experience
+  // Apply arena-specific CSS classes only during active battles
   useEffect(() => {
-    document.body.classList.add('arena-active');
     const arenaDiv = document.querySelector('.battle-arena-container');
-    if (arenaDiv) {
-      arenaDiv.classList.add('arena-mode');
-    }
-    
-    return () => {
+    if (gameState === 'battle') {
+      document.body.classList.add('arena-active');
+      if (arenaDiv) {
+        arenaDiv.classList.add('arena-mode');
+      }
+    } else {
       document.body.classList.remove('arena-active');
-      const arenaDiv = document.querySelector('.battle-arena-container');
       if (arenaDiv) {
         arenaDiv.classList.remove('arena-mode');
       }
+    }
+
+    return () => {
+      document.body.classList.remove('arena-active');
+      const cleanupDiv = document.querySelector('.battle-arena-container');
+      if (cleanupDiv) {
+        cleanupDiv.classList.remove('arena-mode');
+      }
+    };
+  }, [gameState]);
+
+  // Detect mobile portrait to show rotate notice
+  useEffect(() => {
+    const updateOrientation = () => {
+      try {
+        // Prefer matchMedia when available
+        const mm = window.matchMedia && window.matchMedia('(orientation: portrait)');
+        if (mm && typeof mm.matches === 'boolean') {
+          setIsPortrait(mm.matches);
+          return;
+        }
+      } catch (_) {}
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    updateOrientation();
+    const onResize = () => updateOrientation();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize as any);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize as any);
     };
   }, []);
 
-  // Check wallet connection on component mount
+  // Cleanup mounted ref
   useEffect(() => {
+    isMountedRef.current = true;
     const fetchLobbies = async () => {
-      setIsLoadingLobbies(true);
+      // Abort any in-flight request
+      if (fetchControllerRef.current) {
+        fetchControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      fetchControllerRef.current = controller;
+
+      // Only show the main loader on first load to avoid flicker during polling
+      if (!hasLoadedLobbies) {
+        setIsLoadingLobbies(true);
+      }
       try {
-        const response = await fetch('/api/lobbies');
+        const response = await fetch('/api/lobbies', { signal: controller.signal });
         if (response.ok) {
           const data = await response.json();
           setLobbies(data);
         }
-                    } catch (error: unknown) {
+      } catch (error: unknown) {
+        // Ignore abort errors
+        if ((error as any)?.name === 'AbortError') return;
         console.error('Failed to fetch lobbies:', error instanceof Error ? error.message : 'Unknown error');
       } finally {
+        if (!isMountedRef.current) return;
         setIsLoadingLobbies(false);
+        setHasLoadedLobbies(true);
       }
     };
 
@@ -99,19 +152,14 @@ export default function BattleArena() {
       }
     }, 10000); // Poll every 10 seconds instead of 5, and only when not in lobby room
 
-    return () => clearInterval(interval);
-  }, [inLobbyRoom]); // Add inLobbyRoom dependency
-
-  useEffect(() => {
-    const checkWallet = setTimeout(() => {
-      setWalletChecked(true)
-      if (!connected) {
-        router.push("/")
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(interval);
+      if (fetchControllerRef.current) {
+        fetchControllerRef.current.abort();
       }
-    }, 1000)
-
-    return () => clearTimeout(checkWallet)
-  }, [connected, router])
+    };
+  }, [inLobbyRoom, hasLoadedLobbies]);
 
   // Handle drumstick collection
   const handleDrumstickCollected = (id: string) => {
@@ -141,9 +189,31 @@ export default function BattleArena() {
     }
   };
 
+  // Filter and sort lobbies for display
+  const displayedLobbies = useMemo(() => {
+    let list = Array.isArray(lobbies) ? [...lobbies] : [];
+    if (filter === 'ranked') {
+      list = list.filter(l => l.matchType === 'ranked' && l.amount > 0);
+    } else if (filter === 'tutorial') {
+      list = list.filter(l => l.matchType === 'tutorial' || l.amount === 0);
+    }
+    // Sort: tutorial/free first, then by amount ascending; VIP/highRoller last to stand out
+    return list.sort((a, b) => {
+      const aIsFree = a.amount === 0;
+      const bIsFree = b.amount === 0;
+      if (aIsFree && !bIsFree) return -1;
+      if (!aIsFree && bIsFree) return 1;
+      return (a.amount || 0) - (b.amount || 0);
+    });
+  }, [lobbies, filter]);
+
   const handleJoinLobby = async (lobby: Lobby) => {
-    if (!publicKey) {
-      console.error("Wallet not connected");
+    // For FREE tutorial matches, allow guest join when no wallet
+    const joiningAsGuest = (!publicKey && lobby.matchType === 'tutorial' && lobby.amount === 0);
+    // Require wallet for paid/ranked lobbies
+    if (!publicKey && !joiningAsGuest) {
+      toast.error("Connect your wallet to join ranked matches", { duration: 2500 });
+      setVisible(true);
       return;
     }
 
@@ -157,12 +227,13 @@ export default function BattleArena() {
       console.log('🐔 Assigned random chicken:', randomChicken);
 
       // Join the lobby (no wager transaction needed yet)
+      const guestIdGenerated = joiningAsGuest ? `guest_${Math.random().toString(36).slice(2, 10)}` : null;
       const joinResponse = await fetch('/api/lobbies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          playerId: publicKey.toBase58(),
+          playerId: joiningAsGuest ? guestIdGenerated : publicKey!.toBase58(),
           chickenId: randomChicken,
         }),
       });
@@ -184,6 +255,9 @@ export default function BattleArena() {
       const joinResult = await joinResponse.json();
       console.log('✅ Successfully joined lobby:', joinResult);
 
+      // Store guest id locally if applicable (use the generated one)
+      setGuestId(joiningAsGuest ? guestIdGenerated : null);
+ 
       // Go to lobby room for ready-up phase (wager will be handled there)
       console.log('🏠 Going to lobby room...');
       setJoinedLobby(lobby);
@@ -199,23 +273,19 @@ export default function BattleArena() {
     }
   };
 
-  if (!walletChecked) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gray-900">
-        <LoadingPixelChicken size="lg" text="Connecting to Arena..." />
-      </div>
-    );
-  }
-
-  if (!connected && walletChecked) {
-    return null;
-  }
+  // Allow viewing lobbies without wallet - wallet check happens when joining a match
 
   return (
-    <div className="battle-arena-container fixed inset-0 bg-gray-900 text-white flex flex-col overflow-hidden z-50" style={{
+    <div className="battle-arena-container relative min-h-screen bg-gray-900 text-white flex flex-col overflow-hidden" style={{
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
-      <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-hidden">
+      <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-auto">
+        {/* Minimal farm-like background scenes behind UI (non-interactive) */}
+        {gameState !== "battle" && (
+          <div className="absolute inset-0 z-0">
+            <ArenaBackground />
+          </div>
+        )}
         {/* Navigation Bar - Hidden in Arena */}
         <div className="hidden">
           <div className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
@@ -230,15 +300,11 @@ export default function BattleArena() {
         </div>
 
         {gameState === "lobby" && (
-          <div className="flex-1 flex h-full max-h-full gap-4 overflow-hidden">
-            {/* Main Lobby Selection - Left Side (Priority) */}
-            <div className={`transition-all duration-300 ${inLobbyRoom ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 overflow-hidden`}>
-              <div className="p-4 border-b border-gray-700/50 flex-shrink-0">
-                <h1 className="text-3xl lg:text-4xl font-bold text-yellow-400 pixel-font mb-2">BATTLE ARENAS</h1>
-                <p className="text-gray-400 text-sm lg:text-base">Select your arena and dominate the competition</p>
-              </div>
+          <div className="flex-1 flex flex-col lg:flex-row w-full h-full max-h-full overflow-hidden">
+            {/* Main Lobby Selection */}
+            <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${inLobbyRoom ? 'hidden lg:flex lg:w-[calc(100%-400px)]' : 'w-full'}`}>
               
-              <div className="flex-1 p-4 overflow-y-auto">
+              <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 overflow-y-auto">
                 {isLoadingLobbies ? (
                   <div className="flex justify-center items-center h-64">
                     <div className="flex flex-col items-center gap-4">
@@ -247,113 +313,160 @@ export default function BattleArena() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4 max-w-full">
-                    {lobbies.map((lobby) => (
+                  <>
+                  {/* Pro banner - glassmorphic update */}
+                  <div className="mb-6 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-4 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-white/10 border border-white/20 shadow-inner">
+                          <ShieldCheck className="h-5 w-5 text-white/80" />
+                          </div>
+                          <div>
+                          <p className="text-sm font-semibold text-white/90 tracking-wide">Official Arenas</p>
+                          <p className="text-xs text-white/60">Verified lobbies with fair matchmaking</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setFilter('all')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'all' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
+                          >All</button>
+                        <button
+                          onClick={() => {}}
+                          disabled
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all opacity-60 cursor-not-allowed bg-white/5 text-white/70 border-white/10`}
+                        >Ranked (Coming Soon)</button>
+                          <button
+                            onClick={() => setFilter('tutorial')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'tutorial' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
+                          >Tutorial</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5">
+                    {displayedLobbies.map((lobby) => (
                       <motion.div
                         key={lobby.id}
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        className={`relative overflow-hidden bg-gradient-to-br from-gray-800/90 to-gray-900/90 border-2 rounded-xl p-4 lg:p-6 cursor-pointer transition-all duration-300 group backdrop-blur-sm min-w-0
-                          ${lobby.highRoller 
-                            ? 'border-red-500/50 hover:border-red-400 hover:shadow-red-500/20' 
-                            : 'border-gray-600/50 hover:border-yellow-400 hover:shadow-yellow-500/20'} 
-                          ${joinedLobby?.id === lobby.id ? 'ring-2 ring-yellow-400 border-yellow-400' : ''}
-                          hover:shadow-xl`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, ease: 'easeOut' }}
+                        whileHover={{ y: -3, scale: 1.01 }}
+                        whileTap={{ scale: 0.995 }}
+                        className={`relative overflow-hidden rounded-2xl p-5 cursor-pointer transition-all duration-300 group h-full flex flex-col
+                          bg-white/6 backdrop-blur-md border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]
+                          ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
+                        min-h-[240px]
+                        `}
                         onClick={() => !isJoining && handleJoinLobby(lobby)}
                       >
-                        {/* Glow Effect */}
-                        <div className={`absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${
-                          lobby.highRoller ? 'from-red-500 to-red-600' : 'from-yellow-400 to-yellow-500'
-                        }`}></div>
+                        {/* Subtle gradient overlay on hover */}
+                        <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${lobby.highRoller ? 'from-red-400/10 to-red-700/10' : 'from-white/8 to-white/0'}`} />
                         
                         {/* High Roller Badge */}
                         {lobby.highRoller && (
-                          <div className="absolute top-3 right-3 bg-red-600 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                          <div className="absolute top-2 right-2 bg-red-600/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border border-white/10">
                             <Flame className="h-3 w-3" />
                             VIP
                           </div>
                         )}
                         
-                        {/* Coming Soon Overlay */}
-                        {lobby.isComingSoon && (
-                          <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
-                            <span className="text-yellow-400 font-bold text-sm lg:text-lg pixel-font">COMING SOON</span>
-                          </div>
-                        )}
+                        {/* Coming Soon Overlay removed; we keep the button label instead */}
                         
                         <div className="relative z-10">
                           {/* Entry Amount */}
-                          <div className="mb-3 lg:mb-4">
-                            <div className={`text-2xl lg:text-3xl font-bold pixel-font ${lobby.highRoller ? 'text-red-400' : 'text-yellow-400'}`}>
+                          <div className="mb-2 lg:mb-3">
+                            <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
                               {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
                             </div>
-                            <div className="text-xs lg:text-sm text-gray-400 uppercase tracking-wide">
+                            <div className="text-[10px] lg:text-xs text-white/70 uppercase tracking-wide">
                               {lobby.amount === 0 ? 'Tutorial Match' : 'Entry Fee'}
                             </div>
                           </div>
                           
                           {/* Players Count */}
-                          <div className="flex items-center justify-between mb-3 lg:mb-4">
-                            <div className="flex items-center gap-2 text-gray-300">
-                              <Users className="h-4 w-4" />
-                              <span className="font-semibold text-sm lg:text-base">
-                                {Array.isArray(lobby.players) ? lobby.players.length : lobby.players} / {lobby.capacity}
-                              </span>
-                            </div>
-                            
-                            {/* Status Indicator */}
-                            <div className={`px-2 py-1 rounded-full text-xs font-bold ${
-                              (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity
-                                ? 'bg-red-600/20 text-red-400 border border-red-600/30'
-                                : (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) > 0
-                                ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30'
-                                : 'bg-green-600/20 text-green-400 border border-green-600/30'
-                            }`}>
-                              {(Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity 
-                                ? 'FULL' 
-                                : (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) > 0 
-                                ? 'ACTIVE' 
-                                : 'OPEN'}
-                            </div>
-                          </div>
+                          {(() => {
+                            const playerCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0;
+                            const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100));
+                            return (
+                              <>
+                                <div className="flex items-center justify-between mb-2 lg:mb-2">
+                                  <div className="flex items-center gap-1.5 text-white/85">
+                                    <Users className="h-3.5 w-3.5" />
+                                    <span className="font-semibold text-xs lg:text-sm">
+                                      {playerCount} / {lobby.capacity}
+                                    </span>
+                                  </div>
+                                  {/* Status Indicator */}
+                                  <div className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    playerCount >= lobby.capacity
+                                      ? 'bg-red-500/15 text-red-300 border-red-400/30'
+                                      : playerCount > 0
+                                      ? 'bg-white/10 text-white/90 border-white/20'
+                                      : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
+                                  }`}>
+                                    {playerCount >= lobby.capacity 
+                                      ? 'FULL' 
+                                      : playerCount > 0 
+                                      ? 'ACTIVE' 
+                                      : 'OPEN'}
+                                  </div>
+                                </div>
+                                {/* Capacity Progress */}
+                                <div className="mb-2 lg:mb-3">
+                                  <div className="h-1.5 rounded bg-white/10 overflow-hidden">
+                                    <div className={`${lobby.highRoller ? 'bg-red-400' : 'bg-white/80'} h-full`} style={{ width: `${fillPercent}%` }} />
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-white/70 text-right">{fillPercent}% filled</div>
+                                </div>
+                              </>
+                            );
+                          })()}
                           
-                          {/* Action Button */}
-                          <Button
-                            className={`w-full font-bold py-2 px-3 lg:px-4 rounded-lg transition-all duration-300 border-2 text-sm lg:text-base ${
-                              lobby.isComingSoon
-                                ? 'bg-gray-600 border-gray-700 text-gray-400 cursor-not-allowed'
-                                : isJoining === lobby.id
-                                ? 'bg-blue-600 border-blue-700 text-white'
-                                : joinedLobby?.id === lobby.id
-                                ? 'bg-yellow-600 border-yellow-700 text-black'
-                                : lobby.highRoller 
-                                ? 'bg-red-600/80 hover:bg-red-500 border-red-700 text-white hover:border-red-500' 
-                                : 'bg-yellow-500/80 hover:bg-yellow-400 border-yellow-600 text-black hover:border-yellow-400'
-                            }`}
-                            disabled={isJoining === lobby.id || (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity || lobby.isComingSoon}
-                          >
-                            {lobby.isComingSoon 
-                              ? 'COMING SOON'
-                              : isJoining === lobby.id 
-                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Joining...</>
-                                : joinedLobby?.id === lobby.id
-                                ? '✓ JOINED'
-                                : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'LOBBY FULL' : 'JOIN ARENA')
-                            }
-                          </Button>
+                          {/* Action Button - hidden for coming soon to avoid duplicate label */}
+                          {!lobby.isComingSoon && (
+                            <Button
+                              className={`mt-auto w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
+                                bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
+                              disabled={isJoining === lobby.id || (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity}
+                            >
+                              {isJoining === lobby.id 
+                                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin"/> Joining...</>
+                                  : joinedLobby?.id === lobby.id
+                                  ? '✓ JOINED'
+                                  : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'LOBBY FULL' : <>JOIN ARENA <ChevronRight className="h-4 w-4"/></>)}
+                            </Button>
+                          )}
+                          {lobby.isComingSoon && (
+                            <Button
+                              className="mt-auto w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg border text-xs md:text-sm bg-white/10 text-white border-white/20 opacity-90 cursor-not-allowed"
+                              disabled
+                            >
+                              COMING SOON
+                            </Button>
+                          )}
                         </div>
                       </motion.div>
                     ))}
                   </div>
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Lobby Room Details - Right Side (Compact) */}
+            {/* Lobby Room Details - Full overlay on mobile, fixed sidebar on desktop */}
             {inLobbyRoom && joinedLobby && (
-              <div className="w-1/3 min-w-80 border-l border-gray-700/50 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-gray-700/50 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg lg:text-xl font-bold text-yellow-400 pixel-font">LOBBY ROOM</h2>
+              <motion.div
+                initial={{ x: 300, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 300, opacity: 0 }}
+                transition={{ type: "spring", damping: 25 }}
+                className="fixed inset-0 z-50 bg-gray-900/80 backdrop-blur-sm flex flex-col pointer-events-auto
+                           lg:relative lg:z-50 lg:static lg:w-[400px] lg:flex-shrink-0 lg:bg-gray-900/50 lg:border-l lg:border-gray-700/50"
+              >
+                <div className="p-2 border-b border-gray-700/50 flex-shrink-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-lg lg:text-xl font-bold text-yellow-400 pixel-font">MATCH ROOM</h2>
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -366,14 +479,15 @@ export default function BattleArena() {
                       <ArrowLeft className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-sm text-gray-400">
-                    {joinedLobby.amount === 0 ? 'Free Practice' : `${joinedLobby.amount} ${joinedLobby.currency} Wager`}
+                  <p className="text-xs text-gray-400">
+                    {joinedLobby.amount === 0 ? '🆓 Free Practice' : `💰 ${joinedLobby.amount} ${joinedLobby.currency} Wager`}
                   </p>
                 </div>
                 
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 min-h-0" style={{ display: 'flex', flexDirection: 'column' }}>
                   <LobbyRoom
                     lobby={joinedLobby}
+                    playerIdentifier={guestId || publicKey?.toBase58() || undefined}
                     onLeaveLobby={() => {
                       setInLobbyRoom(false);
                       setJoinedLobby(null);
@@ -384,7 +498,7 @@ export default function BattleArena() {
                     }}
                   />
                 </div>
-              </div>
+              </motion.div>
             )}
           </div>
         )}
@@ -402,6 +516,12 @@ export default function BattleArena() {
 
         {gameState === "battle" && (
           <div className="flex-1 w-full h-full relative overflow-hidden">
+            {/* Rotate notice on mobile portrait */}
+            {isPortrait && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-black/60 text-white text-xs px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm">
+                For the best experience, rotate your device to landscape
+              </div>
+            )}
             <BattleHUD 
               playerHP={playerHP} 
               chickensLeft={chickensLeft} 
@@ -440,7 +560,12 @@ export default function BattleArena() {
             <GameOver 
               winner={isVictorious ? (playerChicken as any || null) : null}
               humanPlayer={playerChicken as any || null}
-              onExit={exitBattle}
+              onExit={() => {
+                // Reset everything and return to lobby selection
+                setInLobbyRoom(false);
+                setJoinedLobby(null);
+                exitBattle();
+              }}
             />
           </div>
         )}
@@ -451,7 +576,11 @@ export default function BattleArena() {
               <EnhancedArenaScene 
                 gameState={gameState}
                 playerChicken={playerChicken}
-                onExit={exitBattle}
+                onExit={() => {
+                  setInLobbyRoom(false);
+                  setJoinedLobby(null);
+                  exitBattle();
+                }}
                 onPlayerDamage={handlePlayerDamage}
                 onDrumstickCollected={handleDrumstickCollected}
                 playSound={playSound}
@@ -460,7 +589,13 @@ export default function BattleArena() {
             </div>
             
             {/* Show winner celebration screen */}
-            <WinnerCelebration />
+            <WinnerCelebration 
+              onExit={() => {
+                setInLobbyRoom(false);
+                setJoinedLobby(null);
+                exitBattle();
+              }}
+            />
           </div>
         )}
       </main>

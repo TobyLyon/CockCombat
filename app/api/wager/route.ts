@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { lobbies, Lobby } from '../lobbies/route'; // Assuming lobbies can be imported
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { lobbies, type Lobby } from '@/lib/lobbies';
+import { getConnection } from '@/lib/solana-config';
+import { escrowService } from '@/lib/escrow-service';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
@@ -11,31 +13,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Lobby ID and Player Public Key are required" }, { status: 400 });
     }
 
+    // Validate player public key
+    let playerPubkey: PublicKey;
+    try {
+      playerPubkey = new PublicKey(playerPublicKey);
+    } catch (error) {
+      return NextResponse.json({ error: "Invalid player public key" }, { status: 400 });
+    }
+
     // Find the specific lobby to determine the wager amount
     const lobby = lobbies.find((l: Lobby) => l.id === lobbyId);
     if (!lobby) {
       return NextResponse.json({ error: "Lobby not found" }, { status: 404 });
     }
 
-    // Ensure the prize pool wallet is configured in environment variables
-    const prizePoolWallet = process.env.PRIZE_POOL_WALLET;
-    if (!prizePoolWallet) {
-      console.error("PRIZE_POOL_WALLET is not set in .env.local");
-      return NextResponse.json({ error: "Server configuration error: Prize pool wallet is not set." }, { status: 500 });
+    // Tutorial matches are free
+    if (lobby.matchType === 'tutorial' || lobby.amount === 0) {
+      return NextResponse.json({ 
+        message: "No wager required for tutorial matches",
+        isFree: true,
+      });
     }
 
-    // Establish connection to the Solana devnet
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+    // Get connection using centralized config
+    const connection = getConnection();
     
-    // Create public key objects
-    const playerPubkey = new PublicKey(playerPublicKey);
-    const prizePoolPubkey = new PublicKey(prizePoolWallet);
+    // Initialize escrow service and get next wallet for this wager
+    escrowService.setConnection(connection);
+    const escrowWallet = await escrowService.getNextWallet();
+    
+    console.log(`💰 Creating wager transaction for ${playerPublicKey}`);
+    console.log(`   Lobby: ${lobbyId}`);
+    console.log(`   Amount: ${lobby.amount} SOL`);
+    console.log(`   Escrow: Wallet ${escrowWallet.id}`);
 
     // Create a new transaction for the wager
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: playerPubkey,
-        toPubkey: prizePoolPubkey,
+        toPubkey: escrowWallet.publicKey,
         lamports: lobby.amount * LAMPORTS_PER_SOL,
       })
     );
@@ -44,7 +60,7 @@ export async function POST(request: Request) {
     transaction.feePayer = playerPubkey;
 
     // Get a recent blockhash to include in the transaction
-    const { blockhash } = await connection.getRecentBlockhash();
+    const { blockhash } = await connection.getLatestBlockhash('finalized');
     transaction.recentBlockhash = blockhash;
 
     // Serialize the transaction without signing it
@@ -55,10 +71,17 @@ export async function POST(request: Request) {
     // Return the serialized transaction to the frontend
     return NextResponse.json({
       transaction: serializedTransaction.toString('base64'),
+      wagerAmount: lobby.amount,
+      escrowWallet: escrowWallet.publicKey.toBase58(),
+      lobbyId: lobbyId,
     });
 
   } catch (error) {
-    console.error("Error creating wager transaction:", error);
-    return NextResponse.json({ error: "Failed to create wager transaction" }, { status: 500 });
+    console.error("❌ Error creating wager transaction:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ 
+      error: "Failed to create wager transaction",
+      details: errorMessage,
+    }, { status: 500 });
   }
 } 

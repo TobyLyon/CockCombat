@@ -466,7 +466,7 @@ app.prepare().then(() => {
         
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
-        const readyPlayers = lobbyPlayers.filter(p => p.isReady);
+        const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
         const allReady = lobbyPlayers.length >= minPlayers && 
                          readyPlayers.length === lobbyPlayers.length;
         
@@ -518,7 +518,7 @@ app.prepare().then(() => {
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
         const allReady = lobbyPlayers.length >= minPlayers && 
-                         lobbyPlayers.every(p => p.isReady);
+                         lobbyPlayers.every(p => p.isReady || p.isAi);
         
         if (allReady) {
           console.log(`🚀 Lobby ${lobbyId} is ready to start!`);

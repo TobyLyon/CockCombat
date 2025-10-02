@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,9 +25,10 @@ interface LobbyRoomProps {
   lobby: Lobby
   onLeaveLobby: () => void
   onStartMatch: () => void
+  playerIdentifier?: string
 }
 
-export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRoomProps) {
+export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIdentifier }: LobbyRoomProps) {
   const { socket, isConnected } = useSocket()
   const { publicKey, sendTransaction } = useWallet()
   const [players, setPlayers] = useState<LobbyPlayer[]>([])
@@ -36,14 +37,63 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
   const [lobbyData, setLobbyData] = useState<Lobby>(lobby)
   const [isProcessingWager, setIsProcessingWager] = useState(false)
   const [hasWagered, setHasWagered] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const barRef = useRef<HTMLDivElement | null>(null)
+
+  // Debug: log layout to find why the ready bar might be off-screen
+  useEffect(() => {
+    const logLayout = (reason: string) => {
+      try {
+        const root = rootRef.current
+        const bar = barRef.current
+        if (!root || !bar) {
+          console.log('[LobbyRoom][layout]', reason, { rootExists: !!root, barExists: !!bar })
+          return
+        }
+        const rootStyle = getComputedStyle(root)
+        const barStyle = getComputedStyle(bar)
+        const rootRect = root.getBoundingClientRect()
+        const barRect = bar.getBoundingClientRect()
+        const parent = root.parentElement
+        const pStyle = parent ? getComputedStyle(parent) : null
+        const pRect = parent ? parent.getBoundingClientRect() : null
+
+        const info = {
+          reason,
+          window: { w: window.innerWidth, h: window.innerHeight },
+          rootRect, barRect, pRect,
+          rootOverflow: { overflow: rootStyle.overflow, overflowY: rootStyle.overflowY },
+          parentOverflow: pStyle ? { overflow: pStyle.overflow, overflowY: pStyle.overflowY } : null,
+          barDisplay: barStyle.display,
+          barPosition: barStyle.position,
+          barZ: barStyle.zIndex,
+          classes: { root: root.className, bar: bar.className },
+          outOfViewportPx: Math.max(0, barRect.bottom - window.innerHeight)
+        }
+        console.log('[LobbyRoom][layout]', info)
+      } catch (e) {
+        console.log('[LobbyRoom][layout] measurement error', e)
+      }
+    }
+
+    const onResize = () => logLayout('resize')
+    logLayout('mount')
+    window.addEventListener('resize', onResize)
+    const id = window.setTimeout(() => logLayout('post-mount-200ms'), 200)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.clearTimeout(id)
+    }
+  }, [])
 
   // Join lobby room on mount
   useEffect(() => {
-    if (socket && isConnected && publicKey) {
+    const id = playerIdentifier || publicKey?.toString()
+    if (socket && isConnected && id) {
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
-      // First register the wallet address with the socket
-      socket.emit('register_wallet', publicKey.toString());
+      // Register the player identifier (wallet or guest id) with the socket
+      socket.emit('register_wallet', id);
       
       // Then join the lobby room
       socket.emit('join_lobby_room', lobby.id);
@@ -68,7 +118,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
         socket.emit('leave_lobby_room', lobby.id);
       };
     }
-  }, [socket, isConnected, lobby.id, publicKey]);
+  }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);
 
   // Set up socket listeners
   useEffect(() => {
@@ -76,7 +126,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
-      console.log('Current publicKey:', publicKey?.toString());
+      console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
       setLobbyData(updatedLobby);
       
       // Update players list with the lobby data
@@ -149,8 +199,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
   // Initial lobby data setup - ensure current player is included
   useEffect(() => {
-    if (publicKey && lobbyData.players) {
-      const currentPlayerInLobby = lobbyData.players.find(p => p.playerId === publicKey.toString());
+    const id = playerIdentifier || publicKey?.toString();
+    if (id && lobbyData.players) {
+      const currentPlayerInLobby = lobbyData.players.find(p => p.playerId === id);
       
       if (currentPlayerInLobby) {
         // Convert lobby players to display format, ensuring current player is included
@@ -166,7 +217,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
         console.log('🎯 Set initial players from lobby data:', displayPlayers);
       }
     }
-  }, [publicKey, lobbyData]);
+  }, [publicKey, lobbyData, playerIdentifier]);
 
   // Countdown effect
   useEffect(() => {
@@ -179,7 +230,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
   }, [countdown])
 
   const handleReadyToggle = async () => {
-    if (!socket || !publicKey) return;
+    if (!socket) return;
+    const id = playerIdentifier || publicKey?.toString();
+    if (!id) return;
 
     // If trying to ready up and this is a paid lobby, need to process wager first
     const isPaidLobby = lobby.amount > 0 && lobby.matchType !== 'tutorial';
@@ -195,7 +248,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
     setIsReady(newReadyState);
     socket.emit('player_ready', {
       lobbyId: lobby.id,
-      playerId: publicKey.toString(),
+      playerId: id,
       isReady: newReadyState
     });
   }
@@ -257,10 +310,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
   const allPlayersReady = players.length >= (lobby.matchType === 'tutorial' ? 2 : 4) && 
                           players.every(p => p.isReady)
-  const currentPlayer = players.find(p => p.playerId === publicKey?.toString())
+  const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div className="h-full flex flex-col bg-gray-900/50">
+    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -277,7 +330,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 1.2, opacity: 0 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                className="text-8xl sm:text-9xl font-bold text-yellow-400 pixel-font mb-4 drop-shadow-lg"
+                className="text-6xl sm:text-8xl font-bold text-yellow-400 pixel-font mb-4 drop-shadow-lg"
                 style={{ 
                   textShadow: '4px 4px 0px rgba(0,0,0,0.8), 8px 8px 0px rgba(255,170,0,0.3)' 
                 }}
@@ -287,7 +340,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
               <motion.p 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-2xl sm:text-3xl text-gray-300 pixel-font mb-4"
+                className="text-xl sm:text-2xl text-gray-300 pixel-font mb-4"
               >
                 MATCH STARTING...
               </motion.p>
@@ -295,9 +348,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="flex items-center justify-center gap-2 text-lg text-yellow-400"
+                className="flex items-center justify-center gap-2 text-base text-yellow-400"
               >
-                <Clock className="h-6 w-6 animate-pulse" />
+                <Clock className="h-5 w-5 animate-pulse" />
                 <span>Get ready to fight!</span>
               </motion.div>
             </div>
@@ -312,22 +365,22 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -50 }}
-            className="absolute top-0 left-0 right-0 bg-green-600/90 backdrop-blur-sm p-4 z-40"
+            className="absolute top-0 left-0 right-0 bg-green-600/90 backdrop-blur-sm p-3 z-40"
           >
             <div className="text-center">
               <div className="flex items-center justify-center gap-2 text-white">
-                <Check className="h-6 w-6" />
-                <span className="text-lg font-bold pixel-font">ALL PLAYERS READY!</span>
+                <Check className="h-5 w-5" />
+                <span className="text-base font-bold pixel-font">ALL PLAYERS READY!</span>
               </div>
-              <p className="text-sm text-green-100 mt-1">Waiting for match to start...</p>
+              <p className="text-xs text-green-100 mt-1">Waiting for match to start...</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Match Details */}
-      <div className="p-4 bg-gray-800/50 border-b border-gray-700/50">
-        <div className="space-y-2 text-sm">
+      {/* Match Details - Ultra Compact */}
+      <div className="p-1.5 bg-gray-800/50 border-b border-gray-700/50">
+        <div className="space-y-1 text-[10px]">
           <div className="flex justify-between">
             <span className="text-gray-400">Entry:</span>
             <span className="font-bold text-yellow-400">
@@ -349,38 +402,38 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
         </div>
       </div>
 
-      {/* Players List - Compact */}
-      <div className="flex-1 overflow-y-auto p-3">
-        <div className="space-y-2">
+      {/* Players List - Scrollable */}
+      <div className="overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto" style={{ minHeight: 0 }}>
+        <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
               key={player.playerId}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+              className={`flex items-center justify-between p-2 rounded border transition-colors ${
                 player.isReady 
                   ? 'bg-green-900/30 border-green-600/50' 
                   : 'bg-gray-700/30 border-gray-600/50'
               }`}
             >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
                   player.isAi ? 'bg-purple-600' : 'bg-blue-600'
                 }`}>
                   {player.isAi ? 'AI' : (index + 1)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1">
-                    <span className="text-sm font-semibold truncate">
+                    <span className="text-xs font-semibold truncate">
                       {player.username || `Player ${index + 1}`}
                     </span>
                     {player.isAi && (
-                      <Badge variant="secondary" className="text-xs px-1 py-0">
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0">
                         AI
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 truncate">
+                  <p className="text-[10px] text-gray-400 truncate">
                     🐔 {player.chickenName || 'Random'}
                   </p>
                 </div>
@@ -388,13 +441,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
               
               <div className="flex-shrink-0">
                 {player.isReady ? (
-                  <Badge className="bg-green-600 text-white text-xs px-2 py-1">
-                    <Check className="mr-1 h-3 w-3" />
+                  <Badge className="bg-green-600 text-white text-[10px] px-1.5 py-0.5">
+                    <Check className="mr-0.5 h-2.5 w-2.5" />
                     Ready
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="border-gray-500 text-gray-400 text-xs px-2 py-1">
-                    <Clock className="mr-1 h-3 w-3" />
+                  <Badge variant="outline" className="border-gray-500 text-gray-400 text-[10px] px-1.5 py-0.5">
+                    <Clock className="mr-0.5 h-2.5 w-2.5" />
                     Wait
                   </Badge>
                 )}
@@ -402,16 +455,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
             </motion.div>
           ))}
           
-          {/* Empty slots - Compact */}
+          {/* Empty slots - Ultra Compact */}
           {Array.from({ length: lobby.capacity - players.length }).map((_, index) => (
             <div
               key={`empty-${index}`}
-              className="flex items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-600/50 bg-gray-800/20"
+              className="flex items-center gap-1.5 p-2 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
             >
-              <div className="w-8 h-8 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
-                <Users className="h-4 w-4 text-gray-500" />
+              <div className="w-6 h-6 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
+                <Users className="h-3 w-3 text-gray-500" />
               </div>
-              <span className="text-sm text-gray-500">Waiting...</span>
+              <span className="text-xs text-gray-500">Waiting...</span>
             </div>
           ))}
         </div>
@@ -419,19 +472,20 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
 
       {/* Requirements Notice */}
       {lobby.matchType !== 'tutorial' && (
-        <div className="p-3 bg-yellow-900/20 border-t border-yellow-600/30">
-          <p className="text-xs text-yellow-400 text-center">
-            Minimum 4 players required for ranked matches
+        <div className="px-2 py-1 bg-yellow-900/20 border-t border-yellow-600/30">
+          <p className="text-[9px] text-yellow-400 text-center">
+            Min. 4 players for ranked
           </p>
         </div>
       )}
 
       {/* Ready Button Section */}
-      <div className="p-4 bg-gray-800/50 border-t border-gray-700/50">
+      <div ref={barRef} className="px-2 py-1.5 bg-gray-800 border-t border-yellow-500 w-full">
+        <div className="w-full">
         <Button
           onClick={handleReadyToggle}
           disabled={isProcessingWager}
-          className={`w-full h-12 text-lg font-bold pixel-font transition-all ${
+          className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
             isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'
               : 'bg-green-600 hover:bg-green-500 text-white'
@@ -439,24 +493,24 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
         >
           {isProcessingWager ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               PROCESSING...
             </>
           ) : isReady ? (
             <>
-              <X className="mr-2 h-5 w-5" />
+              <X className="mr-1.5 h-4 w-4" />
               CANCEL
             </>
           ) : (
             <>
               {lobby.amount > 0 && lobby.matchType !== 'tutorial' && !hasWagered ? (
                 <>
-                  <Check className="mr-2 h-5 w-5" />
+                  <Check className="mr-1.5 h-4 w-4" />
                   WAGER & READY
                 </>
               ) : (
                 <>
-                  <Check className="mr-2 h-5 w-5" />
+                  <Check className="mr-1.5 h-4 w-4" />
                   READY UP
                 </>
               )}
@@ -464,17 +518,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
           )}
         </Button>
         
-        {/* Wager Status - Compact */}
+        {/* Wager Status - Ultra Compact */}
         {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
-          <div className="mt-2 text-center">
+          <div className="mt-0.5 text-center">
             {hasWagered ? (
-              <div className="flex items-center justify-center gap-1 text-green-400">
-                <Check className="h-3 w-3" />
-                <span className="text-xs">Wager submitted</span>
+              <div className="flex items-center justify-center gap-0.5 text-green-400">
+                <Check className="h-2.5 w-2.5" />
+                <span className="text-[10px]">Wager submitted</span>
               </div>
             ) : (
-              <p className="text-xs text-yellow-400">
-                Submit {lobby.amount} {lobby.currency} to ready up
+              <p className="text-[10px] text-yellow-400">
+                Submit {lobby.amount} {lobby.currency} to ready
               </p>
             )}
           </div>
@@ -485,13 +539,47 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch }: LobbyRo
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-3 text-center p-2 bg-green-900/30 border border-green-600/50 rounded-lg"
+            className="mt-1 text-center p-1 bg-green-900/30 border border-green-600/50 rounded"
           >
-            <p className="text-green-400 font-bold text-sm">
+            <p className="text-green-400 font-bold text-[10px]">
               All ready! Starting soon...
             </p>
           </motion.div>
         )}
+        </div>
+      </div>
+
+      {/* Match Info Footer */}
+      <div className="px-2 py-1.5 bg-gray-900/80 border-t border-gray-700/30">
+        <div className="space-y-1.5 text-[10px]">
+          {/* Prize Pool */}
+          <div className="flex items-center justify-between px-2 py-1 bg-gray-800/50 rounded border border-gray-700/30">
+            <span className="text-gray-400 flex items-center gap-1">
+              <Crown className="h-3 w-3 text-yellow-500" />
+              Prize Pool
+            </span>
+            <span className="font-bold text-yellow-400">
+              {lobby.amount === 0 ? 'Practice Match' : `${lobby.amount * Math.max(players.length, lobby.matchType === 'tutorial' ? 2 : 4)} ${lobby.currency}`}
+            </span>
+          </div>
+
+          {/* Match Type & Rules */}
+          <div className="flex items-center justify-between text-gray-400 px-2">
+            <span>Match Type:</span>
+            <span className="text-gray-300 font-semibold">
+              {lobby.matchType === 'tutorial' ? 'Tutorial' : 'Ranked'}
+            </span>
+          </div>
+
+          {/* Quick Tip */}
+          <div className="px-2 py-1 bg-blue-900/20 border border-blue-700/30 rounded">
+            <p className="text-blue-300 text-center text-[9px]">
+              💡 {lobby.matchType === 'tutorial' 
+                ? 'Practice your skills against AI opponents!' 
+                : 'Last chicken standing wins the full prize pool!'}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

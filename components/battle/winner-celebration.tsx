@@ -8,7 +8,11 @@ import { Trophy, Coins, ArrowRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import Image from "next/image"
 
-export default function WinnerCelebration() {
+interface WinnerCelebrationProps {
+  onExit?: () => void
+}
+
+export default function WinnerCelebration({ onExit }: WinnerCelebrationProps = {}) {
   const { prizeAmount, returnToMainMenu, playSound } = useGameState()
   const [showConfetti, setShowConfetti] = useState(false)
   
@@ -63,7 +67,11 @@ export default function WinnerCelebration() {
   // Handle play again button
   const handlePlayAgain = () => {
     playSound("button")
-    returnToMainMenu()
+    if (onExit) {
+      onExit()
+    } else {
+      returnToMainMenu()
+    }
   }
   
   return (
