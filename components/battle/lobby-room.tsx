@@ -313,7 +313,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-3 md:pb-4" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
+    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-1 md:pb-2" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -480,7 +480,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       )}
 
       {/* Ready Button Section */}
-      <div ref={barRef} className="px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
+      <div ref={barRef} className="sticky bottom-2 md:bottom-3 z-10 px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
         <div className="w-full">
         <Button
           onClick={handleReadyToggle}
