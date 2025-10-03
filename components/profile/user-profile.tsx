@@ -9,6 +9,11 @@ import Image from "next/image"
 
 export default function UserProfile() {
   const { connected, publicKey } = useWallet()
+  const walletAddress = typeof publicKey === 'string'
+    ? publicKey
+    : (publicKey && typeof (publicKey as any).toBase58 === 'function'
+        ? (publicKey as any).toBase58()
+        : (publicKey?.toString?.() || ''))
   const [userChickens, setUserChickens] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -98,7 +103,7 @@ export default function UserProfile() {
         <div>
           <h2 className="text-2xl font-bold">My Cock Collection</h2>
           <p className="text-sm text-purple-300">
-            Wallet: {publicKey.slice(0, 6)}...{publicKey.slice(-4)}
+            Wallet: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''}
           </p>
         </div>
 
