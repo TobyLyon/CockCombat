@@ -313,7 +313,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-2" style={{ gridTemplateRows: 'auto minmax(0, 1fr) auto auto auto' }}>
+    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-3 md:pb-4" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -403,14 +403,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable */}
-      <div className="overflow-y-auto overflow-x-hidden p-1 pointer-events-auto" style={{ minHeight: 0, maxHeight: '40vh' }}>
-        <div className="space-y-1">
+      <div className="overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto" style={{ minHeight: 0 }}>
+        <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
               key={player.playerId}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className={`flex items-center justify-between p-1.5 rounded border transition-colors ${
+              className={`flex items-center justify-between p-2 rounded border transition-colors ${
                 player.isReady 
                   ? 'bg-green-900/30 border-green-600/50' 
                   : 'bg-gray-700/30 border-gray-600/50'
@@ -459,7 +459,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           {Array.from({ length: lobby.capacity - players.length }).map((_, index) => (
             <div
               key={`empty-${index}`}
-              className="flex items-center gap-1.5 p-1.5 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
+              className="flex items-center gap-1.5 p-2 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
             >
               <div className="w-6 h-6 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
                 <Users className="h-3 w-3 text-gray-500" />
@@ -470,18 +470,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         </div>
       </div>
 
-      {/* Requirements Notice */}
-      {lobby.matchType !== 'tutorial' && (
-        <div className="px-2 py-1 bg-yellow-900/20 border-t border-yellow-600/30">
-          <p className="text-[9px] text-yellow-400 text-center">
-            Min. 4 players for ranked
-          </p>
-        </div>
-      )}
+      {/* Bottom Actions (sticky) */}
+      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+8px)] z-[60] space-y-1">
+        {lobby.matchType !== 'tutorial' && (
+          <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
+            <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>
+          </div>
+        )}
 
-      {/* Ready Button Section */}
-      <div ref={barRef} className="px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
-        <div className="w-full">
+        {/* Ready Button Section */}
+        <div ref={barRef} className="px-2 py-1 bg-gray-800/95 backdrop-blur-sm border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/30">
+          <div className="w-full">
         <Button
           onClick={handleReadyToggle}
           disabled={isProcessingWager}
@@ -546,12 +545,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             </p>
           </motion.div>
         )}
+          </div>
         </div>
-      </div>
 
-      {/* Match Info Footer */}
-      <div className="px-2 py-1 bg-gray-900/80 border border-gray-700/30 rounded-md shadow-inner">
-        <div className="space-y-1.5 text-[10px]">
+        {/* Match Info Footer */}
+        <div className="px-2 py-1 bg-gray-900/90 backdrop-blur-sm border border-gray-700/40 rounded-md shadow-inner">
+          <div className="space-y-1.5 text-[10px]">
           {/* Prize Pool */}
           <div className="flex items-center justify-between px-2 py-1 bg-gray-800/50 rounded border border-gray-700/30">
             <span className="text-gray-400 flex items-center gap-1">
@@ -578,6 +577,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
                 ? 'Practice your skills against AI opponents!' 
                 : 'Last chicken standing wins the full prize pool!'}
             </p>
+          </div>
           </div>
         </div>
       </div>
