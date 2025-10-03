@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { WalletMultiButton as SolanaWalletMultiButton } from "@solana/wallet-adapter-react-ui"
@@ -25,6 +25,11 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const copyAddress = () => {
     if (publicKey) {
@@ -55,7 +60,16 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     router.push("/profile")
   }
 
-  // If not connected, show the native Solana wallet button
+  // While SSR or until mounted, render a stable placeholder to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className={className} suppressHydrationWarning>
+        <div className="h-10 w-[150px] rounded border-b-4 bg-[#fbbf24]/70 border-[#d97706]" />
+      </div>
+    )
+  }
+
+  // If not connected, show the native Solana wallet button (client-only)
   if (!connected) {
     return (
       <div onClick={onClickSound} className={className}>
