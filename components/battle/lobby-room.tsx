@@ -313,7 +313,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
+    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-3 md:pb-4" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -480,7 +480,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       )}
 
       {/* Ready Button Section */}
-      <div ref={barRef} className="px-2 py-1.5 bg-gray-800 border-t border-yellow-500 w-full">
+      <div ref={barRef} className="px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
         <div className="w-full">
         <Button
           onClick={handleReadyToggle}
@@ -550,7 +550,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Match Info Footer */}
-      <div className="px-2 py-1.5 bg-gray-900/80 border-t border-gray-700/30">
+      <div className="px-2 py-1 bg-gray-900/80 border border-gray-700/30 rounded-md shadow-inner">
         <div className="space-y-1.5 text-[10px]">
           {/* Prize Pool */}
           <div className="flex items-center justify-between px-2 py-1 bg-gray-800/50 rounded border border-gray-700/30">
