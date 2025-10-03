@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
+import BalanceBar from "@/components/wallet/balance-bar"
 import { Button } from "@/components/ui/button"
 import { Volume2, VolumeX, Home, Copy, Check } from "lucide-react"
 import Link from "next/link"
@@ -114,7 +115,7 @@ export default function NavBar() {
       </h1>
       </div>
 
-      {/* Right side - Copy token (enhanced), Twitter, Wallet */}
+      {/* Right side - Copy token (enhanced), Twitter, Balances, Wallet */}
       <div className="flex basis-1/3 items-center justify-end gap-3 md:gap-4">
         {/* Copy Token - desktop enhanced pill */}
         <button
@@ -159,6 +160,9 @@ export default function NavBar() {
             <path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/>
           </svg>
         </a>
+
+        {/* Balances */}
+        {isMounted && <BalanceBar compact className="hidden sm:flex" />}
 
         {/* Wallet */}
         {isMounted && <WalletMultiButton onClickSound={() => playSound("click")} />}

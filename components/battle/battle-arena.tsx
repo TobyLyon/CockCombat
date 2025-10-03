@@ -21,7 +21,6 @@ import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
-import BalanceBar from "@/components/wallet/balance-bar"
 
 export default function BattleArena() {
   const router = useRouter()
@@ -287,19 +286,7 @@ export default function BattleArena() {
             <ArenaBackground />
           </div>
         )}
-        {/* Top Bar */}
-        <div className="p-3 bg-gray-900/40 border-b border-white/10 backdrop-blur sticky top-0 z-20">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 px-1">
-            <Link href="/" className="flex items-center gap-2 text-yellow-400 hover:text-yellow-300 transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-              Back
-            </Link>
-            <div className="flex items-center gap-3">
-              <BalanceBar compact className="hidden sm:flex" />
-              <WalletMultiButton />
-            </div>
-          </div>
-        </div>
+        {/* Top Bar moved to universal NavBar; removed local header */}
 
         {gameState === "lobby" && (
           <div className="flex-1 flex flex-col lg:flex-row w-full h-full max-h-full overflow-hidden">
