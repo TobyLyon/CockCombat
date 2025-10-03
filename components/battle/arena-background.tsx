@@ -9,6 +9,7 @@ import { PixelChicken } from "@/components/3d/pixel-chicken-viewer"
 export default function ArenaBackground() {
   const [sceneIndex, setSceneIndex] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
+  const [isVisible, setIsVisible] = useState(true)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneTimerRef = useRef<number | null>(null)
   const sceneStartAtRef = useRef<number>(Date.now())
@@ -30,11 +31,15 @@ export default function ArenaBackground() {
       }, delay)
     }
     schedule()
+
+    const onVisibility = () => setIsVisible(!document.hidden)
+    document.addEventListener('visibilitychange', onVisibility)
     
     return () => { 
       clearTimeout(mountTimer)
       if (sceneTimerRef.current) window.clearTimeout(sceneTimerRef.current)
       setIsMounted(false)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
@@ -44,7 +49,7 @@ export default function ArenaBackground() {
       <Canvas 
         camera={{ position: [0, 2.2, 6], fov: 45 }}
         style={{ width: '100%', height: '100%' }}
-        dpr={[1, 1.5]}
+        dpr={typeof window !== 'undefined' && window.devicePixelRatio > 1.5 ? [1, 1.5] : [1, 1.25]}
         gl={{ 
           antialias: false, // Reduce GPU load
           alpha: false, 
@@ -73,6 +78,7 @@ export default function ArenaBackground() {
         }}
         shadows={false}
       >
+        {isVisible && (
         <CinematicCamera 
           index={sceneIndex}
           getProgress={() => {
@@ -83,7 +89,7 @@ export default function ArenaBackground() {
             const t = Math.max(0, Math.min(1, (now - start) / duration))
             return t * t * (3 - 2 * t)
           }}
-        />
+        />)}
         <color attach="background" args={["#87CEEB"]} />
         <ambientLight intensity={0.9} />
         <directionalLight position={[8, 12, 6]} intensity={1.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-far={50} shadow-camera-left={-15} shadow-camera-right={15} shadow-camera-top={15} shadow-camera-bottom={-15} />
