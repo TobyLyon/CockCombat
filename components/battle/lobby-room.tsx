@@ -471,7 +471,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Bottom Actions (sticky) */}
-      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+8px)] z-[60] space-y-1">
+      <div className="sticky z-[60] space-y-1" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}>
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>
