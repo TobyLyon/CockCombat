@@ -5,7 +5,6 @@ import { useWallet } from "@solana/wallet-adapter-react"
 import { useConnection } from "@solana/wallet-adapter-react"
 import { PublicKey } from "@solana/web3.js"
 import { toast } from "sonner"
-import { Coins } from "lucide-react"
 import Image from "next/image"
 import { getTokenMintAddress, getTokenBalance } from "@/lib/token-service"
 
@@ -70,7 +69,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
   return (
     <div className={`flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 ${className}`}>
       <div className="flex items-center gap-1.5 text-white/90">
-        <Coins className="h-4 w-4 text-yellow-300" />
+        <SolanaLogo className="h-4 w-4" />
         <span className="font-semibold">{sol.toFixed(4)}</span>
         {!compact && <span className="text-xs text-white/70 ml-1">SOL</span>}
       </div>
@@ -79,12 +78,28 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
 
       <div className="flex items-center gap-1.5 text-white/90">
         <div className="relative h-4 w-4">
-          <Image src="/images/cock-token.png" alt="$COCK" fill className="object-contain" />
+          <Image src="/images/logo%202.png" alt="COCK Token" fill className="object-contain" />
         </div>
         <span className="font-semibold">{spl.toFixed(compact ? 1 : 2)}</span>
         {!compact && <span className="text-xs text-white/70 ml-1">$COCK</span>}
       </div>
     </div>
+  )
+}
+
+function SolanaLogo({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 397 311" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="sol1" x1=".5" y1="0" x2=".5" y2="1">
+          <stop stopColor="#14F195" />
+          <stop offset="1" stopColor="#9945FF" />
+        </linearGradient>
+      </defs>
+      <path d="M64 0h312l-64 64H0L64 0Z" fill="url(#sol1)"/>
+      <path d="M64 124h312l-64 64H0l64-64Z" fill="url(#sol1)"/>
+      <path d="M64 247h312l-64 64H0l64-64Z" fill="url(#sol1)"/>
+    </svg>
   )
 }
 
