@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       SystemProgram.transfer({
         fromPubkey: playerPubkey,
         toPubkey: escrowWallet.publicKey,
-        lamports: lobby.amount * LAMPORTS_PER_SOL,
+        lamports: Math.round(lobby.amount * LAMPORTS_PER_SOL),
       })
     );
 

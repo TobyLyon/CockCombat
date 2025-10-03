@@ -170,6 +170,24 @@ class EscrowService {
   }
 
   /**
+   * Pick a wallet that has at least the required lamports (best-effort)
+   */
+  public async getWalletWithBalance(minLamports: number): Promise<EscrowWallet> {
+    if (!this.connection) throw new Error('Connection not initialized');
+    const enabled = Array.from(this.wallets.values()).filter(w => w.isEnabled);
+    if (enabled.length === 0) throw new Error('No escrow wallets available');
+    // Refresh balances
+    await Promise.all(enabled.map(async w => { try { w.balance = await this.connection!.getBalance(w.publicKey); } catch {} }));
+    const enough = enabled.filter(w => (w.balance || 0) >= minLamports);
+    if (enough.length > 0) {
+      // choose the least used among those with enough balance
+      return enough.reduce((a,b) => a.transactionCount <= b.transactionCount ? a : b);
+    }
+    // fallback to highest balance wallet
+    return enabled.reduce((a,b) => (a.balance || 0) >= (b.balance || 0) ? a : b);
+  }
+
+  /**
    * Get a specific wallet by ID
    */
   public getWallet(id: 'A' | 'B' | 'C'): EscrowWallet | undefined {
@@ -368,8 +386,8 @@ class EscrowService {
 
     console.log(`💰 Processing payout: Winner: ${winnerCutLamports / LAMPORTS_PER_SOL} SOL, House: ${houseCutLamports / LAMPORTS_PER_SOL} SOL`);
 
-    // Get escrow wallet
-    const wallet = await this.getNextWallet();
+    // Get escrow wallet with sufficient balance
+    const wallet = await this.getWalletWithBalance(totalPrizePoolLamports);
 
     // Transfer to winner
     const winnerSignature = await this.transferSOL(winnerAddress, winnerCutLamports, wallet);

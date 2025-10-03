@@ -8,7 +8,7 @@ export interface Lobby {
   id: string;
   amount: number;
   currency: string;
-  players: { playerId: string; chickenId: string; isAi?: boolean; username?: string }[];
+  players: { playerId: string; chickenId: string; isAi?: boolean; username?: string; isReady?: boolean; hasWagered?: boolean }[];
   capacity: number;
   highRoller: boolean;
   status: 'open' | 'starting' | 'in-progress';

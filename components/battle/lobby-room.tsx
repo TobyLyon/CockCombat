@@ -288,17 +288,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log('Wager transaction successful with signature:', signature);
       toast.success("Wager submitted successfully!");
       
-      setHasWagered(true);
-      
-      // Now ready up automatically
-      setIsReady(true);
-      if (socket) {
-        socket.emit('player_ready', {
-          lobbyId: lobby.id,
-          playerId: publicKey.toString(),
-          isReady: true
-        });
+      // Confirm with server (verifies signature and marks ready)
+      const confirmRes = await fetch('/api/wager/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lobbyId: lobby.id, signature })
+      });
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json();
+        throw new Error(err.error || 'Wager confirmation failed');
       }
+      setHasWagered(true);
+      setIsReady(true);
 
     } catch (error: any) {
       console.error("❌ Failed to process wager:", error);
@@ -308,8 +309,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const allPlayersReady = players.length >= (lobby.matchType === 'tutorial' ? 2 : 4) && 
-                          players.every(p => p.isReady)
+  const minRequired = lobby.matchType === 'tutorial' ? 2 : 4
+  const paidPlayers = players.filter(p => p.hasWagered || p.isReady).length
+  const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady)
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
@@ -390,13 +392,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="flex justify-between">
             <span className="text-gray-400">Prize:</span>
             <span className="font-bold text-green-400">
-              {lobby.amount === 0 ? 'Practice' : `${lobby.amount * players.length} ${lobby.currency}`}
+              {lobby.amount === 0 ? 'Practice' : `${(lobby.amount * Math.max(paidPlayers, minRequired)).toFixed(2)} ${lobby.currency}`}
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Players:</span>
             <span className="font-bold">
-              {players.length} / {lobby.capacity}
+              {paidPlayers} paid / {players.length} joined / {lobby.capacity} cap
             </span>
           </div>
         </div>
@@ -558,7 +560,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
               Prize Pool
             </span>
             <span className="font-bold text-yellow-400">
-              {lobby.amount === 0 ? 'Practice Match' : `${lobby.amount * Math.max(players.length, lobby.matchType === 'tutorial' ? 2 : 4)} ${lobby.currency}`}
+              {lobby.amount === 0 ? 'Practice Match' : `${(lobby.amount * Math.max(paidPlayers, minRequired)).toFixed(2)} ${lobby.currency}`}
             </span>
           </div>
 
