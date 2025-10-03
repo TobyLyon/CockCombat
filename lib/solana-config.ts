@@ -24,8 +24,13 @@ class SolanaConfig {
 
   private constructor() {
     // Get network from environment or default to devnet
-    const envNetwork = process.env.NEXT_PUBLIC_SOLANA_NETWORK as SolanaNetwork;
-    this.network = envNetwork || 'devnet';
+    // Normalize legacy values to supported clusters
+    const rawNetwork = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || '').toLowerCase();
+    const normalized = rawNetwork === 'mainnet' ? 'mainnet-beta' : rawNetwork;
+    const envNetwork = normalized as SolanaNetwork;
+    this.network = (envNetwork === 'devnet' || envNetwork === 'testnet' || envNetwork === 'mainnet-beta')
+      ? envNetwork
+      : 'devnet';
 
     // Get RPC endpoint (custom or default)
     const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;

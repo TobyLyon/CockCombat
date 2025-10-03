@@ -110,10 +110,11 @@ class EscrowService {
     }
 
     if (this.wallets.size === 0) {
-      throw new Error('No escrow wallets configured! Please set up at least one escrow wallet.');
+      // Do NOT throw during module import/build. We'll validate at call time.
+      console.warn('⚠️ No escrow wallets configured. Payouts will be disabled until wallets are set.');
+    } else {
+      console.log(`🔐 Escrow service initialized with ${this.wallets.size} wallet(s)`);
     }
-
-    console.log(`🔐 Escrow service initialized with ${this.wallets.size} wallet(s)`);
   }
 
   /**
@@ -350,6 +351,10 @@ class EscrowService {
   ): Promise<{ winnerSignature: string; houseSignature: string }> {
     if (!this.connection) {
       throw new Error('Connection not initialized');
+    }
+
+    if (this.wallets.size === 0) {
+      throw new Error('Escrow wallets not configured');
     }
 
     const houseWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET;

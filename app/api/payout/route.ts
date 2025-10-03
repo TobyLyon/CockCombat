@@ -40,6 +40,14 @@ export async function POST(request: Request) {
     const connection = getConnection();
     escrowService.setConnection(connection);
 
+    // Validate wallets are configured (avoid build-time failure on Vercel)
+    try {
+      await escrowService.getNextWallet();
+    } catch (e) {
+      console.error('Payout attempted but escrow wallets are not configured.');
+      return NextResponse.json({ error: 'Escrow wallets not configured on server' }, { status: 500 });
+    }
+
     // Process payout using escrow service (handles winner + house cut)
     const { winnerSignature, houseSignature } = await escrowService.processPayout(
       winnerAddress,
