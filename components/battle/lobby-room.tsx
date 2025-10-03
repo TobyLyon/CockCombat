@@ -313,7 +313,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-1 md:pb-2" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
+    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-2" style={{ gridTemplateRows: 'auto minmax(0, 1fr) auto auto auto' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -403,14 +403,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable */}
-      <div className="overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto" style={{ minHeight: 0 }}>
-        <div className="space-y-1.5">
+      <div className="overflow-y-auto overflow-x-hidden p-1 pointer-events-auto" style={{ minHeight: 0, maxHeight: '40vh' }}>
+        <div className="space-y-1">
           {players.map((player, index) => (
             <motion.div
               key={player.playerId}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className={`flex items-center justify-between p-2 rounded border transition-colors ${
+              className={`flex items-center justify-between p-1.5 rounded border transition-colors ${
                 player.isReady 
                   ? 'bg-green-900/30 border-green-600/50' 
                   : 'bg-gray-700/30 border-gray-600/50'
@@ -459,7 +459,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           {Array.from({ length: lobby.capacity - players.length }).map((_, index) => (
             <div
               key={`empty-${index}`}
-              className="flex items-center gap-1.5 p-2 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
+              className="flex items-center gap-1.5 p-1.5 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
             >
               <div className="w-6 h-6 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
                 <Users className="h-3 w-3 text-gray-500" />
@@ -480,7 +480,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       )}
 
       {/* Ready Button Section */}
-      <div ref={barRef} className="sticky bottom-2 md:bottom-3 z-10 px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
+      <div ref={barRef} className="px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/20">
         <div className="w-full">
         <Button
           onClick={handleReadyToggle}
