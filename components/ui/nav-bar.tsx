@@ -122,21 +122,20 @@ export default function NavBar() {
 
       {/* Right side - Copy token (enhanced), Twitter, Balances, Wallet */}
       <div className="flex basis-1/3 items-center justify-end gap-1 sm:gap-2 md:gap-3 min-w-0 flex-shrink-0">
-        {/* Copy Token - desktop enhanced pill */}
+        {/* Copy Token - desktop sleeker pill */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
-          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-md border-2 shadow transition-colors duration-150 ${
+          className={`hidden sm:inline-flex items-center gap-2 px-4 py-1 rounded-full border transition-colors duration-150 min-w-[220px] ${
             copied
-              ? 'border-green-500 bg-green-600/20 text-green-300'
-              : 'border-[#666666] bg-[#2a2a2a] text-gray-200 hover:bg-[#3a3a3a] hover:border-yellow-500'
+              ? 'border-green-400/40 bg-green-500/10 text-green-300'
+              : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:border-yellow-500/40'
           }`}
-          style={{ boxShadow: '2px 2px 0 #000' }}
           aria-label="Copy token contract address"
           title="Copy token contract address"
           type="button"
         >
-          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4 text-yellow-300" />}
-          <span className="text-xs font-mono">Token: {tokenEndPreview}</span>
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 text-yellow-300" />}
+          <span className="text-xs font-mono tracking-wide">Token: {tokenEndPreview}</span>
         </button>
 
         {/* Copy Token - mobile icon */}
