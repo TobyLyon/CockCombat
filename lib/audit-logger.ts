@@ -51,8 +51,14 @@ class AuditLogger {
   private readonly FLUSH_INTERVAL = 5000; // 5 seconds
 
   private constructor() {
-    this.supabase = createClient(supabaseUrl, supabaseServiceKey);
-    this.startPeriodicFlush();
+    try {
+      if (supabaseUrl && supabaseServiceKey) {
+        this.supabase = createClient(supabaseUrl, supabaseServiceKey);
+        this.startPeriodicFlush();
+      }
+    } catch (error) {
+      console.warn('⚠️ Audit logger failed to initialize, logging will be console-only:', error);
+    }
   }
 
   public static getInstance(): AuditLogger {
@@ -184,7 +190,7 @@ class AuditLogger {
    * Flush buffered logs to database
    */
   private async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
+    if (this.buffer.length === 0 || !this.supabase) return;
 
     const logsToFlush = [...this.buffer];
     this.buffer = [];
@@ -195,13 +201,21 @@ class AuditLogger {
         .insert(logsToFlush);
 
       if (error) {
+        // Silently fail if table doesn't exist (graceful degradation)
+        if (error.code === '42P01') {
+          console.warn('⚠️ audit_logs table not found, skipping flush (run migration)');
+          return;
+        }
         console.error('Failed to flush audit logs:', error);
         // Put them back in the buffer to retry
         this.buffer.unshift(...logsToFlush);
       }
     } catch (error) {
       console.error('Error flushing audit logs:', error);
-      this.buffer.unshift(...logsToFlush);
+      // Don't put back in buffer if it's a table missing error
+      if (!(error instanceof Error && error.message.includes('relation'))) {
+        this.buffer.unshift(...logsToFlush);
+      }
     }
   }
 

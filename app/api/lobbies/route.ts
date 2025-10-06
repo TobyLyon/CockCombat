@@ -257,19 +257,24 @@ export async function POST(req: NextRequest) {
 
     console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}${lobby.escrowWalletId ? ` [Escrow: ${lobby.escrowWalletId}]` : ''}`);
 
-    // Audit log the join
-    await auditLogger.log({
-      eventType: 'lobby_join',
-      actorWallet: playerId,
-      endpoint: '/api/lobbies',
-      severity: 'info',
-      metadata: {
-        lobbyId,
-        lobbyAmount: lobby.amount,
-        playerCount: lobby.players.length,
-        escrowWallet: lobby.escrowWalletId,
-      },
-    });
+    // Audit log the join (non-blocking)
+    try {
+      await auditLogger.log({
+        eventType: 'lobby_join',
+        actorWallet: playerId,
+        endpoint: '/api/lobbies',
+        severity: 'info',
+        metadata: {
+          lobbyId,
+          lobbyAmount: lobby.amount,
+          playerCount: lobby.players.length,
+          escrowWallet: lobby.escrowWalletId,
+        },
+      });
+    } catch (error) {
+      // Non-fatal, continue
+      console.warn('Audit log failed (non-fatal):', error);
+    }
 
   // Broadcast the player join event via Socket.IO
   try {

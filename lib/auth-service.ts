@@ -32,7 +32,11 @@ class AuthService {
   private supabase;
 
   private constructor() {
-    this.supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (supabaseUrl && supabaseServiceKey) {
+      this.supabase = createClient(supabaseUrl, supabaseServiceKey);
+    } else {
+      console.warn('⚠️ Auth service: Supabase credentials missing');
+    }
   }
 
   public static getInstance(): AuthService {
@@ -237,13 +241,21 @@ class AuthService {
    * Check if a signature has been used before (replay protection)
    */
   public async isSignatureUsed(signature: string): Promise<boolean> {
-    const { data, error } = await this.supabase
-      .from('used_signatures')
-      .select('signature')
-      .eq('signature', signature)
-      .single();
+    if (!this.supabase) return false;
+    
+    try {
+      const { data, error } = await this.supabase
+        .from('used_signatures')
+        .select('signature')
+        .eq('signature', signature)
+        .single();
 
-    return !error && !!data;
+      return !error && !!data;
+    } catch (error) {
+      // Gracefully degrade if table doesn't exist
+      console.warn('⚠️ Signature check failed (table may not exist):', error);
+      return false;
+    }
   }
 
   /**
@@ -255,14 +267,21 @@ class AuthService {
     endpoint: string,
     metadata?: Record<string, any>
   ): Promise<void> {
-    await this.supabase
-      .from('used_signatures')
-      .insert({
-        signature,
-        wallet_address: walletAddress,
-        endpoint,
-        metadata: metadata || {},
-      });
+    if (!this.supabase) return;
+    
+    try {
+      await this.supabase
+        .from('used_signatures')
+        .insert({
+          signature,
+          wallet_address: walletAddress,
+          endpoint,
+          metadata: metadata || {},
+        });
+    } catch (error) {
+      // Gracefully degrade if table doesn't exist
+      console.warn('⚠️ Failed to mark signature as used (table may not exist):', error);
+    }
   }
 }
 
