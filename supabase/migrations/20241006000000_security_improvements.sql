@@ -107,27 +107,33 @@ ALTER TABLE match_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limit_log ENABLE ROW LEVEL SECURITY;
 
--- 9. Create RLS policies
+-- 9. Create RLS policies (drop existing first to make idempotent)
 -- used_signatures: service role only
+DROP POLICY IF EXISTS "Service role can manage used signatures" ON used_signatures;
 CREATE POLICY "Service role can manage used signatures" ON used_signatures
   FOR ALL USING (auth.role() = 'service_role');
 
 -- auth_sessions: service role can manage, users can view their own
+DROP POLICY IF EXISTS "Service role can manage auth sessions" ON auth_sessions;
 CREATE POLICY "Service role can manage auth sessions" ON auth_sessions
   FOR ALL USING (auth.role() = 'service_role');
 
 -- match_results: public read, service role write
+DROP POLICY IF EXISTS "Anyone can view match results" ON match_results;
 CREATE POLICY "Anyone can view match results" ON match_results
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage match results" ON match_results;
 CREATE POLICY "Service role can manage match results" ON match_results
   FOR ALL USING (auth.role() = 'service_role');
 
 -- audit_logs: service role only
+DROP POLICY IF EXISTS "Service role can manage audit logs" ON audit_logs;
 CREATE POLICY "Service role can manage audit logs" ON audit_logs
   FOR ALL USING (auth.role() = 'service_role');
 
 -- rate_limit_log: service role only
+DROP POLICY IF EXISTS "Service role can manage rate limits" ON rate_limit_log;
 CREATE POLICY "Service role can manage rate limits" ON rate_limit_log
   FOR ALL USING (auth.role() = 'service_role');
 
