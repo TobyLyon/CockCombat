@@ -39,6 +39,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [hasWagered, setHasWagered] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
+  const bottomActionsRef = useRef<HTMLDivElement | null>(null)
+  const [bottomPadding, setBottomPadding] = useState<number>(56)
 
   // Debug: log layout to find why the ready bar might be off-screen
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   // Join lobby room on mount
   useEffect(() => {
-    const id = playerIdentifier || publicKey?.toString()
+    const id = playerIdentifier || publicKey?.toString() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') || undefined : undefined)
     if (socket && isConnected && id) {
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
@@ -119,6 +121,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       };
     }
   }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);
+
+  // Ensure scroll area never hides the bottom actions: measure bottom bar height
+  useEffect(() => {
+    const measure = () => {
+      try {
+        const h = bottomActionsRef.current?.offsetHeight || 56
+        setBottomPadding(h + 8)
+      } catch {}
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    const id = window.setInterval(measure, 500)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.clearInterval(id)
+    }
+  }, [])
 
   // Set up socket listeners
   useEffect(() => {
@@ -244,7 +263,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     // Toggle ready state
     const newReadyState = !isReady;
-    console.log(`🎯 Setting ready state to ${newReadyState} for player ${publicKey.toString()}`);
+    console.log(`🎯 Setting ready state to ${newReadyState} for player ${id}`);
     setIsReady(newReadyState);
     socket.emit('player_ready', {
       lobbyId: lobby.id,
@@ -316,7 +335,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   }
 
   const minRequired = lobby.matchType === 'tutorial' ? 2 : 4
-  const paidPlayers = players.filter(p => p.hasWagered || p.isReady).length
+  const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady)
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
@@ -411,7 +430,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable (pad for bottom bar) */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pb-16 pointer-events-auto min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0" style={{ paddingBottom: bottomPadding }}>
         <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
@@ -479,7 +498,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Bottom Actions - Fixed to bottom to remain visible */}
-      <div className="flex-shrink-0 absolute bottom-0 left-0 right-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
+      <div ref={bottomActionsRef} className="flex-shrink-0 absolute bottom-0 left-0 right-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>

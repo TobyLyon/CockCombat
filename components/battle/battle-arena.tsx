@@ -253,7 +253,10 @@ export default function BattleArena() {
       const joinResult = await joinResponse.json();
       console.log('✅ Successfully joined lobby:', joinResult);
 
-      // Store guest id locally if applicable (use the generated one)
+      // Store guest id locally if applicable (persist to localStorage for sockets)
+      if (joiningAsGuest && guestIdGenerated) {
+        try { localStorage.setItem('guest_id', guestIdGenerated); } catch {}
+      }
       setGuestId(joiningAsGuest ? guestIdGenerated : null);
  
       // Go to lobby room for ready-up phase (wager will be handled there)
