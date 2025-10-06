@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { getConnection, getExplorerUrl } from '@/lib/solana-config';
 import { escrowService } from '@/lib/escrow-service';
 import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -10,15 +11,38 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // This function creates and executes a payout transaction using the escrow service
 export async function POST(request: Request) {
   try {
-    const { winnerAddress, prizePoolLamports, matchId } = await request.json();
+    // --- AUTHORIZATION: Require server secret to call payouts ---
+    const providedAuth = request.headers.get('x-server-auth') || request.headers.get('authorization');
+    const serverSecret = process.env.PAYOUT_SERVER_SECRET;
+    if (!serverSecret || !providedAuth || !providedAuth.replace(/^Bearer\s+/i, '').trim() || providedAuth.replace(/^Bearer\s+/i, '').trim() !== serverSecret) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // --- VALIDATION ---
+    const BodySchema = z.object({
+      winnerAddress: z.string().min(32),
+      prizePoolLamports: z.number().int().positive(),
+      matchId: z.string().optional(),
+    });
+
+    const parsed = BodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const { winnerAddress, prizePoolLamports, matchId } = parsed.data;
 
     if (!winnerAddress || !prizePoolLamports) {
       return NextResponse.json({ error: "Winner address and prize pool are required" }, { status: 400 });
     }
 
-    // Validate winner address
-    if (typeof winnerAddress !== 'string' || winnerAddress.length < 32) {
-      return NextResponse.json({ error: "Invalid winner address" }, { status: 400 });
+    // Validate winner address (base58 pubkey)
+    try {
+      // Throws if invalid
+      // eslint-disable-next-line no-new
+      new PublicKey(winnerAddress);
+    } catch {
+      return NextResponse.json({ error: 'Invalid winner address' }, { status: 400 });
     }
 
     // --- SECURITY CHECKS ---
@@ -34,6 +58,36 @@ export async function POST(request: Request) {
     console.log(`💰 Processing payout for match ${matchId || 'unknown'}`);
     console.log(`   Winner: ${winnerAddress}`);
     console.log(`   Prize Pool: ${prizePoolLamports / LAMPORTS_PER_SOL} SOL`);
+
+    // --- IDEMPOTENCY + MATCH VALIDATION (best-effort) ---
+    let matchAlreadyPaid = false;
+    let matchWinnerFromDb: string | null = null;
+    if (matchId && supabaseUrl && supabaseServiceKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: matchRow } = await supabase
+          .from('matches')
+          .select('id, winner_wallet, metadata')
+          .eq('id', matchId)
+          .single();
+
+        if (matchRow) {
+          matchWinnerFromDb = matchRow.winner_wallet || null;
+          // If metadata contains payout_tx, assume already paid
+          matchAlreadyPaid = Boolean(matchRow.metadata && (matchRow.metadata as any).payout_tx);
+        }
+      } catch (e) {
+        // Non-fatal; proceed safely
+      }
+
+      if (matchAlreadyPaid) {
+        return NextResponse.json({ error: 'Payout already processed for this match' }, { status: 409 });
+      }
+
+      if (matchWinnerFromDb && matchWinnerFromDb !== winnerAddress) {
+        return NextResponse.json({ error: 'Winner address does not match recorded match winner' }, { status: 400 });
+      }
+    }
 
     // --- TRANSACTION LOGIC USING ESCROW SERVICE ---
     // Initialize escrow service with connection
@@ -86,7 +140,7 @@ export async function POST(request: Request) {
           description: `House cut (${(houseCutPercentage * 100).toFixed(1)}%)`,
         });
 
-        // Update match record if matchId provided
+        // Update match record if matchId provided (idempotency marker)
         if (matchId) {
           await supabase
             .from('matches')

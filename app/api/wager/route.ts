@@ -3,11 +3,20 @@ import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana
 import { lobbies, type Lobby } from '@/lib/lobbies';
 import { getConnection } from '@/lib/solana-config';
 import { escrowService } from '@/lib/escrow-service';
+import { z } from 'zod';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
   try {
-    const { lobbyId, playerPublicKey } = await request.json();
+    const BodySchema = z.object({
+      lobbyId: z.string().min(3),
+      playerPublicKey: z.string().min(32),
+    });
+    const parsed = BodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { lobbyId, playerPublicKey } = parsed.data;
 
     if (!lobbyId || !playerPublicKey) {
       return NextResponse.json({ error: "Lobby ID and Player Public Key are required" }, { status: 400 });

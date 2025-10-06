@@ -280,8 +280,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       const { transaction: serializedTransaction } = await wagerResponse.json();
       const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
       
-      // Send and confirm the transaction
-      const connection = new Connection(clusterApiUrl('devnet'));
+      // Send and confirm the transaction using the configured network
+      const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
+      const connection = new Connection(rpcUrl);
       const signature = await sendTransaction(transaction, connection);
       await connection.confirmTransaction(signature, 'confirmed');
 
@@ -292,7 +294,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       const confirmRes = await fetch('/api/wager/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lobbyId: lobby.id, signature })
+        body: JSON.stringify({ 
+          lobbyId: lobby.id, 
+          signature,
+          playerPublicKey: publicKey.toBase58()
+        })
       });
       if (!confirmRes.ok) {
         const err = await confirmRes.json();

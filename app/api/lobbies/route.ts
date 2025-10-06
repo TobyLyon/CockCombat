@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { lobbies, lobbyTimers, type Lobby } from '@/lib/lobbies';
+import { z } from 'zod';
 
 // Import the socket.io instance
 let io: any = null;
@@ -19,9 +20,20 @@ async function getSocketInstance() {
   return io;
 }
 
-// Helper function to get profile username
+// Username cache to reduce database queries
+const usernameCache = new Map<string, { username: string; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Helper function to get profile username with caching
 async function getPlayerUsername(playerId: string): Promise<string> {
   try {
+    // Check cache first
+    const cached = usernameCache.get(playerId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.username;
+    }
+
+    // Cache miss or expired - fetch from database
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,7 +64,15 @@ async function getPlayerUsername(playerId: string): Promise<string> {
       .eq('wallet_address', playerId)
       .single();
 
-    return profile?.username || playerId.slice(0, 8) + '...';
+    const username = profile?.username || playerId.slice(0, 8) + '...';
+    
+    // Cache the result for 5 minutes
+    usernameCache.set(playerId, {
+      username,
+      timestamp: Date.now()
+    });
+
+    return username;
   } catch (error) {
     console.error('Error fetching username:', error);
     return playerId.slice(0, 8) + '...';
@@ -130,7 +150,16 @@ export async function GET(req: NextRequest) {
 
 // API handler for a player to join a lobby
 export async function POST(req: NextRequest) {
-  const { lobbyId, playerId, chickenId } = await req.json();
+  const BodySchema = z.object({
+    lobbyId: z.string().min(3),
+    playerId: z.string().min(3).optional(),
+    chickenId: z.string().min(1).optional(),
+  });
+  const parsed = BodySchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { lobbyId, playerId, chickenId } = parsed.data;
 
   const lobby = lobbies.find(l => l.id === lobbyId);
 

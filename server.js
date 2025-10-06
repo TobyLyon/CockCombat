@@ -15,6 +15,10 @@ const handle = app.getRequestHandler();
 const activeConnections = new Map();
 const gameRooms = new Map();
 
+// Username cache to reduce database queries
+const usernameCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 app.prepare().then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
@@ -35,6 +39,13 @@ app.prepare().then(() => {
       origin: dev ? '*' : process.env.NEXT_PUBLIC_APP_URL,
       methods: ['GET', 'POST'],
     },
+    // Performance optimizations
+    pingTimeout: 60000,        // 60 seconds before considering connection dead
+    pingInterval: 25000,       // Ping every 25 seconds to keep connection alive
+    upgradeTimeout: 10000,     // 10 seconds for WebSocket upgrade
+    maxHttpBufferSize: 1e6,    // 1MB max message size
+    transports: ['websocket'], // Force WebSocket only (faster than polling)
+    perMessageDeflate: false,  // Disable compression to save CPU
   });
 
   // Store the socket instance globally so API routes can access it
@@ -62,8 +73,25 @@ app.prepare().then(() => {
       }
     });
 
+    // Simple in-memory rate limiting helper per socket
+    const rateLimitMap = new Map();
+    function checkRateLimit(action, maxPerMinute = 10) {
+      const key = `${socket.id}:${action}`;
+      const now = Date.now();
+      let rec = rateLimitMap.get(key);
+      if (!rec) { rec = { count: 0, resetAt: now + 60000 }; rateLimitMap.set(key, rec); }
+      if (now > rec.resetAt) { rec.count = 0; rec.resetAt = now + 60000; }
+      if (rec.count >= maxPerMinute) return false;
+      rec.count++;
+      return true;
+    }
+
     // Handle lobby room joining
     socket.on('join_lobby_room', async (lobbyId) => {
+      if (!checkRateLimit('join_lobby_room', 10)) {
+        console.warn(`⚠️ Rate limit exceeded for join_lobby_room: ${socket.id}`);
+        return;
+      }
       if (lobbyId) {
         // Check if already in this lobby to prevent duplicate joins
         const connection = activeConnections.get(socket.id);
@@ -83,7 +111,8 @@ app.prepare().then(() => {
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
         try {
-          const response = await fetch(`http://localhost:${port}/api/lobbies`);
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const response = await fetch(`${baseUrl}/api/lobbies`);
           const lobbies = await response.json();
           const lobby = lobbies.find(l => l.id === lobbyId);
           
@@ -167,6 +196,10 @@ app.prepare().then(() => {
 
     // Handle lobby room leaving
     socket.on('leave_lobby_room', (lobbyId) => {
+      if (!checkRateLimit('leave_lobby_room', 20)) {
+        console.warn(`⚠️ Rate limit exceeded for leave_lobby_room: ${socket.id}`);
+        return;
+      }
       if (lobbyId) {
         console.log(`🚪 Client ${socket.id} leaving lobby room: ${lobbyId}`);
         socket.leave(lobbyId);
@@ -234,6 +267,10 @@ app.prepare().then(() => {
 
     // Handle player ready status
     socket.on('player_ready', (data) => {
+      if (!checkRateLimit('player_ready', 5)) {
+        console.warn(`⚠️ Rate limit exceeded for player_ready: ${socket.id}`);
+        return;
+      }
       const { lobbyId, playerId, isReady } = data;
       console.log(`🎯 Player ${playerId} ready status: ${isReady} in lobby ${lobbyId}`);
       
@@ -259,9 +296,14 @@ app.prepare().then(() => {
 
     // Handle get lobby state request
     socket.on('get_lobby_state', async (lobbyId) => {
+      if (!checkRateLimit('get_lobby_state', 20)) {
+        console.warn(`⚠️ Rate limit exceeded for get_lobby_state: ${socket.id}`);
+        return;
+      }
       try {
         // Fetch lobby data from API to get real usernames and player list
-        const response = await fetch(`http://localhost:${port}/api/lobbies`);
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const response = await fetch(`${baseUrl}/api/lobbies`);
         const lobbies = await response.json();
         const lobby = lobbies.find(l => l.id === lobbyId);
         
@@ -359,6 +401,10 @@ app.prepare().then(() => {
 
     // Handle battle actions
     socket.on('battle_action', (actionData) => {
+      if (!checkRateLimit('battle_action', 30)) {
+        console.warn(`⚠️ Rate limit exceeded for battle_action: ${socket.id}`);
+        return;
+      }
       const { roomId, action, targetPosition } = actionData;
       console.log(`⚔️ Action from ${socket.id} in room ${roomId}: ${action}`);
       
@@ -438,7 +484,8 @@ app.prepare().then(() => {
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {
       // Fetch lobby data from API to get the real player list
-      const response = await fetch(`http://localhost:${port}/api/lobbies`);
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+      const response = await fetch(`${baseUrl}/api/lobbies`);
       const lobbies = await response.json();
       const lobby = lobbies.find(l => l.id === lobbyId);
       
