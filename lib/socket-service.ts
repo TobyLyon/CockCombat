@@ -36,7 +36,7 @@ class SocketService {
           path: "/api/socketio",
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
-          transports: ["websocket"],
+          transports: ["websocket", "polling"],
           withCredentials: true,
         })
 

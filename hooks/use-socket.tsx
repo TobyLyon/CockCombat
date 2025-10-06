@@ -29,7 +29,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const socketInstance = io(socketUrl, {
       path: '/api/socketio',
       addTrailingSlash: false,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       withCredentials: true,
     });
 

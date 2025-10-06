@@ -321,7 +321,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto overflow-hidden">
+    <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto overflow-hidden">
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -410,8 +410,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         </div>
       </div>
 
-      {/* Players List - Scrollable */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0">
+      {/* Players List - Scrollable (pad for bottom bar) */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pb-16 pointer-events-auto min-h-0">
         <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
@@ -478,8 +478,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         </div>
       </div>
 
-      {/* Bottom Actions - Fixed at bottom */}
-      <div className="flex-shrink-0 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
+      {/* Bottom Actions - Fixed to bottom to remain visible */}
+      <div className="flex-shrink-0 absolute bottom-0 left-0 right-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>

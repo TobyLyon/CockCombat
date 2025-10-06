@@ -66,7 +66,7 @@ app.prepare().then(() => {
     pingInterval: 25000,       // Ping every 25 seconds to keep connection alive
     upgradeTimeout: 10000,     // 10 seconds for WebSocket upgrade
     maxHttpBufferSize: 1e6,    // 1MB max message size
-    transports: ['websocket'], // Force WebSocket only (faster than polling)
+    transports: ['websocket', 'polling'],
     perMessageDeflate: false,  // Disable compression to save CPU
   });
 
