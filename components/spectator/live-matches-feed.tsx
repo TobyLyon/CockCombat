@@ -178,11 +178,11 @@ export default function LiveMatchesFeed({ className = '', compact = false }: Liv
               {/* Spectate Button */}
               <Button
                 onClick={() => handleSpectate(match.matchId)}
-                className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold"
+                className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-semibold text-xs py-2"
                 size="sm"
               >
-                <Eye className="h-4 w-4 mr-2" />
-                Spectate Match
+                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                Spectate
               </Button>
             </motion.div>
           ))}

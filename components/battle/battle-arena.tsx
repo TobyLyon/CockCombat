@@ -437,10 +437,10 @@ export default function BattleArena() {
                             </Button>
                             <Button
                               variant="outline"
-                              className="w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg border text-xs md:text-sm flex items-center justify-center gap-2 bg-black/20 hover:bg-black/30 text-white border-white/20"
+                              className="w-full font-semibold py-1.5 px-2 lg:px-2.5 rounded-lg border text-[10px] md:text-xs flex items-center justify-center gap-1 bg-black/20 hover:bg-black/30 text-white border-white/20 leading-none"
                               onClick={(e) => { e.stopPropagation(); router.push('/spectate'); }}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-3.5 w-3.5" />
                               Spectate
                             </Button>
                           </div>
