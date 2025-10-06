@@ -558,7 +558,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
         {/* Leave Lobby Button */}
         <Button
-          onClick={handleLeaveLobby}
+          onClick={onLeaveLobby}
           variant="outline"
           className="w-full h-8 text-xs font-semibold border-2 border-red-500 text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-all pixel-font mt-1"
         >
