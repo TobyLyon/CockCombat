@@ -1,7 +1,11 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authService } from '@/lib/auth-service';
+import { auditLogger } from '@/lib/audit-logger';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
+import { z } from 'zod';
 
 // Admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -9,35 +13,43 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, RATE_LIMITS.PROFILE, async () => {
+    return handleProfileCreation(req);
+  });
+}
+
+async function handleProfileCreation(req: NextRequest) {
   try {
-    const { username, walletAddress: providedWalletAddress } = await req.json();
+    const BodySchema = z.object({
+      username: z.string().min(3).max(20),
+      walletAddress: z.string().min(32),
+      sessionId: z.string().uuid().optional(),
+    });
 
-    if (!username || username.trim().length < 3) {
-      return NextResponse.json({ error: 'Username must be at least 3 characters long' }, { status: 400 });
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: parsed.error.flatten() },
+        { status: 400 }
+      );
     }
 
-    // For now, we'll use a simple approach - in production you'd get the wallet from auth
-    // Since we're having auth issues, let's create a temporary solution
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    
-    // Try to get session, but if it fails, use the provided wallet address
-    let walletAddress = null;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      walletAddress = session?.user?.id;
-    } catch (authError) {
-      console.log('Auth session not available, using provided wallet address');
-    }
+    const { username, walletAddress, sessionId } = parsed.data;
 
-    // Use provided wallet address as fallback
-    if (!walletAddress && providedWalletAddress) {
-      walletAddress = providedWalletAddress;
-    }
-
-    if (!walletAddress) {
-      return NextResponse.json({ error: 'Wallet address required' }, { status: 401 });
+    // Require authentication (signature verification)
+    if (sessionId) {
+      const isValidSession = await authService.validateSession(sessionId, walletAddress);
+      if (!isValidSession) {
+        return NextResponse.json({
+          error: 'Invalid or expired session',
+          message: 'Please sign in again',
+        }, { status: 401 });
+      }
+    } else {
+      // Allow profile creation without session for backwards compatibility,
+      // but this should eventually be required
+      console.warn(`⚠️  Profile creation without session for ${walletAddress}`);
     }
 
     // Check if username is unique
@@ -100,6 +112,18 @@ export async function POST(req: Request) {
     }
 
     console.log('Profile created successfully:', newProfile);
+
+    // Audit log the profile creation
+    await auditLogger.log({
+      eventType: 'profile_created',
+      actorWallet: walletAddress,
+      endpoint: '/api/profile/create',
+      severity: 'info',
+      metadata: {
+        username: username.trim(),
+      },
+    });
+
     return NextResponse.json(newProfile);
   } catch (error) {
     console.error('Unexpected error in profile creation:', error);

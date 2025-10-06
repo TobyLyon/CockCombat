@@ -450,12 +450,19 @@ export default function BattleArena() {
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: 300, opacity: 0 }}
                 transition={{ type: "spring", damping: 25 }}
-                className="fixed inset-0 z-50 bg-gray-900/80 backdrop-blur-sm flex flex-col pointer-events-auto
-                           lg:relative lg:z-50 lg:static lg:w-[400px] lg:flex-shrink-0 lg:bg-gray-900/50 lg:border-l lg:border-gray-700/50"
+                className="fixed top-0 left-0 right-0 bottom-0 z-50 bg-gray-900/80 backdrop-blur-sm flex flex-col pointer-events-auto
+                           lg:relative lg:z-50 lg:static lg:w-[400px] lg:flex-shrink-0 lg:bg-gray-900/50 lg:border-l lg:border-gray-700/50 
+                           safe-area-inset overflow-hidden"
+                style={{ 
+                  paddingTop: 'env(safe-area-inset-top, 0px)',
+                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                  height: '100vh',
+                  maxHeight: '100dvh'
+                }}
               >
-                <div className="p-2 border-b border-gray-700/50 flex-shrink-0">
+                <div className="p-2 sm:p-3 border-b border-gray-700/50 flex-shrink-0">
                   <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-lg lg:text-xl font-bold text-yellow-400 pixel-font">MATCH ROOM</h2>
+                    <h2 className="text-base sm:text-lg lg:text-xl font-bold text-yellow-400 pixel-font">MATCH ROOM</h2>
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -463,7 +470,7 @@ export default function BattleArena() {
                         setInLobbyRoom(false);
                         setJoinedLobby(null);
                       }}
-                      className="bg-red-600/20 border-red-600 text-red-400 hover:bg-red-600/30"
+                      className="bg-red-600/20 border-red-600 text-red-400 hover:bg-red-600/30 h-8 w-8 p-0 flex items-center justify-center"
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </Button>
@@ -473,7 +480,7 @@ export default function BattleArena() {
                   </p>
                 </div>
                 
-                <div className="flex-1 min-h-0" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="flex-1 min-h-0 overflow-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
                   <LobbyRoom
                     lobby={joinedLobby}
                     playerIdentifier={guestId || publicKey?.toBase58() || undefined}

@@ -66,9 +66,14 @@ export default function NavBar() {
   }, []);
 
   return (
-    <header className="relative z-10 flex items-center px-4 md:px-8 py-4 bg-[#222222] border-b-4 border-[#111111] text-white shadow-md gap-4 md:gap-8">
+    <header 
+      className="relative z-10 flex items-center px-2 sm:px-4 md:px-8 py-2 sm:py-3 md:py-4 bg-[#222222] border-b-4 border-[#111111] text-white shadow-md gap-2 sm:gap-4 md:gap-8 flex-shrink-0"
+      style={{
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
+      }}
+    >
       {/* Left side - Music controls and home button */}
-      <div className="flex basis-1/3 items-center justify-start gap-3 md:gap-4">
+      <div className="flex basis-1/3 items-center justify-start gap-1.5 sm:gap-3 md:gap-4 min-w-0">
         <Link href="/">
           <Button
             variant="outline"
@@ -116,7 +121,7 @@ export default function NavBar() {
       </div>
 
       {/* Right side - Copy token (enhanced), Twitter, Balances, Wallet */}
-      <div className="flex basis-1/3 items-center justify-end gap-3 md:gap-4">
+      <div className="flex basis-1/3 items-center justify-end gap-1 sm:gap-2 md:gap-3 min-w-0 flex-shrink-0">
         {/* Copy Token - desktop enhanced pill */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
@@ -148,16 +153,29 @@ export default function NavBar() {
           {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-yellow-300" />}
         </button>
 
-        {/* Twitter */}
+        {/* Twitter / X */}
         <a
-          href="https://twitter.com/CockCombat"
+          href="https://www.x.com/CockCombatSOL"
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 flex items-center justify-center"
-          aria-label="Cock Combat Twitter"
+          aria-label="Cock Combat on X"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/>
+          </svg>
+        </a>
+
+        {/* TikTok */}
+        <a
+          href="https://www.tiktok.com/@cockcombatgame"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2 flex items-center justify-center"
+          aria-label="Cock Combat on TikTok"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" fill="#00F2EA"/>
           </svg>
         </a>
 

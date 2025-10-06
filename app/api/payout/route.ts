@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { getConnection, getExplorerUrl } from '@/lib/solana-config';
 import { escrowService } from '@/lib/escrow-service';
+import { auditLogger } from '@/lib/audit-logger';
+import { monitoringService } from '@/lib/monitoring';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
@@ -59,34 +61,123 @@ export async function POST(request: Request) {
     console.log(`   Winner: ${winnerAddress}`);
     console.log(`   Prize Pool: ${prizePoolLamports / LAMPORTS_PER_SOL} SOL`);
 
-    // --- IDEMPOTENCY + MATCH VALIDATION (best-effort) ---
+    // --- IDEMPOTENCY + MATCH VALIDATION ---
     let matchAlreadyPaid = false;
     let matchWinnerFromDb: string | null = null;
+    let matchResult: any = null;
+    
     if (matchId && supabaseUrl && supabaseServiceKey) {
       try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        const { data: matchRow } = await supabase
-          .from('matches')
-          .select('id, winner_wallet, metadata')
+        
+        // Check match_results table first (new security feature)
+        const { data: matchResultRow } = await supabase
+          .from('match_results')
+          .select('*')
           .eq('id', matchId)
           .single();
 
-        if (matchRow) {
-          matchWinnerFromDb = matchRow.winner_wallet || null;
-          // If metadata contains payout_tx, assume already paid
-          matchAlreadyPaid = Boolean(matchRow.metadata && (matchRow.metadata as any).payout_tx);
+        if (matchResultRow) {
+          matchResult = matchResultRow;
+          matchWinnerFromDb = matchResultRow.winner_wallet;
+          matchAlreadyPaid = matchResultRow.payout_processed || false;
+          
+          // Verify status
+          if (matchResultRow.status !== 'completed') {
+            await auditLogger.logSuspiciousActivity(
+              'Payout attempted on incomplete match',
+              winnerAddress,
+              undefined,
+              { matchId, status: matchResultRow.status }
+            );
+            return NextResponse.json({ 
+              error: 'Match not completed',
+              status: matchResultRow.status 
+            }, { status: 400 });
+          }
+
+          // Verify prize pool matches
+          const expectedPrizePool = Math.round(matchResultRow.total_prize_pool * LAMPORTS_PER_SOL);
+          if (Math.abs(expectedPrizePool - prizePoolLamports) > 100) { // Allow 100 lamport tolerance for rounding
+            await auditLogger.logSuspiciousActivity(
+              'Payout amount mismatch',
+              winnerAddress,
+              undefined,
+              { matchId, expected: expectedPrizePool, provided: prizePoolLamports }
+            );
+            return NextResponse.json({ 
+              error: 'Prize pool amount mismatch',
+              expected: expectedPrizePool / LAMPORTS_PER_SOL,
+              provided: prizePoolLamports / LAMPORTS_PER_SOL
+            }, { status: 400 });
+          }
+        } else {
+          // Fallback to old matches table
+          const { data: matchRow } = await supabase
+            .from('matches')
+            .select('id, winner_wallet, metadata')
+            .eq('id', matchId)
+            .single();
+
+          if (matchRow) {
+            matchWinnerFromDb = matchRow.winner_wallet || null;
+            matchAlreadyPaid = Boolean(matchRow.metadata && (matchRow.metadata as any).payout_tx);
+          }
         }
       } catch (e) {
-        // Non-fatal; proceed safely
+        console.error('Error validating match:', e);
+        // Don't fail silently on validation errors
+        await auditLogger.log({
+          eventType: 'payout_failed',
+          targetWallet: winnerAddress,
+          severity: 'error',
+          metadata: { matchId, error: String(e) }
+        });
+        return NextResponse.json({ error: 'Failed to validate match data' }, { status: 500 });
       }
 
       if (matchAlreadyPaid) {
+        await auditLogger.logSuspiciousActivity(
+          'Duplicate payout attempt',
+          winnerAddress,
+          undefined,
+          { matchId }
+        );
         return NextResponse.json({ error: 'Payout already processed for this match' }, { status: 409 });
       }
 
       if (matchWinnerFromDb && matchWinnerFromDb !== winnerAddress) {
-        return NextResponse.json({ error: 'Winner address does not match recorded match winner' }, { status: 400 });
+        await auditLogger.logSuspiciousActivity(
+          'Payout winner mismatch',
+          winnerAddress,
+          undefined,
+          { matchId, expectedWinner: matchWinnerFromDb, providedWinner: winnerAddress }
+        );
+        return NextResponse.json({ 
+          error: 'Winner address does not match recorded match winner',
+          expected: matchWinnerFromDb
+        }, { status: 400 });
       }
+
+      // Require match validation for non-zero payouts
+      if (!matchWinnerFromDb && prizePoolLamports > 0) {
+        await auditLogger.logSuspiciousActivity(
+          'Payout without match record',
+          winnerAddress,
+          undefined,
+          { matchId, amount: prizePoolLamports }
+        );
+        return NextResponse.json({ error: 'Match winner not recorded in database' }, { status: 400 });
+      }
+    } else if (prizePoolLamports > 0) {
+      // Require matchId for all non-zero payouts
+      await auditLogger.logSuspiciousActivity(
+        'Payout without match ID',
+        winnerAddress,
+        undefined,
+        { amount: prizePoolLamports }
+      );
+      return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
     }
 
     // --- TRANSACTION LOGIC USING ESCROW SERVICE ---
@@ -94,28 +185,55 @@ export async function POST(request: Request) {
     const connection = getConnection();
     escrowService.setConnection(connection);
 
-    // Validate wallets are configured (avoid build-time failure on Vercel)
-    try {
-      await escrowService.getNextWallet();
-    } catch (e) {
-      console.error('Payout attempted but escrow wallets are not configured.');
-      return NextResponse.json({ error: 'Escrow wallets not configured on server' }, { status: 500 });
+    // Get the SPECIFIC escrow wallet that holds funds for this match
+    let escrowWallet;
+    if (matchResult && matchResult.escrow_wallet_id) {
+      // Use the wallet that collected the wagers
+      escrowWallet = escrowService.getWallet(matchResult.escrow_wallet_id);
+      if (!escrowWallet) {
+        return NextResponse.json({ 
+          error: 'Escrow wallet not available',
+          details: `Wallet ${matchResult.escrow_wallet_id} is not configured`
+        }, { status: 500 });
+      }
+      console.log(`💰 Using Escrow Wallet ${escrowWallet.id} (same wallet that collected wagers)`);
+    } else {
+      // Fallback: get a wallet with sufficient balance (legacy behavior)
+      console.warn('⚠️  Match result missing escrow_wallet_id, using wallet with balance');
+      try {
+        escrowWallet = await escrowService.getWalletWithBalance(prizePoolLamports);
+      } catch (e) {
+        console.error('Payout attempted but no escrow wallet has sufficient balance.');
+        return NextResponse.json({ 
+          error: 'Insufficient escrow balance',
+          details: 'No escrow wallet has enough SOL for this payout'
+        }, { status: 500 });
+      }
     }
 
-    // Process payout using escrow service (handles winner + house cut)
-    const { winnerSignature, houseSignature } = await escrowService.processPayout(
-      winnerAddress,
-      prizePoolLamports,
-      houseCutPercentage
-    );
-
-    // Calculate amounts for logging
+    // Calculate amounts
     const houseCutLamports = Math.floor(prizePoolLamports * houseCutPercentage);
     const winnerCutLamports = prizePoolLamports - houseCutLamports;
+
+    console.log(`💰 Processing payout from Wallet ${escrowWallet.id}: Winner: ${winnerCutLamports / LAMPORTS_PER_SOL} SOL, House: ${houseCutLamports / LAMPORTS_PER_SOL} SOL`);
+
+    // Transfer to winner
+    const winnerSignature = await escrowService.transferSOL(winnerAddress, winnerCutLamports, escrowWallet);
+
+    // Transfer to house
+    const houseSignature = await escrowService.transferSOL(houseWalletAddress, houseCutLamports, escrowWallet);
 
     console.log(`✅ Payout successful!`);
     console.log(`   Winner TX: ${winnerSignature}`);
     console.log(`   House TX: ${houseSignature}`);
+
+    // Audit log and monitor the payout
+    await monitoringService.monitorPayout(
+      winnerAddress,
+      winnerCutLamports / LAMPORTS_PER_SOL,
+      matchId,
+      winnerSignature
+    );
 
     // --- RECORD TRANSACTION IN DATABASE ---
     if (supabaseUrl && supabaseServiceKey) {
@@ -140,7 +258,19 @@ export async function POST(request: Request) {
           description: `House cut (${(houseCutPercentage * 100).toFixed(1)}%)`,
         });
 
-        // Update match record if matchId provided (idempotency marker)
+        // Update match_results if it exists (new security table)
+        if (matchId && matchResult) {
+          await supabase
+            .from('match_results')
+            .update({
+              payout_processed: true,
+              payout_tx_signature: winnerSignature,
+              status: 'completed',
+            })
+            .eq('id', matchId);
+        }
+
+        // Also update old matches table for compatibility
         if (matchId) {
           await supabase
             .from('matches')

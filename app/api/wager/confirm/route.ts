@@ -2,12 +2,18 @@ import { NextResponse, NextRequest } from 'next/server';
 import { lobbies } from '@/lib/lobbies';
 import { getConnection } from '@/lib/solana-config';
 import { SystemProgram, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { authService } from '@/lib/auth-service';
+import { auditLogger } from '@/lib/audit-logger';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
 
-// In-memory replay guard (best-effort); consider persisting in DB for production
-const confirmedSignatures = new Set<string>();
-
 export async function POST(req: NextRequest) {
+  return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
+    return handleWagerConfirmation(req);
+  });
+}
+
+async function handleWagerConfirmation(req: NextRequest) {
   try {
     const BodySchema = z.object({
       lobbyId: z.string().min(3),
@@ -45,8 +51,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify the transaction moved the exact wager to the escrow wallet
-    // Replay protection
-    if (confirmedSignatures.has(signature)) {
+    // Replay protection (database-backed)
+    const isUsed = await authService.isSignatureUsed(signature);
+    if (isUsed) {
+      await auditLogger.logSuspiciousActivity(
+        'Wager signature replay attempt',
+        playerPublicKey,
+        req.headers.get('x-forwarded-for') || undefined,
+        { signature, lobbyId }
+      );
       return NextResponse.json({ error: 'Signature already confirmed' }, { status: 409 });
     }
 
@@ -58,19 +71,26 @@ export async function POST(req: NextRequest) {
 
     const expectedLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL);
 
-    // Get configured escrow wallets for verification
-    const escrowWalletAddresses = [
-      process.env.ESCROW_WALLET_A_PUBLIC_KEY,
-      process.env.ESCROW_WALLET_B_PUBLIC_KEY,
-      process.env.ESCROW_WALLET_C_PUBLIC_KEY,
-    ].filter(Boolean);
+    // Get the SPECIFIC escrow wallet assigned to this lobby
+    // All players MUST send to the same wallet for this match
+    if (!lobby.escrowWalletId) {
+      await auditLogger.logSuspiciousActivity(
+        'Wager confirmation attempted for lobby without assigned escrow wallet',
+        playerPublicKey,
+        req.headers.get('x-forwarded-for') || undefined,
+        { lobbyId, signature }
+      );
+      return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+    }
 
-    if (escrowWalletAddresses.length === 0) {
-      console.error('No escrow wallets configured for verification');
+    const expectedEscrowAddress = process.env[`ESCROW_WALLET_${lobby.escrowWalletId}_PUBLIC_KEY`];
+    if (!expectedEscrowAddress) {
+      console.error(`Escrow wallet ${lobby.escrowWalletId} not configured`);
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    const escrowWalletKeys = escrowWalletAddresses.map(addr => new PublicKey(addr!));
+    const expectedEscrowKey = new PublicKey(expectedEscrowAddress);
+    console.log(`🔍 Verifying transaction sent to Escrow Wallet ${lobby.escrowWalletId}: ${expectedEscrowAddress}`);
 
     // Find transfer instruction matching (player -> escrow) for exact lamports
     const ixs = tx.transaction.message.compiledInstructions || [];
@@ -88,21 +108,32 @@ export async function POST(req: NextRequest) {
       const post = tx.meta.postBalances[playerIdx];
       if (pre - post < expectedLamports) continue;
       
-      // SECURITY: Verify the recipient is one of our escrow wallets
+      // SECURITY: Verify the recipient is SPECIFICALLY the lobby's assigned escrow wallet
       const recipientIdx = tx.meta.postBalances.findIndex((b, i) => 
         i !== playerIdx && (b - tx.meta!.preBalances[i]) >= expectedLamports
       );
       
       if (recipientIdx >= 0) {
         const recipientKey = accKeys[recipientIdx];
-        const isEscrowWallet = escrowWalletKeys.some(escrowKey => escrowKey.equals(recipientKey));
+        const isCorrectEscrowWallet = recipientKey.equals(expectedEscrowKey);
         
-        if (isEscrowWallet) {
+        if (isCorrectEscrowWallet) {
           valid = true;
-          console.log(`✅ Wager verified: ${playerPublicKey} -> ${recipientKey.toBase58()} (${expectedLamports / LAMPORTS_PER_SOL} SOL)`);
+          console.log(`✅ Wager verified: ${playerPublicKey} -> Wallet ${lobby.escrowWalletId} (${expectedLamports / LAMPORTS_PER_SOL} SOL)`);
           break;
         } else {
-          console.warn(`⚠️ Transfer recipient ${recipientKey.toBase58()} is not a configured escrow wallet`);
+          console.warn(`⚠️ Transfer recipient ${recipientKey.toBase58()} is not the assigned escrow wallet ${lobby.escrowWalletId}`);
+          await auditLogger.logSuspiciousActivity(
+            'Wager sent to wrong escrow wallet',
+            playerPublicKey,
+            req.headers.get('x-forwarded-for') || undefined,
+            { 
+              lobbyId, 
+              expectedWallet: expectedEscrowAddress,
+              actualRecipient: recipientKey.toBase58(),
+              assignedWalletId: lobby.escrowWalletId
+            }
+          );
         }
       }
     }
@@ -111,13 +142,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Wager transaction not verified' }, { status: 400 });
     }
 
-    // Mark signature as used (best-effort)
-    confirmedSignatures.add(signature);
+    // Mark signature as used (database-backed)
+    await authService.markSignatureUsed(
+      signature,
+      playerPublicKey,
+      '/api/wager/confirm',
+      { lobbyId, amount: lobby.amount }
+    );
 
     player.hasWagered = true;
     player.isReady = true;
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
+
+    // Audit log the wager confirmation
+    await auditLogger.log({
+      eventType: 'wager_confirmed',
+      actorWallet: playerPublicKey,
+      endpoint: '/api/wager/confirm',
+      severity: 'info',
+      metadata: {
+        lobbyId,
+        amount: lobby.amount,
+        signature,
+      },
+    });
 
     return NextResponse.json({ message: "Player status updated to ready", lobby });
 

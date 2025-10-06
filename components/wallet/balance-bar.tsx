@@ -77,7 +77,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
       <div className="h-4 w-px bg-white/15" />
 
       <div className="flex items-center gap-1.5 text-white/90">
-        <div className="relative h-4 w-4">
+        <div className="relative h-5 w-5">
           <Image src="/images/logo%202.png" alt="COCK Token" fill className="object-contain" />
         </div>
         <span className="font-semibold">{spl.toFixed(compact ? 1 : 2)}</span>

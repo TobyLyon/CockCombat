@@ -321,7 +321,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
 
   return (
-    <div ref={rootRef} className="h-full w-full grid bg-gray-900/50 pointer-events-auto gap-y-1.5 pb-3 md:pb-4" style={{ gridTemplateRows: 'auto 1fr auto auto' }}>
+    <div ref={rootRef} className="h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto overflow-hidden">
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -387,7 +387,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </AnimatePresence>
 
       {/* Match Details - Ultra Compact */}
-      <div className="p-1.5 bg-gray-800/50 border-b border-gray-700/50">
+      <div className="flex-shrink-0 p-1.5 bg-gray-800/50 border-b border-gray-700/50">
         <div className="space-y-1 text-[10px]">
           <div className="flex justify-between">
             <span className="text-gray-400">Entry:</span>
@@ -411,7 +411,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable */}
-      <div className="overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto" style={{ minHeight: 0 }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0">
         <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
@@ -478,8 +478,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         </div>
       </div>
 
-      {/* Bottom Actions (sticky) */}
-      <div className="sticky z-[60] space-y-1" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}>
+      {/* Bottom Actions - Fixed at bottom */}
+      <div className="flex-shrink-0 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>
@@ -487,7 +487,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         )}
 
         {/* Ready Button Section */}
-        <div ref={barRef} className="px-2 py-1 bg-gray-800/95 backdrop-blur-sm border border-yellow-500/40 rounded-md w-full shadow-lg shadow-black/30">
+        <div ref={barRef} className="w-full">
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
@@ -527,7 +527,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         
         {/* Wager Status - Ultra Compact */}
         {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
-          <div className="mt-0.5 text-center">
+          <div className="mt-1 text-center">
             {hasWagered ? (
               <div className="flex items-center justify-center gap-0.5 text-green-400">
                 <Check className="h-2.5 w-2.5" />
@@ -556,38 +556,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           </div>
         </div>
 
-        {/* Match Info Footer */}
-        <div className="px-2 py-1 bg-gray-900/90 backdrop-blur-sm border border-gray-700/40 rounded-md shadow-inner">
-          <div className="space-y-1.5 text-[10px]">
-          {/* Prize Pool */}
-          <div className="flex items-center justify-between px-2 py-1 bg-gray-800/50 rounded border border-gray-700/30">
-            <span className="text-gray-400 flex items-center gap-1">
-              <Crown className="h-3 w-3 text-yellow-500" />
-              Prize Pool
-            </span>
-            <span className="font-bold text-yellow-400">
-              {lobby.amount === 0 ? 'Practice Match' : `${(lobby.amount * Math.max(paidPlayers, minRequired)).toFixed(2)} ${lobby.currency}`}
-            </span>
-          </div>
-
-          {/* Match Type & Rules */}
-          <div className="flex items-center justify-between text-gray-400 px-2">
-            <span>Match Type:</span>
-            <span className="text-gray-300 font-semibold">
-              {lobby.matchType === 'tutorial' ? 'Tutorial' : 'Ranked'}
-            </span>
-          </div>
-
-          {/* Quick Tip */}
-          <div className="px-2 py-1 bg-blue-900/20 border border-blue-700/30 rounded">
-            <p className="text-blue-300 text-center text-[9px]">
-              💡 {lobby.matchType === 'tutorial' 
-                ? 'Practice your skills against AI opponents!' 
-                : 'Last chicken standing wins the full prize pool!'}
-            </p>
-          </div>
-          </div>
-        </div>
+        {/* Leave Lobby Button */}
+        <Button
+          onClick={handleLeaveLobby}
+          variant="outline"
+          className="w-full h-8 text-xs font-semibold border-2 border-red-500 text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-all pixel-font mt-1"
+        >
+          <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+          LEAVE LOBBY
+        </Button>
       </div>
     </div>
   )

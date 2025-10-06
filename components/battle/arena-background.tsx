@@ -301,15 +301,36 @@ function FarmyardScene() {
         <planeGeometry args={[55, 55]} />
         <meshStandardMaterial map={dirtTexture} color="#8B7355" roughness={0.95} />
       </mesh>
-      {/* Simple barn silhouette */}
+      {/* Red barn with proper gable roof */}
       <group position={[0, 0, -8]}>
+        {/* Main barn body - bright red */}
         <mesh position={[0, 2.4, 0]} castShadow receiveShadow>
           <boxGeometry args={[7.5, 4.8, 1.2]} />
-          <meshStandardMaterial map={woodTexture} color="#8B2500" roughness={0.85} />
+          <meshStandardMaterial map={woodTexture} color="#B22222" roughness={0.85} />
         </mesh>
-        <mesh position={[0, 4.6, 0]} castShadow receiveShadow>
-          <boxGeometry args={[5.5, 0.18, 1.6]} />
+        
+        {/* Triangular gable ends - fills the gap under roof */}
+        <mesh position={[0, 5.3, 0]} rotation={[0, 0, 0]} castShadow>
+          <coneGeometry args={[4.2, 1.6, 4]} />
+          <meshStandardMaterial color="#B22222" roughness={0.85} />
+        </mesh>
+        
+        {/* Roof - left slope */}
+        <mesh position={[-2.2, 5.8, 0]} rotation={[0, 0, Math.PI / 5.5]} castShadow receiveShadow>
+          <boxGeometry args={[2.8, 0.15, 1.8]} />
           <meshStandardMaterial color="#654321" roughness={0.9} />
+        </mesh>
+        
+        {/* Roof - right slope */}
+        <mesh position={[2.2, 5.8, 0]} rotation={[0, 0, -Math.PI / 5.5]} castShadow receiveShadow>
+          <boxGeometry args={[2.8, 0.15, 1.8]} />
+          <meshStandardMaterial color="#654321" roughness={0.9} />
+        </mesh>
+        
+        {/* Roof peak beam */}
+        <mesh position={[0, 6.4, 0]} castShadow>
+          <boxGeometry args={[0.2, 0.2, 1.8]} />
+          <meshStandardMaterial color="#4a3621" roughness={0.9} />
         </mesh>
       </group>
       {/* Fence line */}

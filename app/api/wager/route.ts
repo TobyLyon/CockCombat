@@ -47,14 +47,32 @@ export async function POST(request: Request) {
     // Get connection using centralized config
     const connection = getConnection();
     
-    // Initialize escrow service and get next wallet for this wager
+    // Initialize escrow service
     escrowService.setConnection(connection);
-    const escrowWallet = await escrowService.getNextWallet();
+    
+    // Get the escrow wallet assigned to this lobby
+    // All players in the same lobby MUST use the same escrow wallet
+    let escrowWallet;
+    if (!lobby.escrowWalletId) {
+      // Assign one now if not already assigned
+      escrowWallet = await escrowService.getNextWallet();
+      lobby.escrowWalletId = escrowWallet.id;
+      console.log(`🔐 Assigned Escrow Wallet ${escrowWallet.id} to lobby ${lobbyId}`);
+    } else {
+      // Use the lobby's assigned wallet
+      escrowWallet = escrowService.getWallet(lobby.escrowWalletId);
+      if (!escrowWallet) {
+        return NextResponse.json({ 
+          error: "Escrow wallet not available",
+          details: `Wallet ${lobby.escrowWalletId} is not configured`
+        }, { status: 500 });
+      }
+    }
     
     console.log(`💰 Creating wager transaction for ${playerPublicKey}`);
     console.log(`   Lobby: ${lobbyId}`);
     console.log(`   Amount: ${lobby.amount} SOL`);
-    console.log(`   Escrow: Wallet ${escrowWallet.id}`);
+    console.log(`   Escrow: Wallet ${escrowWallet.id} (ALL players in this match use this wallet)`);
 
     // Create a new transaction for the wager
     const transaction = new Transaction().add(

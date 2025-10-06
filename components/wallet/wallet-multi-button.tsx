@@ -73,7 +73,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
   if (!connected) {
     return (
       <div onClick={onClickSound} className={className}>
-        <SolanaWalletMultiButton className="!bg-[#fbbf24] !text-[#333333] !font-bold !py-2 !px-4 !rounded !border-b-4 !border-[#d97706] hover:!bg-[#f59e0b] hover:!border-[#b45309] !transition-all !flex !items-center !gap-2" />
+        <SolanaWalletMultiButton className="!bg-[#fbbf24] !text-[#333333] !font-bold !py-2 !px-3 sm:!px-4 !rounded !border-b-4 !border-[#d97706] hover:!bg-[#f59e0b] hover:!border-[#b45309] !transition-all !flex !items-center !gap-2 !text-xs sm:!text-sm !whitespace-nowrap !min-w-0 !max-w-[140px] sm:!max-w-[180px]" />
       </div>
     )
   }
@@ -83,12 +83,12 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     <DropdownMenu onOpenChange={setIsDropdownOpen}>
       <DropdownMenuTrigger asChild>
         <motion.button
-          className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-2 ${className} ${isDropdownOpen ? "bg-[#f59e0b] border-[#b45309]" : ""}`}
+          className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap min-w-0 ${className} ${isDropdownOpen ? "bg-[#f59e0b] border-[#b45309]" : ""}`}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Wallet className="h-5 w-5 hidden sm:block" />
-          <span className="truncate max-w-[80px] sm:max-w-[100px]">
+          <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+          <span className="truncate min-w-0 max-w-[70px] sm:max-w-[100px]">
             {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
           </span>
         </motion.button>

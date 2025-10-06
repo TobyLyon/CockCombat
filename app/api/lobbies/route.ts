@@ -2,6 +2,9 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { lobbies, lobbyTimers, type Lobby } from '@/lib/lobbies';
+import { authService } from '@/lib/auth-service';
+import { auditLogger } from '@/lib/audit-logger';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
 
 // Import the socket.io instance
@@ -145,35 +148,58 @@ function addAiPlayer(lobbyId: string) {
 
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
-  return NextResponse.json(lobbies);
+  return withRateLimit(req, RATE_LIMITS.READ, async () => {
+    return NextResponse.json(lobbies);
+  });
 }
 
 // API handler for a player to join a lobby
 export async function POST(req: NextRequest) {
-  const BodySchema = z.object({
-    lobbyId: z.string().min(3),
-    playerId: z.string().min(3).optional(),
-    chickenId: z.string().min(1).optional(),
-  });
-  const parsed = BodySchema.safeParse(await req.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
-  }
-  const { lobbyId, playerId, chickenId } = parsed.data;
+  return withRateLimit(req, RATE_LIMITS.LOBBY, async () => {
+    const BodySchema = z.object({
+      lobbyId: z.string().min(3),
+      playerId: z.string().min(3),
+      chickenId: z.string().min(1).optional(),
+      sessionId: z.string().uuid().optional(), // Optional auth for now, will be required for non-tutorial
+    });
+    
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { lobbyId, playerId, chickenId, sessionId } = parsed.data;
 
-  const lobby = lobbies.find(l => l.id === lobbyId);
+    const lobby = lobbies.find(l => l.id === lobbyId);
 
-  if (!lobby) {
-    return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
-  }
+    if (!lobby) {
+      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+    }
 
-  if (lobby.players.length >= lobby.capacity) {
-    return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
-  }
+    if (lobby.players.length >= lobby.capacity) {
+      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+    }
 
-  // Check if player is already in the lobby
-  const existingPlayer = lobby.players.find(p => p.playerId === playerId);
-  if (existingPlayer) {
+    // Require authentication for non-tutorial lobbies
+    if (lobby.matchType !== 'tutorial' && lobby.amount > 0) {
+      if (!sessionId) {
+        return NextResponse.json({ 
+          error: 'Authentication required',
+          message: 'Please sign in to join this lobby'
+        }, { status: 401 });
+      }
+
+      const isValidSession = await authService.validateSession(sessionId, playerId);
+      if (!isValidSession) {
+        return NextResponse.json({ 
+          error: 'Invalid or expired session',
+          message: 'Please sign in again'
+        }, { status: 401 });
+      }
+    }
+
+    // Check if player is already in the lobby
+    const existingPlayer = lobby.players.find(p => p.playerId === playerId);
+    if (existingPlayer) {
     // Get socket instance and broadcast current lobby state
     try {
       const socketIo = await getSocketInstance();
@@ -201,24 +227,49 @@ export async function POST(req: NextRequest) {
       console.log('Could not broadcast lobby state:', error);
     }
     
-    return NextResponse.json({ error: 'Player already in lobby' }, { status: 400 });
-  }
-  
-  // Use the provided playerId or generate a placeholder
-  const actualPlayerId = playerId || `player-${Math.random().toString(36).substring(2, 9)}`;
-  const actualChickenId = chickenId || 'default-chicken';
-  
-  // Get the player's username
-  const username = await getPlayerUsername(actualPlayerId);
-  
-  const player = { 
-    playerId: actualPlayerId, 
-    chickenId: actualChickenId, 
-    username: username 
-  };
-  lobby.players.push(player);
+      return NextResponse.json({ error: 'Player already in lobby' }, { status: 400 });
+    }
+    
+    const actualChickenId = chickenId || 'default-chicken';
+    
+    // Get the player's username
+    const username = await getPlayerUsername(playerId);
+    
+    const player = { 
+      playerId: playerId, 
+      chickenId: actualChickenId, 
+      username: username 
+    };
+    lobby.players.push(player);
 
-  console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}`);
+    // Assign escrow wallet when first player joins (for non-tutorial matches)
+    if (!lobby.escrowWalletId && lobby.matchType !== 'tutorial' && lobby.amount > 0) {
+      const { escrowService } = await import('@/lib/escrow-service');
+      try {
+        const wallet = await escrowService.getNextWallet();
+        lobby.escrowWalletId = wallet.id;
+        console.log(`🔐 Assigned Escrow Wallet ${wallet.id} to lobby ${lobbyId}`);
+      } catch (error) {
+        console.error('Failed to assign escrow wallet:', error);
+        // Continue without assigning - will fail at wager time
+      }
+    }
+
+    console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}${lobby.escrowWalletId ? ` [Escrow: ${lobby.escrowWalletId}]` : ''}`);
+
+    // Audit log the join
+    await auditLogger.log({
+      eventType: 'lobby_join',
+      actorWallet: playerId,
+      endpoint: '/api/lobbies',
+      severity: 'info',
+      metadata: {
+        lobbyId,
+        lobbyAmount: lobby.amount,
+        playerCount: lobby.players.length,
+        escrowWallet: lobby.escrowWalletId,
+      },
+    });
 
   // Broadcast the player join event via Socket.IO
   try {
@@ -226,7 +277,7 @@ export async function POST(req: NextRequest) {
     if (socketIo) {
       // Broadcast to all players in the lobby room that a new player joined
       socketIo.to(lobbyId).emit('player_joined_lobby', {
-        playerId: actualPlayerId,
+        playerId: playerId,
         username: username,
         chickenName: actualChickenId,
         isReady: false,
@@ -288,5 +339,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json(lobby);
+    return NextResponse.json(lobby);
+  });
 } 

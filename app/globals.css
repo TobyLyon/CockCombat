@@ -256,3 +256,58 @@ body.arena-active {
   width: 100% !important;
   height: 100% !important;
 }
+
+/* Mobile responsive fixes */
+@media (max-width: 640px) {
+  /* Prevent wallet button text wrapping */
+  .wallet-adapter-button {
+    font-size: 0.75rem !important;
+    padding: 0.5rem 0.75rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 140px !important;
+  }
+  
+  .wallet-adapter-button-trigger {
+    font-size: 0.75rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+}
+
+/* Ensure safe areas on mobile devices */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Dynamic viewport height for mobile browsers */
+@supports (height: 100dvh) {
+  .h-screen, .min-h-screen {
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+  }
+}
+
+/* Prevent text selection and touch callouts on buttons */
+button, .wallet-adapter-button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fix flex shrink issues on mobile */
+.flex-shrink-0 {
+  flex-shrink: 0 !important;
+}
+
+/* Ensure scrollable areas work properly */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}

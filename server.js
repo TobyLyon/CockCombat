@@ -3,6 +3,24 @@ const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
 
+// Validate environment variables on startup
+try {
+  const { printEnvironmentStatus, checkForSecurityIssues } = require('./lib/env-validator.ts');
+  printEnvironmentStatus();
+  
+  const securityIssues = checkForSecurityIssues();
+  if (securityIssues.length > 0) {
+    console.error('🚨 SECURITY ISSUES DETECTED:\n');
+    securityIssues.forEach(issue => console.error(`   ❌ ${issue}`));
+    console.error('\n');
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  }
+} catch (error) {
+  console.warn('⚠️  Could not validate environment:', error.message);
+}
+
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = process.env.PORT || 3000;
@@ -36,8 +54,9 @@ app.prepare().then(() => {
     path: '/api/socketio',
     addTrailingSlash: false,
     cors: {
-      origin: dev ? '*' : process.env.NEXT_PUBLIC_APP_URL,
+      origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
       methods: ['GET', 'POST'],
+      credentials: true,
     },
     // Performance optimizations
     pingTimeout: 60000,        // 60 seconds before considering connection dead
