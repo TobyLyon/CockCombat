@@ -41,6 +41,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const barRef = useRef<HTMLDivElement | null>(null)
   const bottomActionsRef = useRef<HTMLDivElement | null>(null)
   const [bottomPadding, setBottomPadding] = useState<number>(56)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
 
   // Debug: log layout to find why the ready bar might be off-screen
   useEffect(() => {
@@ -88,9 +90,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }, [])
 
+  const getCurrentPlayerId = () => {
+    try {
+      if (playerIdentifier) return playerIdentifier
+      if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58()
+      if (typeof window !== 'undefined') return localStorage.getItem('guest_id') || undefined
+    } catch {}
+    return undefined
+  }
+
   // Join lobby room on mount
   useEffect(() => {
-    const id = playerIdentifier || publicKey?.toString() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') || undefined : undefined)
+    const id = getCurrentPlayerId()
     if (socket && isConnected && id) {
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
@@ -122,12 +133,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);
 
-  // Ensure scroll area never hides the bottom actions: measure bottom bar height
+  // Ensure scroll area never hides the bottom actions and fits viewport
   useEffect(() => {
     const measure = () => {
       try {
-        const h = bottomActionsRef.current?.offsetHeight || 56
-        setBottomPadding(h + 8)
+        const bottomH = bottomActionsRef.current?.offsetHeight || 56
+        const scrollTop = scrollRef.current?.getBoundingClientRect().top || 0
+        const avail = window.innerHeight - scrollTop - bottomH - 8
+        setBottomPadding(Math.max(bottomH + 12, 96))
+        setScrollMaxHeight(Math.max(260, avail))
       } catch {}
     }
     measure()
@@ -218,11 +232,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   // Initial lobby data setup - ensure current player is included
   useEffect(() => {
-    const id = playerIdentifier || publicKey?.toString();
+    const id = getCurrentPlayerId();
     if (id && lobbyData.players) {
       const currentPlayerInLobby = lobbyData.players.find(p => p.playerId === id);
       
-      if (currentPlayerInLobby) {
+      if (currentPlayerInLobby || lobbyData.players.length) {
         // Convert lobby players to display format, ensuring current player is included
         const displayPlayers = lobbyData.players.map(player => ({
           playerId: player.playerId,
@@ -250,7 +264,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   const handleReadyToggle = async () => {
     if (!socket) return;
-    const id = playerIdentifier || publicKey?.toString();
+    const id = getCurrentPlayerId();
     if (!id) return;
 
     // If trying to ready up and this is a paid lobby, need to process wager first
@@ -337,10 +351,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const minRequired = lobby.matchType === 'tutorial' ? 2 : 4
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady)
-  const currentPlayer = players.find(p => p.playerId === (playerIdentifier || publicKey?.toString()))
+  const currentPlayer = players.find(p => p.playerId === getCurrentPlayerId())
 
   return (
-    <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto overflow-hidden">
+    <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
       {/* Countdown Overlay */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
@@ -430,7 +444,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable (pad for bottom bar) */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0" style={{ paddingBottom: bottomPadding }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0" style={{ paddingBottom: Math.max(bottomPadding, 96), maxHeight: scrollMaxHeight }}>
         <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
@@ -498,7 +512,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Bottom Actions - Fixed to bottom to remain visible */}
-      <div ref={bottomActionsRef} className="flex-shrink-0 absolute bottom-0 left-0 right-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
+      <div ref={bottomActionsRef} className="flex-shrink-0 sticky bottom-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>
@@ -544,7 +558,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           )}
         </Button>
         
-        {/* Wager Status - Ultra Compact */}
+         {/* Wager Status - Ultra Compact */}
         {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
           <div className="mt-1 text-center">
             {hasWagered ? (
@@ -572,6 +586,60 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             </p>
           </motion.div>
         )}
+         {/* Expanded Details - between Ready and Leave buttons */}
+         <div className="mt-2 p-2 bg-gray-900/70 border border-gray-700/50 rounded">
+           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-white/80">
+             <div>Current Pool</div>
+             <div className="text-right font-bold">
+               {lobby.amount === 0 ? (
+                 <span className="text-gray-300">Practice</span>
+               ) : (
+                 <span className="text-green-400">{(lobby.amount * Math.max(paidPlayers, minRequired)).toFixed(2)} {lobby.currency}</span>
+               )}
+             </div>
+             <div>Potential Payout</div>
+             <div className="text-right font-bold">
+               {lobby.amount === 0 ? (
+                 <span className="text-gray-300">—</span>
+               ) : (
+                 <span className="text-yellow-300">{(lobby.amount * Math.max(paidPlayers, minRequired)).toFixed(2)} {lobby.currency}</span>
+               )}
+             </div>
+             <div>Your Status</div>
+             <div className="text-right">
+               {currentPlayer ? (
+                 <>
+                   {currentPlayer.isReady ? (
+                     <span className="text-green-400 font-semibold">Ready</span>
+                   ) : (
+                     <span className="text-red-400 font-semibold">Not Ready</span>
+                   )}
+                   {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
+                     <span className="ml-1 text-[9px] text-white/60">{hasWagered ? '(Wagered)' : '(No Wager)'}</span>
+                   )}
+                 </>
+               ) : (
+                 <span className="text-white/60">Not Joined</span>
+               )}
+             </div>
+             {lobby.amount > 0 && (
+               <>
+                 <div>Escrow</div>
+                 <div className="text-right">
+                   {(lobby as any)?.escrowWalletId ? (
+                     <span className="text-emerald-400">Assigned</span>
+                   ) : (
+                     <span className="text-white/60">Pending</span>
+                   )}
+                 </div>
+               </>
+             )}
+             <div>Min Players</div>
+             <div className="text-right">{minRequired}</div>
+             <div>Capacity</div>
+             <div className="text-right">{lobby.capacity}</div>
+           </div>
+         </div>
           </div>
         </div>
 

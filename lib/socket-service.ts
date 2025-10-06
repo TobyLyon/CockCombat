@@ -34,9 +34,12 @@ class SocketService {
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined
         this.socket = io(socketUrl, {
           path: "/api/socketio",
-          reconnectionAttempts: 5,
+          transports: ["polling", "websocket"],
+          reconnection: true,
+          reconnectionAttempts: 10,
           reconnectionDelay: 1000,
-          transports: ["websocket", "polling"],
+          reconnectionDelayMax: 5000,
+          timeout: 15000,
           withCredentials: true,
         })
 
@@ -45,8 +48,13 @@ class SocketService {
           resolve(this.socket as Socket)
         })
 
+        let lastErrLog = 0
         this.socket.on("connect_error", (err) => {
-          console.error("Socket connection error:", err)
+          const now = Date.now()
+          if (now - lastErrLog > 5000) {
+            console.error("Socket connection error:", err?.message || err)
+            lastErrLog = now
+          }
           reject(err)
         })
 

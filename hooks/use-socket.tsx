@@ -29,7 +29,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const socketInstance = io(socketUrl, {
       path: '/api/socketio',
       addTrailingSlash: false,
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 15000,
       withCredentials: true,
     });
 
@@ -43,8 +48,13 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       setIsConnected(false);
     });
 
+    let lastErrLog = 0;
     socketInstance.on('connect_error', (error) => {
-      console.error('🚫 Socket connection error:', error);
+      const now = Date.now();
+      if (now - lastErrLog > 5000) {
+        console.error('🚫 Socket connection error:', error?.message || error);
+        lastErrLog = now;
+      }
       setIsConnected(false);
     });
     

@@ -3,11 +3,7 @@
 import React, { FC, ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import {
-  PhantomWalletAdapter,
-  LedgerWalletAdapter,
-  TorusWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
+import { LedgerWalletAdapter, TorusWalletAdapter } from "@solana/wallet-adapter-wallets";
 import { clusterApiUrl, Commitment } from "@solana/web3.js";
 
 // Import CSS directly instead of using require
@@ -73,14 +69,14 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
     console.log('🔧 Re-initializing wallet adapters with more aggressive filtering...');
     
     const allWallets = [
-      new PhantomWalletAdapter(),
+      // Phantom is a Standard Wallet; it injects itself. Avoid double registration in UI.
       new LedgerWalletAdapter(),
       new TorusWalletAdapter(),
     ];
 
     console.log('📦 Created base wallet adapter instances:', allWallets.map(w => w.name));
 
-    const allowedWalletNames = new Set(['Phantom', 'Ledger', 'Torus']);
+    const allowedWalletNames = new Set(['Ledger', 'Torus']);
     
     const filteredWallets = allWallets.filter(wallet => {
       const isAllowed = allowedWalletNames.has(wallet.name);
