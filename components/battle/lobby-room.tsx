@@ -43,6 +43,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [bottomPadding, setBottomPadding] = useState<number>(56)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
+  const httpPollRef = useRef<number | null>(null)
 
   // Debug: log layout to find why the ready bar might be off-screen
   useEffect(() => {
@@ -229,6 +230,39 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('refresh_lobby_state', handleRefreshLobbyState);
     };
   }, [socket, onStartMatch]);
+
+  // HTTP fallback polling when sockets are unavailable (dev/CORS etc.)
+  useEffect(() => {
+    const fetchLobbyHttp = async () => {
+      try {
+        const res = await fetch('/api/lobbies')
+        if (!res.ok) return
+        const data = await res.json()
+        const lobbyFromApi = Array.isArray(data) ? data.find((l: any) => l.id === lobby.id) : null
+        if (lobbyFromApi) {
+          setLobbyData(lobbyFromApi)
+          const mapped = (lobbyFromApi.players || []).map((p: any) => ({
+            playerId: p.playerId,
+            username: p.username || p.playerId.slice(0, 8) + '...',
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : false,
+            isAi: !!p.isAi,
+          }))
+          setPlayers(mapped)
+        }
+      } catch {}
+    }
+
+    if (!isConnected) {
+      // Start HTTP polling
+      fetchLobbyHttp()
+      httpPollRef.current = window.setInterval(fetchLobbyHttp, 3000)
+      return () => { if (httpPollRef.current) window.clearInterval(httpPollRef.current) }
+    } else {
+      // If connected, stop fallback polling
+      if (httpPollRef.current) window.clearInterval(httpPollRef.current)
+    }
+  }, [isConnected, lobby.id])
 
   // Initial lobby data setup - ensure current player is included
   useEffect(() => {
