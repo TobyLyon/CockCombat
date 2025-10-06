@@ -33,6 +33,9 @@ const handle = app.getRequestHandler();
 const activeConnections = new Map();
 const gameRooms = new Map();
 
+// Make gameRooms globally accessible for API routes
+global.gameRooms = gameRooms;
+
 // Username cache to reduce database queries
 const usernameCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -436,9 +439,55 @@ app.prepare().then(() => {
         io.to(roomId).emit('action_result', result);
         io.to(roomId).emit('game_state_update', room.gameState);
 
+        // Broadcast battle event to spectators as chat message
+        if (result.actionSuccess) {
+          const isPlayer1 = room.player1Id === socket.id;
+          const attackerName = isPlayer1 ? room.gameState.player1.name : room.gameState.player2.name;
+          const targetName = isPlayer1 ? room.gameState.player2.name : room.gameState.player1.name;
+          
+          let eventMessage = '';
+          if (action === 'attack' && result.damage > 0) {
+            eventMessage = `${attackerName} attacked ${targetName} for ${result.damage} damage!`;
+          } else if (action === 'special_attack' && result.damage > 0) {
+            eventMessage = `${attackerName} used SPECIAL ATTACK on ${targetName} for ${result.damage} damage! 💥`;
+          } else if (action === 'defend') {
+            eventMessage = `${attackerName} is defending! 🛡️`;
+          }
+          
+          if (eventMessage) {
+            io.to(roomId).emit('chat_message', {
+              id: `event-${Date.now()}`,
+              user: {
+                name: 'System',
+                address: '0x000',
+              },
+              message: eventMessage,
+              timestamp: new Date().toISOString(),
+              isPrediction: true,
+            });
+          }
+        }
+
         // Check if battle is over
         if (result.battleOver) {
           console.log(`🏆 Match ${roomId} ended. Winner: ${result.winner}`);
+          
+          // Broadcast victory message to spectators
+          const winnerName = result.winner === room.player1Id 
+            ? room.gameState.player1.name 
+            : room.gameState.player2.name;
+          
+          io.to(roomId).emit('chat_message', {
+            id: `victory-${Date.now()}`,
+            user: {
+              name: 'System',
+              address: '0x000',
+            },
+            message: `🏆 ${winnerName} WINS THE MATCH! 🏆`,
+            timestamp: new Date().toISOString(),
+            isPrediction: true,
+          });
+          
           io.to(roomId).emit('match_ended', { 
             winner: result.winner,
             battleData: result 
@@ -460,10 +509,76 @@ app.prepare().then(() => {
       const room = gameRooms.get(matchId);
       if (room) {
         socket.join(matchId);
+        
+        // Mark as spectator
+        const connection = activeConnections.get(socket.id);
+        if (connection) {
+          connection.isSpectator = true;
+          connection.spectatingMatch = matchId;
+        }
+        
+        // Send current game state
         socket.emit('game_state_update', room.gameState);
+        
+        // Send match metadata
+        const now = Date.now();
+        const elapsed = Math.floor((now - room.startTime) / 1000);
+        socket.emit('match_metadata', {
+          matchId,
+          startedAt: new Date(room.startTime).toISOString(),
+          elapsedSeconds: elapsed,
+          spectatorCount: io.sockets.adapter.rooms.get(matchId)?.size - 2 || 0,
+        });
+        
+        // Notify other spectators
+        socket.to(matchId).emit('spectator_joined', {
+          spectatorId: socket.id,
+          spectatorCount: io.sockets.adapter.rooms.get(matchId)?.size - 2 || 0,
+        });
       } else {
         socket.emit('spectate_error', { message: 'Match not found' });
       }
+    });
+
+    // Handle leaving spectator mode
+    socket.on('leave_spectate', ({ matchId }) => {
+      console.log(`👁️ Spectator ${socket.id} leaving match ${matchId}`);
+      socket.leave(matchId);
+      
+      const connection = activeConnections.get(socket.id);
+      if (connection) {
+        connection.isSpectator = false;
+        connection.spectatingMatch = null;
+      }
+      
+      // Notify other spectators
+      socket.to(matchId).emit('spectator_left', {
+        spectatorId: socket.id,
+        spectatorCount: io.sockets.adapter.rooms.get(matchId)?.size - 2 || 0,
+      });
+    });
+
+    // Handle spectator chat messages
+    socket.on('spectator_chat', ({ matchId, message, username }) => {
+      if (!checkRateLimit('spectator_chat', 20)) {
+        console.warn(`⚠️ Rate limit exceeded for spectator_chat: ${socket.id}`);
+        return;
+      }
+      
+      console.log(`💬 Spectator ${socket.id} sent message in match ${matchId}`);
+      
+      // Broadcast to all in the match room
+      io.to(matchId).emit('chat_message', {
+        id: `${socket.id}-${Date.now()}`,
+        user: {
+          id: socket.id,
+          name: username || `Spectator_${socket.id.slice(0, 6)}`,
+          address: socket.id.slice(0, 10),
+        },
+        message: message,
+        timestamp: new Date().toISOString(),
+        isSpectator: true,
+      });
     });
 
     // Handle disconnect

@@ -6,18 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send } from "lucide-react"
+import { Send, Users } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
+import { useSocket } from "@/hooks/use-socket"
+import { useWallet } from "@solana/wallet-adapter-react"
 
 interface ChatMessage {
   id: string
   user: {
+    id?: string
     name: string
     address: string
     avatar?: string
   }
   message: string
-  timestamp: Date
+  timestamp: Date | string
   isSpectator?: boolean
   isPrediction?: boolean
 }
@@ -25,14 +28,67 @@ interface ChatMessage {
 interface SpectatorChatProps {
   matchId?: string
   onNewMessage?: (message: string) => void
+  onSendMessage?: (message: string) => void
 }
 
-export default function SpectatorChat({ matchId, onNewMessage }: SpectatorChatProps) {
+export default function SpectatorChat({ matchId, onNewMessage, onSendMessage }: SpectatorChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageText, setMessageText] = useState("")
+  const [spectatorCount, setSpectatorCount] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { socket, isConnected } = useSocket()
+  const { publicKey } = useWallet()
   
-  // Mock initial messages
+  // Socket.IO event listeners for real-time chat
+  useEffect(() => {
+    if (!socket || !isConnected || !matchId) return;
+    
+    // Join match as spectator
+    socket.emit('spectate_match', { matchId });
+    
+    // Listen for chat messages
+    const handleChatMessage = (msg: any) => {
+      const chatMsg: ChatMessage = {
+        id: msg.id || `${msg.user.id}-${Date.now()}`,
+        user: msg.user,
+        message: msg.message,
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        isSpectator: msg.isSpectator,
+        isPrediction: msg.isPrediction,
+      };
+      setMessages(prev => [...prev, chatMsg]);
+      if (onNewMessage) onNewMessage(msg.message);
+    };
+    
+    // Listen for spectator count updates
+    const handleSpectatorJoined = (data: any) => {
+      setSpectatorCount(data.spectatorCount);
+    };
+    
+    const handleSpectatorLeft = (data: any) => {
+      setSpectatorCount(data.spectatorCount);
+    };
+    
+    // Listen for match metadata
+    const handleMatchMetadata = (data: any) => {
+      setSpectatorCount(data.spectatorCount);
+    };
+    
+    socket.on('chat_message', handleChatMessage);
+    socket.on('spectator_joined', handleSpectatorJoined);
+    socket.on('spectator_left', handleSpectatorLeft);
+    socket.on('match_metadata', handleMatchMetadata);
+    
+    return () => {
+      socket.off('chat_message', handleChatMessage);
+      socket.off('spectator_joined', handleSpectatorJoined);
+      socket.off('spectator_left', handleSpectatorLeft);
+      socket.off('match_metadata', handleMatchMetadata);
+      socket.emit('leave_spectate', { matchId });
+    };
+  }, [socket, isConnected, matchId, onNewMessage]);
+  
+  // Mock initial welcome message
   useEffect(() => {
     const initialMessages: ChatMessage[] = [
       {
@@ -85,30 +141,38 @@ export default function SpectatorChat({ matchId, onNewMessage }: SpectatorChatPr
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!messageText.trim()) return
+    if (!messageText.trim() || !socket || !matchId) return
     
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      user: {
-        name: "You",
-        address: "0xYou...r123",
-        avatar: "/images/avatars/you.png"
-      },
+    // Get username from wallet or use fallback
+    const username = publicKey ? `${publicKey.toString().slice(0, 4)}...${publicKey.toString().slice(-4)}` : 'Anonymous';
+    
+    // Send via Socket.IO
+    socket.emit('spectator_chat', {
+      matchId,
       message: messageText,
-      timestamp: new Date(),
-      isSpectator: true
-    }
+      username,
+    });
     
-    setMessages(prev => [...prev, newMessage])
     setMessageText("")
     
-    if (onNewMessage) {
-      onNewMessage(messageText)
+    if (onSendMessage) {
+      onSendMessage(messageText)
     }
   }
   
   return (
     <div className="flex flex-col h-full">
+      {/* Spectator Count Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-900/50 border-b border-gray-800">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Users className="h-4 w-4" />
+          <span>{spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}</span>
+        </div>
+        <Badge variant="outline" className="bg-green-600/20 text-green-400 border-green-600">
+          LIVE
+        </Badge>
+      </div>
+
       <ScrollArea className="flex-1 p-3">
         <div className="flex flex-col gap-3">
           {messages.map((message) => (
@@ -125,7 +189,9 @@ export default function SpectatorChat({ matchId, onNewMessage }: SpectatorChatPr
                     {message.user.address}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {formatDistanceToNow(message.timestamp, { addSuffix: true })}
+                    {typeof message.timestamp === 'string' 
+                      ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
+                      : formatDistanceToNow(message.timestamp, { addSuffix: true })}
                   </span>
                   
                   {message.isPrediction && (
@@ -150,13 +216,21 @@ export default function SpectatorChat({ matchId, onNewMessage }: SpectatorChatPr
           <Input 
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={isConnected ? "Type a message..." : "Connecting..."}
             className="bg-gray-950 border-gray-800"
+            disabled={!isConnected}
           />
-          <Button type="submit" size="icon" disabled={!messageText.trim()}>
+          <Button 
+            type="submit" 
+            size="icon" 
+            disabled={!messageText.trim() || !isConnected}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {!isConnected && (
+          <p className="text-xs text-gray-400 mt-1">Connecting to chat...</p>
+        )}
       </form>
     </div>
   )

@@ -6,11 +6,12 @@ import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Button } from "@/components/ui/button"
-import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight } from "lucide-react"
+import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye } from "lucide-react"
 import Link from "next/link"
 import EnhancedArenaScene from "./enhanced-arena-scene"
 import WaitingQueue from "./waiting-queue"
 import LobbyRoom from "./lobby-room"
+import LiveMatchesFeed from "@/components/spectator/live-matches-feed"
 import { useAudio } from "@/contexts/AudioContext"
 import BattleHUD from './battle-hud';
 import GameOver from './game-over';
@@ -289,9 +290,9 @@ export default function BattleArena() {
         {/* Top Bar moved to universal NavBar; removed local header */}
 
         {gameState === "lobby" && (
-          <div className="flex-1 flex flex-col lg:flex-row w-full h-full max-h-full overflow-hidden">
+          <div className="flex-1 flex flex-col lg:flex-row w-full h-full max-h-full overflow-hidden gap-4">
             {/* Main Lobby Selection */}
-            <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${inLobbyRoom ? 'hidden lg:flex lg:w-[calc(100%-400px)]' : 'w-full'}`}>
+            <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${inLobbyRoom ? 'hidden lg:flex lg:w-[calc(100%-400px)]' : 'w-full lg:w-[calc(100%-350px)]'}`}>
               
               <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 overflow-y-auto">
                 {isLoadingLobbies ? (
@@ -316,6 +317,15 @@ export default function BattleArena() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => router.push('/spectate')}
+                            variant="outline"
+                            size="sm"
+                            className="border-yellow-600/30 text-yellow-400 hover:bg-yellow-600/10 hover:border-yellow-600/50 text-xs gap-1"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Spectate Live Matches
+                          </Button>
                           <button
                             onClick={() => setFilter('all')}
                           className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'all' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
@@ -442,6 +452,13 @@ export default function BattleArena() {
                 )}
               </div>
             </div>
+
+            {/* Live Matches Feed - Shows when not in lobby room */}
+            {!inLobbyRoom && (
+              <div className="hidden lg:block w-[350px] flex-shrink-0 overflow-y-auto px-4 py-6">
+                <LiveMatchesFeed compact />
+              </div>
+            )}
 
             {/* Lobby Room Details - Full overlay on mobile, fixed sidebar on desktop */}
             {inLobbyRoom && joinedLobby && (

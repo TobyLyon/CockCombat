@@ -195,18 +195,14 @@ export async function withRateLimit(
   const rateLimiter = RateLimiter.getInstance();
   const endpoint = req.nextUrl.pathname;
   
-  // Get identifier (prefer wallet address from request body/query)
+  // Get identifier WITHOUT consuming request body (use IP-based for now)
   let identifier: string;
   
   if (config.identifier) {
     identifier = config.identifier(req);
   } else {
-    try {
-      const body = await req.json();
-      identifier = rateLimiter.getIdentifier(req, body.walletAddress || body.playerPublicKey);
-    } catch {
-      identifier = rateLimiter.getIdentifier(req);
-    }
+    // Use IP address for rate limiting to avoid consuming request body
+    identifier = rateLimiter.getIdentifier(req);
   }
 
   const result = await rateLimiter.checkLimit(identifier, endpoint, config);

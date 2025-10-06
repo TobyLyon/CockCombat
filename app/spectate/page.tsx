@@ -1,91 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
-
-// Define an interface for the Match object
-interface Match {
-  id: string;
-  player1: string;
-  player2: string;
-  wagerAmount: number;
-  inProgress: boolean;
-}
-
-// Mock match data - Update with wager amounts
-const MOCK_MATCHES: Match[] = [
-  { id: "match-1", player1: "CockyWarrior", player2: "FeatherFury", wagerAmount: 10000, inProgress: true }, // Tier 1
-  { id: "match-2", player1: "CluckNorris", player2: "WingCommander", wagerAmount: 100000, inProgress: true }, // Tier 2
-  { id: "match-3", player1: "BeakTyson", player2: "HenSolo", wagerAmount: 1000000, inProgress: true } // Tier 3
-];
+import { ArrowLeft, Radio } from "lucide-react";
+import LiveMatchesFeed from "@/components/spectator/live-matches-feed";
 
 export default function SpectateIndexPage() {
-  // Use the Match interface for the state type
-  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Simulate loading live matches
-  useEffect(() => {
-    // Replace with actual API call to fetch live matches
-    const fetchLiveMatches = async () => {
-      setIsLoading(true);
-      try {
-        // Simulating API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setLiveMatches(MOCK_MATCHES);
-      } catch (error) {
-        console.error("Failed to fetch live matches:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLiveMatches();
-  }, []);
+  const router = useRouter()
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-6">
-      <h1 className="text-3xl font-bold mb-6">Live Matches</h1>
-      
-      {isLoading ? (
-        <div className="text-gray-400">Loading live matches...</div>
-      ) : liveMatches.length > 0 ? (
-        <div className="w-full max-w-2xl grid gap-4">
-          {liveMatches.map((match) => (
-            <Link 
-              href={`/spectate/${match.id}`} 
-              key={match.id}
-              className="block w-full"
-            >
-              <div className="border border-gray-700 bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-semibold text-lg flex items-center">
-                    <span className="text-yellow-500 mr-2">💰</span> 
-                    Wager: {match.wagerAmount.toLocaleString()} $COCK
-                  </h3>
-                  <div className="flex items-center">
-                    <span className="h-2 w-2 bg-green-500 rounded-full animate-pulse mr-2"></span>
-                    <span className="text-sm text-gray-400">Live</span>
-                  </div>
-                </div>
-                <Button className="w-full mt-3">Watch Match</Button>
-              </div>
-            </Link>
-          ))}
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
+      <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-bold mb-2 text-yellow-400 pixel-font flex items-center gap-3">
+              <Radio className="h-8 w-8 animate-pulse" />
+              SPECTATOR MODE
+            </h1>
+            <p className="text-gray-400">Watch live battles and chat with other spectators</p>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => router.push("/arena")}
+            className="border-gray-700 hover:bg-gray-800"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Arena
+          </Button>
         </div>
-      ) : (
-        <div className="text-center">
-          <p className="text-gray-400 mb-4">No live matches available at the moment.</p>
-          <p className="text-gray-500 text-sm">Check back soon or visit the arena to start your own match!</p>
-          <Link href="/arena">
-            <Button className="mt-4">Go to Arena</Button>
-          </Link>
-        </div>
-      )}
-      
-      <div className="mt-8 text-center text-sm text-gray-500 max-w-lg">
-        <p>Select a match above to spectate, or navigate directly to <code className="bg-gray-800 px-2 py-1 rounded">/spectate/[matchId]</code> if you have a specific match ID.</p>
+        
+        {/* Live Matches Feed */}
+        <LiveMatchesFeed />
       </div>
     </div>
   );
