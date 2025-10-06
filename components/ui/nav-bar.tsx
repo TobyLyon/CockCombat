@@ -125,7 +125,7 @@ export default function NavBar() {
         {/* Copy Token - desktop sleeker pill */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
-          className={`hidden sm:inline-flex items-center gap-2 px-4 py-1 rounded-full border transition-colors duration-150 min-w-[220px] ${
+          className={`hidden sm:inline-flex items-center gap-2 px-4 py-1 rounded-full border transition-colors duration-150 min-w-[180px] ${
             copied
               ? 'border-green-400/40 bg-green-500/10 text-green-300'
               : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:border-yellow-500/40'
