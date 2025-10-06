@@ -11,7 +11,6 @@ import Link from "next/link"
 import EnhancedArenaScene from "./enhanced-arena-scene"
 import WaitingQueue from "./waiting-queue"
 import LobbyRoom from "./lobby-room"
-import LiveMatchesFeed from "@/components/spectator/live-matches-feed"
 import { useAudio } from "@/contexts/AudioContext"
 import BattleHUD from './battle-hud';
 import GameOver from './game-over';
@@ -463,12 +462,7 @@ export default function BattleArena() {
               </div>
             </div>
 
-            {/* Live Matches Feed - Shows when not in lobby room */}
-            {!inLobbyRoom && (
-              <div className="hidden lg:block w-[350px] flex-shrink-0 overflow-y-auto px-4 py-6">
-                <LiveMatchesFeed compact />
-              </div>
-            )}
+            {/* Spectate sidebar removed per request */}
 
             {/* Lobby Room Details - Full overlay on mobile, fixed sidebar on desktop */}
             {inLobbyRoom && joinedLobby && (
