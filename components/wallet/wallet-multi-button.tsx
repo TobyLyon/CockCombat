@@ -72,8 +72,8 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
   // If not connected, show the native Solana wallet button (client-only)
   if (!connected) {
     return (
-      <div onClick={onClickSound} className={className}>
-        <SolanaWalletMultiButton className="!bg-[#fbbf24] !text-[#333333] !font-bold !py-2 !px-3 sm:!px-4 !rounded !border-b-4 !border-[#d97706] hover:!bg-[#f59e0b] hover:!border-[#b45309] !transition-all !flex !items-center !gap-2 !text-xs sm:!text-sm !whitespace-nowrap !min-w-0 !max-w-[140px] sm:!max-w-[180px]" />
+      <div onClick={onClickSound} className={`shrink-0 ${className}`}>
+        <SolanaWalletMultiButton className="!bg-[#fbbf24] !text-[#333333] !font-bold !py-2 !px-3 sm:!px-4 !rounded !border-b-4 !border-[#d97706] hover:!bg-[#f59e0b] hover:!border-[#b45309] !transition-all !flex !items-center !gap-2 !text-xs sm:!text-sm !whitespace-nowrap !leading-none !shrink-0 !min-w-fit !max-w-none" />
       </div>
     )
   }
@@ -83,7 +83,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     <DropdownMenu onOpenChange={setIsDropdownOpen}>
       <DropdownMenuTrigger asChild>
         <motion.button
-          className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap min-w-0 ${className} ${isDropdownOpen ? "bg-[#f59e0b] border-[#b45309]" : ""}`}
+          className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className} ${isDropdownOpen ? "bg-[#f59e0b] border-[#b45309]" : ""}`}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >

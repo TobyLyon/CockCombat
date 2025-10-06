@@ -422,10 +422,11 @@ export default function BattleArena() {
                             );
                           })()}
                           
-                          {/* Action Button - hidden for coming soon to avoid duplicate label */}
-                          {!lobby.isComingSoon && (
+                        {/* Actions: Join and Spectate */}
+                        {!lobby.isComingSoon && (
+                          <div className="mt-auto grid grid-cols-2 gap-2">
                             <Button
-                              className={`mt-auto w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
+                              className={`w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
                                 bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
                               disabled={isJoining === lobby.id || (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity}
                             >
@@ -433,9 +434,18 @@ export default function BattleArena() {
                                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin"/> Joining...</>
                                   : joinedLobby?.id === lobby.id
                                   ? '✓ JOINED'
-                                  : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'LOBBY FULL' : <>JOIN ARENA <ChevronRight className="h-4 w-4"/></>)}
+                                  : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'FULL' : <>JOIN <ChevronRight className="h-4 w-4"/></>)}
                             </Button>
-                          )}
+                            <Button
+                              variant="outline"
+                              className="w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg border text-xs md:text-sm flex items-center justify-center gap-2 bg-black/20 hover:bg-black/30 text-white border-white/20"
+                              onClick={(e) => { e.stopPropagation(); router.push('/spectate'); }}
+                            >
+                              <Eye className="h-4 w-4" />
+                              Spectate
+                            </Button>
+                          </div>
+                        )}
                           {lobby.isComingSoon && (
                             <Button
                               className="mt-auto w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg border text-xs md:text-sm bg-white/10 text-white border-white/20 opacity-90 cursor-not-allowed"

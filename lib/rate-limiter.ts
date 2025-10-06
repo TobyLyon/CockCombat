@@ -30,7 +30,9 @@ class RateLimiter {
   private inMemoryStore: Map<string, { count: number; resetAt: number }> = new Map();
 
   private constructor() {
-    this.supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (supabaseUrl && supabaseServiceKey) {
+      this.supabase = createClient(supabaseUrl, supabaseServiceKey);
+    }
     this.startCleanupInterval();
   }
 
@@ -73,7 +75,13 @@ class RateLimiter {
       };
     }
 
-    // Check database
+    // Check database (if available)
+    if (!this.supabase) {
+      // No database, use in-memory only
+      this.inMemoryStore.set(key, { count: 1, resetAt: now + config.windowMs });
+      return { allowed: true, remaining: config.maxRequests - 1, resetAt };
+    }
+
     try {
       const { data: existing, error } = await this.supabase
         .from('rate_limit_log')
@@ -83,9 +91,15 @@ class RateLimiter {
         .gte('window_start', new Date(windowStart).toISOString())
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error && error.code !== 'PGRST116' && error.code !== '42P01') {
         console.error('Rate limit check error:', error);
         // Fail open (allow request) if database is down
+        return { allowed: true, remaining: config.maxRequests - 1, resetAt };
+      }
+      
+      // Table doesn't exist, fail open
+      if (error && error.code === '42P01') {
+        this.inMemoryStore.set(key, { count: 1, resetAt: now + config.windowMs });
         return { allowed: true, remaining: config.maxRequests - 1, resetAt };
       }
 

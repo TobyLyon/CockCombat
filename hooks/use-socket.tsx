@@ -25,9 +25,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     // Initialize Socket.io connection with custom server
     console.log('🔌 Initializing Socket.io connection...');
     
-    const socketInstance = io({
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+    const socketInstance = io(socketUrl, {
       path: '/api/socketio',
       addTrailingSlash: false,
+      transports: ['websocket'],
+      withCredentials: true,
     });
 
     socketInstance.on('connect', () => {

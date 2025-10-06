@@ -31,11 +31,13 @@ class SocketService {
     this.connectionPromise = new Promise((resolve, reject) => {
       try {
         // Initialize Socket.io connection
-        this.socket = io({
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined
+        this.socket = io(socketUrl, {
           path: "/api/socketio",
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
           transports: ["websocket"],
+          withCredentials: true,
         })
 
         this.socket.on("connect", () => {
