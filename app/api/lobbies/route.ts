@@ -134,8 +134,8 @@ function addAiPlayer(lobbyId: string) {
       console.error('❌ Failed to broadcast AI player join:', error);
     });
     
-    // If lobby is now full, start the match
-    if (lobby.players.length === lobby.capacity) {
+    // Do not mark tutorial lobbies as starting automatically; readiness logic handles it
+    if (lobby.matchType !== 'tutorial' && lobby.players.length === lobby.capacity) {
       lobby.status = 'starting';
       console.log(`Lobby ${lobbyId} is full and starting.`);
       if (lobbyTimers.has(lobbyId)) {
@@ -316,32 +316,27 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
-  // Tutorial lobbies: quickly and deterministically backfill AI to ensure stable start
-  if (lobby.matchType === 'tutorial' && lobby.players.length === 1) {
+  // Tutorial lobbies: backfill ONLY up to minimum players (2) with AI
+  if (lobby.matchType === 'tutorial') {
     if (!lobbyTimers.has(lobbyId)) {
-      console.log(`⏳ Scheduling fast AI backfill for tutorial lobby ${lobbyId}`);
+      console.log(`⏳ Scheduling AI backfill (to min players) for tutorial lobby ${lobbyId}`);
       const timer = setTimeout(() => {
         try {
-          // Fill remaining slots with AI opponents (AI are auto-ready)
-          while (lobby.players.length < lobby.capacity) {
-            addAiPlayer(lobbyId);
-          }
+          // Ensure we only fill to 2 total players (minRequired) for tutorial
+          const minRequired = 2;
+          while (lobby.players.length < minRequired) addAiPlayer(lobbyId);
         } finally {
           lobbyTimers.delete(lobbyId);
         }
-      }, 500); // fast backfill for smooth UX
+      }, 500);
       lobbyTimers.set(lobbyId, timer);
     } else {
       console.log(`AI backfill already scheduled for ${lobbyId}`);
     }
   }
 
-  if (lobby.players.length === lobby.capacity) {
+  if (lobby.players.length === lobby.capacity && lobby.matchType !== 'tutorial') {
     lobby.status = 'starting';
-    if (lobby.matchType === 'tutorial' && lobbyTimers.has(lobbyId)) {
-      clearTimeout(lobbyTimers.get(lobbyId)!);
-      lobbyTimers.delete(lobbyId);
-    }
   }
 
     return NextResponse.json(lobby);
