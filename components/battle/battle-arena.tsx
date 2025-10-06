@@ -32,7 +32,7 @@ export default function BattleArena() {
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [joinedLobby, setJoinedLobby] = useState<Lobby | null>(null);
   const [inLobbyRoom, setInLobbyRoom] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'ranked' | 'tutorial'>('all');
+  const [filter, setFilter] = useState<'all' | 'tutorial'>('all');
   const [hasLoadedLobbies, setHasLoadedLobbies] = useState(false);
   const fetchControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
@@ -192,9 +192,7 @@ export default function BattleArena() {
   // Filter and sort lobbies for display
   const displayedLobbies = useMemo(() => {
     let list = Array.isArray(lobbies) ? [...lobbies] : [];
-    if (filter === 'ranked') {
-      list = list.filter(l => l.matchType === 'ranked' && l.amount > 0);
-    } else if (filter === 'tutorial') {
+    if (filter === 'tutorial') {
       list = list.filter(l => l.matchType === 'tutorial' || l.amount === 0);
     }
     // Sort: tutorial/free first, then by amount ascending; VIP/highRoller last to stand out
@@ -329,11 +327,6 @@ export default function BattleArena() {
                             onClick={() => setFilter('all')}
                           className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'all' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
                           >All</button>
-                        <button
-                          onClick={() => {}}
-                          disabled
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all opacity-60 cursor-not-allowed bg-white/5 text-white/70 border-white/10`}
-                        >Ranked (Coming Soon)</button>
                           <button
                             onClick={() => setFilter('tutorial')}
                           className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'tutorial' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
