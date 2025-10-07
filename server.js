@@ -581,6 +581,66 @@ preparePromise.then(() => {
                   ended_at: Date.now(),
                 },
               }, { onConflict: 'id' });
+
+              // Ranked payout orchestrator: if lobby info available and amount > 0, record match_results and trigger payout
+              try {
+                // Try to infer lobby from participants' last lobby or from room metadata (not stored here), so fallback to unknown
+                // Here we compute prize pool based on live lobby amounts if we can find a matching lobby; otherwise skip
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const lobbyRes = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+                const lobbies = lobbyRes ? await lobbyRes.json().catch(() => []) : [];
+                // Find any ranked lobby with either player wallet present
+                const rankedLobby = Array.isArray(lobbies) ? lobbies.find(l => l.amount > 0 && (l.players || []).some(p => p.playerId === player1Wallet || p.playerId === player2Wallet)) : null;
+                if (rankedLobby && rankedLobby.amount > 0) {
+                  const humans = (rankedLobby.players || []).filter(p => !p.isAi);
+                  const prizePoolLamports = Math.round(rankedLobby.amount * humans.length * 1_000_000_000);
+
+                  // Create match_results row
+                  const participants = humans.map((p) => ({ wallet: p.playerId, wager_amount: rankedLobby.amount }));
+                  const { data: mr, error: mrErr } = await supabase.from('match_results').insert({
+                    lobby_id: rankedLobby.id,
+                    escrow_wallet_id: rankedLobby.escrowWalletId || null,
+                    match_started_at: new Date(room.startTime || Date.now()).toISOString(),
+                    match_ended_at: new Date().toISOString(),
+                    winner_wallet: winnerWallet,
+                    total_prize_pool: (prizePoolLamports / 1_000_000_000),
+                    participants,
+                    game_data: { roomId },
+                    status: 'completed',
+                    payout_processed: false,
+                  }).select('id').single();
+                  if (!mrErr && mr?.id) {
+                    // Trigger payout via internal API with server secret
+                    const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${`http://localhost:${port}`}/api/payout`;
+                    const serverSecret = process.env.PAYOUT_SERVER_SECRET;
+                    if (serverSecret) {
+                      const res = await fetch(payoutUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${serverSecret}`,
+                        },
+                        body: JSON.stringify({
+                          winnerAddress: winnerWallet,
+                          prizePoolLamports,
+                          matchId: mr.id,
+                        }),
+                      });
+                      if (!res.ok) {
+                        console.error('❌ Ranked payout failed:', await res.text().catch(() => ''));
+                      } else {
+                        console.log('💸 Ranked payout initiated for match_result:', mr.id);
+                      }
+                    } else {
+                      console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot trigger ranked payout');
+                    }
+                  } else if (mrErr) {
+                    console.error('❌ Failed to insert match_results:', mrErr);
+                  }
+                }
+              } catch (orchestratorErr) {
+                console.error('⚠️ Payout orchestrator error:', orchestratorErr);
+              }
             }
           } catch (e) {
             console.error('⚠️ Failed to record match result:', e);
@@ -759,8 +819,39 @@ preparePromise.then(() => {
         const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
         const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
-        const allReady = lobbyPlayers.length >= minPlayers && 
-                         readyPlayers.length === lobbyPlayers.length && hasHumanReady;
+        let allReady = lobbyPlayers.length >= minPlayers && 
+                       readyPlayers.length === lobbyPlayers.length && hasHumanReady;
+
+        // Ranked enforcement: all human players must have confirmed wagers to assigned escrow
+        if (!lobbyId.includes('tutorial')) {
+          try {
+            // Fetch the live lobby from API to inspect hasWagered flags and escrow wallet
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`);
+            const all = await res.json();
+            const liveLobby = all.find(l => l.id === lobbyId);
+            if (liveLobby && liveLobby.amount > 0) {
+              const humans = (liveLobby.players || []).filter(p => !p.isAi);
+              const allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
+              const hasEscrow = Boolean(liveLobby.escrowWalletId);
+              if (!allWagered || !hasEscrow) {
+                allReady = false;
+                io.to(lobbyId).emit('lobby_updated', {
+                  id: lobbyId,
+                  players: lobbyPlayers,
+                  capacity: liveLobby.capacity,
+                  amount: liveLobby.amount,
+                  currency: liveLobby.currency,
+                  matchType: liveLobby.matchType
+                });
+                console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered} hasEscrow=${hasEscrow}`);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Enforcement check failed, deferring start:', e?.message || e);
+            allReady = false;
+          }
+        }
         
         console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${lobbyPlayers.length} ready (min: ${minPlayers})`);
         
