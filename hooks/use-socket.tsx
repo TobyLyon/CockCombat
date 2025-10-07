@@ -26,10 +26,17 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     console.log('🔌 Initializing Socket.io connection...');
     
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
-    const socketInstance = io(socketUrl, {
-      path: '/api/socketio',
+    const isProd = process.env.NODE_ENV === 'production';
+    const transports = isProd ? ['websocket'] : ['polling', 'websocket'];
+
+    // Attempt connection with configured path; if it errors with 404, retry with default '/socket.io'
+    const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
+    const fallbackPath = '/socket.io';
+
+    let socketInstance = io(socketUrl, {
+      path: primaryPath,
       addTrailingSlash: false,
-      transports: ['polling', 'websocket'],
+      transports,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
@@ -49,13 +56,45 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     });
 
     let lastErrLog = 0;
-    socketInstance.on('connect_error', (error) => {
+    socketInstance.on('connect_error', (error: any) => {
       const now = Date.now();
+      const msg = error?.message || '';
       if (now - lastErrLog > 5000) {
-        console.error('🚫 Socket connection error:', error?.message || error);
+        console.error('🚫 Socket connection error:', msg);
         lastErrLog = now;
       }
       setIsConnected(false);
+
+      // If we get 404 against the primary custom path, try the default Socket.IO path once
+      const is404 = (error && (error as any).description === 404) || /404/i.test(String((error as any)?.message || ''));
+      const usedPrimary = (socketInstance.io.opts.path === primaryPath);
+      if (is404 && usedPrimary) {
+        try {
+          console.log('🔁 Retrying Socket.io with fallback path', fallbackPath);
+          socketInstance.off();
+          socketInstance.close();
+        } catch {}
+        socketInstance = io(socketUrl, {
+          path: fallbackPath,
+          addTrailingSlash: false,
+          transports,
+          reconnection: true,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 15000,
+          withCredentials: true,
+        });
+
+        socketInstance.on('connect', () => {
+          console.log('✅ Socket connected:', socketInstance.id);
+          setIsConnected(true);
+        });
+        socketInstance.on('disconnect', () => {
+          console.log('❌ Socket disconnected');
+          setIsConnected(false);
+        });
+      }
     });
     
     setSocket(socketInstance);

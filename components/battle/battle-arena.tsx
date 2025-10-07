@@ -189,6 +189,14 @@ export default function BattleArena() {
     }
   };
 
+  const getCurrentPlayerId = (): string | undefined => {
+    try {
+      if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58();
+      if (typeof window !== 'undefined') return localStorage.getItem('guest_id') || undefined;
+    } catch {}
+    return undefined;
+  };
+
   // Filter and sort lobbies for display
   const displayedLobbies = useMemo(() => {
     let list = Array.isArray(lobbies) ? [...lobbies] : [];
@@ -380,30 +388,41 @@ export default function BattleArena() {
                           
                           {/* Players Count */}
                           {(() => {
-                            const playerCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0;
-                            const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100));
+                            const rawCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0;
+                            const humanCount = Array.isArray(lobby.players)
+                              ? lobby.players.filter((p: any) => !p.isAi).length
+                              : rawCount;
+                            const playerCount = rawCount;
+                            const baseForPercent = lobby.matchType === 'tutorial' ? humanCount : playerCount;
+                            const fillPercent = Math.min(100, Math.round((baseForPercent / lobby.capacity) * 100));
                             return (
                               <>
                                 <div className="flex items-center justify-between mb-2 lg:mb-2">
                                   <div className="flex items-center gap-1.5 text-white/85">
                                     <Users className="h-3.5 w-3.5" />
                                     <span className="font-semibold text-xs lg:text-sm">
-                                      {playerCount} / {lobby.capacity}
+                                      {lobby.matchType === 'tutorial' ? `${humanCount} human${humanCount === 1 ? '' : 's'}` : `${playerCount} / ${lobby.capacity}`}
                                     </span>
                                   </div>
                                   {/* Status Indicator */}
                                   <div className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                    playerCount >= lobby.capacity
-                                      ? 'bg-red-500/15 text-red-300 border-red-400/30'
-                                      : playerCount > 0
-                                      ? 'bg-white/10 text-white/90 border-white/20'
-                                      : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
+                                    lobby.matchType === 'tutorial'
+                                      ? (humanCount === 0
+                                          ? 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
+                                          : 'bg-white/10 text-white/90 border-white/20')
+                                      : (playerCount >= lobby.capacity
+                                          ? 'bg-red-500/15 text-red-300 border-red-400/30'
+                                          : playerCount > 0
+                                          ? 'bg-white/10 text-white/90 border-white/20'
+                                          : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30')
                                   }`}>
-                                    {playerCount >= lobby.capacity 
-                                      ? 'FULL' 
-                                      : playerCount > 0 
-                                      ? 'ACTIVE' 
-                                      : 'OPEN'}
+                                    {lobby.matchType === 'tutorial'
+                                      ? (humanCount === 0 ? 'OPEN' : 'ACTIVE')
+                                      : (playerCount >= lobby.capacity 
+                                          ? 'FULL' 
+                                          : playerCount > 0 
+                                          ? 'ACTIVE' 
+                                          : 'OPEN')}
                                   </div>
                                 </div>
                                 {/* Capacity Progress */}
@@ -423,13 +442,14 @@ export default function BattleArena() {
                             <Button
                               className={`w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
                                 bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
-                              disabled={isJoining === lobby.id || (Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity}
+                              onClick={(e) => { e.stopPropagation(); !isJoining && handleJoinLobby(lobby); }}
+                              disabled={isJoining === lobby.id || ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial')}
                             >
                               {isJoining === lobby.id 
                                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin"/> Joining...</>
                                   : joinedLobby?.id === lobby.id
                                   ? '✓ JOINED'
-                                  : ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity ? 'FULL' : <>JOIN <ChevronRight className="h-4 w-4"/></>)}
+                                  : (((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial') ? 'FULL' : <>JOIN <ChevronRight className="h-4 w-4"/></>)}
                             </Button>
                             <Button
                               variant="outline"
@@ -495,7 +515,17 @@ export default function BattleArena() {
                   <LobbyRoom
                     lobby={joinedLobby}
                     playerIdentifier={guestId || publicKey?.toBase58() || undefined}
-                    onLeaveLobby={() => {
+                    onLeaveLobby={async () => {
+                      try {
+                        const id = getCurrentPlayerId();
+                        if (id) {
+                          await fetch('/api/lobbies', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lobbyId: joinedLobby.id, playerId: id })
+                          });
+                        }
+                      } catch {}
                       setInLobbyRoom(false);
                       setJoinedLobby(null);
                     }}

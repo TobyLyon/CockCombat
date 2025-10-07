@@ -585,6 +585,19 @@ app.prepare().then(() => {
     socket.on('disconnect', (reason) => {
       console.log(`❌ Client disconnected: ${socket.id}. Reason: ${reason}`);
       
+      // Attempt to remove the player from their current lobby via API (keeps server state clean)
+      try {
+        const connection = activeConnections.get(socket.id);
+        if (connection && connection.currentLobby && connection.walletAddress) {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          fetch(`${baseUrl}/api/lobbies`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lobbyId: connection.currentLobby, playerId: connection.walletAddress })
+          }).catch(() => {});
+        }
+      } catch {}
+
       // Remove from active connections
       activeConnections.delete(socket.id);
 
@@ -648,8 +661,9 @@ app.prepare().then(() => {
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
         const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
+        const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         const allReady = lobbyPlayers.length >= minPlayers && 
-                         readyPlayers.length === lobbyPlayers.length;
+                         readyPlayers.length === lobbyPlayers.length && hasHumanReady;
         
         console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${lobbyPlayers.length} ready (min: ${minPlayers})`);
         
@@ -698,8 +712,9 @@ app.prepare().then(() => {
         
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
+        const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         const allReady = lobbyPlayers.length >= minPlayers && 
-                         lobbyPlayers.every(p => p.isReady || p.isAi);
+                         lobbyPlayers.every(p => p.isReady || p.isAi) && hasHumanReady;
         
         if (allReady) {
           console.log(`🚀 Lobby ${lobbyId} is ready to start!`);

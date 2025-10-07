@@ -47,9 +47,9 @@ export default function WaitingQueue({
           setCurrentLobby(updatedLobby);
           
           // Check if all players are ready (minimum requirements met)
-          const minPlayersRequired = lobby.matchType === 'tutorial' ? 2 : 4;
+          const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4;
           const hasEnoughPlayers = updatedLobby.players.length >= minPlayersRequired;
-          const allReady = hasEnoughPlayers && updatedLobby.players.every((p: any) => p.isReady);
+          const allReady = hasEnoughPlayers && updatedLobby.players.every((p: any) => p.isReady || p.isAi);
           setAllPlayersReady(allReady);
           
           // If the lobby is starting, trigger the battle

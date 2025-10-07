@@ -161,6 +161,18 @@ function ensureTutorialAIFilledToCapacity(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
+    // Auto-sanitize tutorial lobbies: if no humans, clear AI and reset status
+    try {
+      for (const lobby of lobbies) {
+        if ((lobby as any)?.matchType === 'tutorial') {
+          const hasHuman = (lobby.players || []).some(p => !p.isAi);
+          if (!hasHuman && lobby.players.length > 0) {
+            lobby.players = [];
+            lobby.status = 'open';
+          }
+        }
+      }
+    } catch {}
     return NextResponse.json(lobbies);
   });
 }
@@ -357,3 +369,78 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(lobby);
   });
 } 
+
+// API handler for a player to leave a lobby
+export async function DELETE(req: NextRequest) {
+  return withRateLimit(req, RATE_LIMITS.LOBBY, async () => {
+    const BodySchema = z.object({
+      lobbyId: z.string().min(3),
+      playerId: z.string().min(3),
+    });
+
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { lobbyId, playerId } = parsed.data;
+
+    const lobby = lobbies.find(l => l.id === lobbyId);
+    if (!lobby) {
+      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+    }
+
+    const idx = lobby.players.findIndex(p => p.playerId === playerId);
+    if (idx === -1) {
+      // Idempotent: treat as success even if player isn't present
+      return NextResponse.json(lobby);
+    }
+
+    const leavingPlayer = lobby.players[idx];
+    lobby.players.splice(idx, 1);
+
+    // If tutorial lobby has no humans left, purge all AI and reset state
+    if (lobby.matchType === 'tutorial') {
+      const hasHuman = lobby.players.some(p => !p.isAi);
+      if (!hasHuman) {
+        lobby.players = [];
+        lobby.status = 'open';
+        if (lobbyTimers.has(lobbyId)) {
+          clearTimeout(lobbyTimers.get(lobbyId)!);
+          lobbyTimers.delete(lobbyId);
+        }
+      }
+    }
+
+    // Broadcast via Socket.IO if available
+    try {
+      const socketIo = await getSocketInstance();
+      if (socketIo) {
+        socketIo.to(lobbyId).emit('player_left_lobby', {
+          playerId,
+          timestamp: Date.now()
+        });
+
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : false,
+          isAi: p.isAi || false
+        }));
+
+        socketIo.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        });
+      }
+    } catch (e) {
+      console.log('Could not broadcast lobby leave:', e);
+    }
+
+    return NextResponse.json(lobby);
+  });
+}
