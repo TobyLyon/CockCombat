@@ -482,7 +482,7 @@ preparePromise.then(() => {
     });
 
     // Handle battle actions
-    socket.on('battle_action', (actionData) => {
+    socket.on('battle_action', async (actionData) => {
       if (!checkRateLimit('battle_action', 30)) {
         console.warn(`⚠️ Rate limit exceeded for battle_action: ${socket.id}`);
         return;
