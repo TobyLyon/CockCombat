@@ -269,7 +269,8 @@ export default function BattleArena() {
  
       // Go to lobby room for ready-up phase (wager will be handled there)
       console.log('🏠 Going to lobby room...');
-      setJoinedLobby(lobby);
+      // Use API response lobby (contains server-enriched usernames/players) when available
+      setJoinedLobby(joinResult || lobby);
       setInLobbyRoom(true);
 
     } catch (error: unknown) {

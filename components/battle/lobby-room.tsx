@@ -279,6 +279,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           isReady: player.isAi ? true : Boolean((player as any).isReady),
           isAi: player.isAi || false
         }));
+        // Optimistic include of current player if not present yet
+        if (!displayPlayers.some(p => p.playerId === id)) {
+          displayPlayers.unshift({
+            playerId: id,
+            username: 'You',
+            chickenName: 'Default',
+            isReady: isReady,
+            isAi: false,
+          })
+        }
         
         setPlayers(displayPlayers);
         console.log('🎯 Set initial players from lobby data:', displayPlayers);
