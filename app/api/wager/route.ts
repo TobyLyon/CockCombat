@@ -4,6 +4,9 @@ import { lobbies, type Lobby } from '@/lib/lobbies';
 import { getConnection } from '@/lib/solana-config';
 import { escrowService } from '@/lib/escrow-service';
 import { z } from 'zod';
+import { isBsc, toNativeUnits } from '@/lib/chain';
+import { evmEscrowService } from '@/lib/evm-escrow-service';
+import { getEvmProvider } from '@/lib/evm-config';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
@@ -44,28 +47,37 @@ export async function POST(request: Request) {
       });
     }
 
-    // Get connection using centralized config
+    if (isBsc()) {
+      // EVM path: return an unsigned tx (player -> escrow)
+      let w = lobby.escrowWalletId ? evmEscrowService.getWallet(lobby.escrowWalletId as any) : undefined;
+      if (!w) {
+        w = evmEscrowService.getNextWallet();
+        lobby.escrowWalletId = w.id;
+      }
+      const provider = getEvmProvider();
+      const valueWei = BigInt(toNativeUnits(lobby.amount));
+      // Client will sign and send this transaction; we just return target + value
+      return NextResponse.json({
+        chain: 'bsc',
+        to: w.address,
+        value: valueWei.toString(),
+        lobbyId: lobbyId,
+      });
+    }
+
+    // Solana path
     const connection = getConnection();
-    
-    // Initialize escrow service
     escrowService.setConnection(connection);
-    
     // Get the escrow wallet assigned to this lobby
-    // All players in the same lobby MUST use the same escrow wallet
     let escrowWallet;
     if (!lobby.escrowWalletId) {
-      // Assign one now if not already assigned
       escrowWallet = await escrowService.getNextWallet();
       lobby.escrowWalletId = escrowWallet.id;
       console.log(`🔐 Assigned Escrow Wallet ${escrowWallet.id} to lobby ${lobbyId}`);
     } else {
-      // Use the lobby's assigned wallet
       escrowWallet = escrowService.getWallet(lobby.escrowWalletId);
       if (!escrowWallet) {
-        return NextResponse.json({ 
-          error: "Escrow wallet not available",
-          details: `Wallet ${lobby.escrowWalletId} is not configured`
-        }, { status: 500 });
+        return NextResponse.json({ error: "Escrow wallet not available", details: `Wallet ${lobby.escrowWalletId} is not configured` }, { status: 500 });
       }
     }
     

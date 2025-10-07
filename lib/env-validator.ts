@@ -134,6 +134,11 @@ export function printEnvironmentStatus(): void {
     + Number(!!process.env.ESCROW_WALLET_B_PUBLIC_KEY && !!process.env.ESCROW_WALLET_B_PRIVATE_KEY)
     + Number(!!process.env.ESCROW_WALLET_C_PUBLIC_KEY && !!process.env.ESCROW_WALLET_C_PRIVATE_KEY);
   console.log(`   Escrow Wallets: ${escrowConfiguredCount}/3`);
+  console.log(`   Chain: ${process.env.CHAIN || 'solana'}`);
+  if ((process.env.CHAIN || 'solana').toLowerCase() === 'bsc') {
+    console.log(`   EVM RPC: ${process.env.NEXT_PUBLIC_EVM_RPC_URL || 'unset'}`);
+    console.log(`   ChainId: ${process.env.NEXT_PUBLIC_CHAIN_ID || 'unset'}`);
+  }
   console.log('\n');
 }
 

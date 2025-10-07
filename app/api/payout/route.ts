@@ -6,6 +6,9 @@ import { auditLogger } from '@/lib/audit-logger';
 import { monitoringService } from '@/lib/monitoring';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { isBsc, toNativeUnits } from '@/lib/chain';
+import { evmEscrowService } from '@/lib/evm-escrow-service';
+import { getEvmExplorerUrl } from '@/lib/evm-config';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -180,52 +183,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
     }
 
-    // --- TRANSACTION LOGIC USING ESCROW SERVICE ---
-    // Initialize escrow service with connection
-    const connection = getConnection();
-    escrowService.setConnection(connection);
-
-    // Get the SPECIFIC escrow wallet that holds funds for this match
-    let escrowWallet;
-    if (matchResult && matchResult.escrow_wallet_id) {
-      // Use the wallet that collected the wagers
-      escrowWallet = escrowService.getWallet(matchResult.escrow_wallet_id);
-      if (!escrowWallet) {
-        return NextResponse.json({ 
-          error: 'Escrow wallet not available',
-          details: `Wallet ${matchResult.escrow_wallet_id} is not configured`
-        }, { status: 500 });
-      }
-      console.log(`💰 Using Escrow Wallet ${escrowWallet.id} (same wallet that collected wagers)`);
+    // --- TRANSACTION LOGIC (Solana or BSC) ---
+    let winnerSignature = '';
+    let houseSignature = '';
+    if (isBsc()) {
+      const houseCutWei = BigInt(toNativeUnits((prizePoolLamports / LAMPORTS_PER_SOL) * houseCutPercentage));
+      const winnerCutWei = BigInt(toNativeUnits((prizePoolLamports / LAMPORTS_PER_SOL) - (prizePoolLamports / LAMPORTS_PER_SOL) * houseCutPercentage));
+      const walletId = matchResult?.escrow_wallet_id as any | undefined;
+      const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
+      // Fallback to next wallet if not found
+      const from = wallet || evmEscrowService.getNextWallet();
+      winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
+      houseSignature = await evmEscrowService.transferNative(houseWalletAddress, houseCutWei, from);
+      console.log(`✅ EVM payout successful`, { winnerSignature, houseSignature });
     } else {
-      // Fallback: get a wallet with sufficient balance (legacy behavior)
-      console.warn('⚠️  Match result missing escrow_wallet_id, using wallet with balance');
-      try {
+      const connection = getConnection();
+      escrowService.setConnection(connection);
+      let escrowWallet;
+      if (matchResult && matchResult.escrow_wallet_id) {
+        escrowWallet = escrowService.getWallet(matchResult.escrow_wallet_id);
+        if (!escrowWallet) {
+          return NextResponse.json({ error: 'Escrow wallet not available', details: `Wallet ${matchResult.escrow_wallet_id} is not configured` }, { status: 500 });
+        }
+      } else {
         escrowWallet = await escrowService.getWalletWithBalance(prizePoolLamports);
-      } catch (e) {
-        console.error('Payout attempted but no escrow wallet has sufficient balance.');
-        return NextResponse.json({ 
-          error: 'Insufficient escrow balance',
-          details: 'No escrow wallet has enough SOL for this payout'
-        }, { status: 500 });
       }
+      const houseCutLamports = Math.floor(prizePoolLamports * houseCutPercentage);
+      const winnerCutLamports = prizePoolLamports - houseCutLamports;
+      winnerSignature = await escrowService.transferSOL(winnerAddress, winnerCutLamports, escrowWallet);
+      houseSignature = await escrowService.transferSOL(houseWalletAddress, houseCutLamports, escrowWallet);
     }
-
-    // Calculate amounts
-    const houseCutLamports = Math.floor(prizePoolLamports * houseCutPercentage);
-    const winnerCutLamports = prizePoolLamports - houseCutLamports;
-
-    console.log(`💰 Processing payout from Wallet ${escrowWallet.id}: Winner: ${winnerCutLamports / LAMPORTS_PER_SOL} SOL, House: ${houseCutLamports / LAMPORTS_PER_SOL} SOL`);
-
-    // Transfer to winner
-    const winnerSignature = await escrowService.transferSOL(winnerAddress, winnerCutLamports, escrowWallet);
-
-    // Transfer to house
-    const houseSignature = await escrowService.transferSOL(houseWalletAddress, houseCutLamports, escrowWallet);
-
-    console.log(`✅ Payout successful!`);
-    console.log(`   Winner TX: ${winnerSignature}`);
-    console.log(`   House TX: ${houseSignature}`);
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
@@ -300,10 +287,9 @@ export async function POST(request: Request) {
       houseTransaction: houseSignature,
       winnerAmount: winnerCutLamports / LAMPORTS_PER_SOL,
       houseAmount: houseCutLamports / LAMPORTS_PER_SOL,
-      explorerUrls: {
-        winner: getExplorerUrl(winnerSignature),
-        house: getExplorerUrl(houseSignature),
-      },
+      explorerUrls: isBsc()
+        ? { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) }
+        : { winner: getExplorerUrl(winnerSignature), house: getExplorerUrl(houseSignature) },
     });
 
   } catch (error) {

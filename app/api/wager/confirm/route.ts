@@ -6,6 +6,8 @@ import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
+import { isBsc, toNativeUnits } from '@/lib/chain';
+import { getEvmProvider } from '@/lib/evm-config';
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -63,83 +65,75 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Signature already confirmed' }, { status: 409 });
     }
 
-    const connection = getConnection();
-    const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 });
-    if (!tx || !tx.transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 400 });
-    }
-
-    const expectedLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL);
-
-    // Get the SPECIFIC escrow wallet assigned to this lobby
-    // All players MUST send to the same wallet for this match
-    if (!lobby.escrowWalletId) {
-      await auditLogger.logSuspiciousActivity(
-        'Wager confirmation attempted for lobby without assigned escrow wallet',
-        playerPublicKey,
-        req.headers.get('x-forwarded-for') || undefined,
-        { lobbyId, signature }
-      );
-      return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
-    }
-
-    const expectedEscrowAddress = process.env[`ESCROW_WALLET_${lobby.escrowWalletId}_PUBLIC_KEY`];
-    if (!expectedEscrowAddress) {
-      console.error(`Escrow wallet ${lobby.escrowWalletId} not configured`);
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-    }
-
-    const expectedEscrowKey = new PublicKey(expectedEscrowAddress);
-    console.log(`🔍 Verifying transaction sent to Escrow Wallet ${lobby.escrowWalletId}: ${expectedEscrowAddress}`);
-
-    // Find transfer instruction matching (player -> escrow) for exact lamports
-    const ixs = tx.transaction.message.compiledInstructions || [];
-    let valid = false;
-    for (const ix of ixs) {
-      const prog = tx.transaction.message.staticAccountKeys[ix.programIdIndex]?.toBase58?.();
-      if (prog !== SystemProgram.programId.toBase58()) continue;
-      
-      if (!tx.meta) continue;
-      const accKeys = tx.transaction.message.staticAccountKeys;
-      const playerIdx = accKeys.findIndex(k => k.equals(playerKey));
-      if (playerIdx < 0) continue;
-      
-      const pre = tx.meta.preBalances[playerIdx];
-      const post = tx.meta.postBalances[playerIdx];
-      if (pre - post < expectedLamports) continue;
-      
-      // SECURITY: Verify the recipient is SPECIFICALLY the lobby's assigned escrow wallet
-      const recipientIdx = tx.meta.postBalances.findIndex((b, i) => 
-        i !== playerIdx && (b - tx.meta!.preBalances[i]) >= expectedLamports
-      );
-      
-      if (recipientIdx >= 0) {
-        const recipientKey = accKeys[recipientIdx];
-        const isCorrectEscrowWallet = recipientKey.equals(expectedEscrowKey);
-        
-        if (isCorrectEscrowWallet) {
-          valid = true;
-          console.log(`✅ Wager verified: ${playerPublicKey} -> Wallet ${lobby.escrowWalletId} (${expectedLamports / LAMPORTS_PER_SOL} SOL)`);
-          break;
-        } else {
-          console.warn(`⚠️ Transfer recipient ${recipientKey.toBase58()} is not the assigned escrow wallet ${lobby.escrowWalletId}`);
-          await auditLogger.logSuspiciousActivity(
-            'Wager sent to wrong escrow wallet',
-            playerPublicKey,
-            req.headers.get('x-forwarded-for') || undefined,
-            { 
-              lobbyId, 
-              expectedWallet: expectedEscrowAddress,
-              actualRecipient: recipientKey.toBase58(),
-              assignedWalletId: lobby.escrowWalletId
-            }
-          );
+    if (isBsc()) {
+      // EVM: signature = txHash
+      const provider = getEvmProvider();
+      const receipt = await provider.getTransactionReceipt(signature);
+      if (!receipt || receipt.status !== 1) {
+        return NextResponse.json({ error: 'Transaction not found or failed' }, { status: 400 });
+      }
+      const tx = await provider.getTransaction(signature);
+      if (!tx) {
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 400 });
+      }
+      // Basic checks
+      if (tx.from?.toLowerCase() !== playerPublicKey.toLowerCase()) {
+        return NextResponse.json({ error: 'Sender mismatch' }, { status: 400 });
+      }
+      if (!lobby.escrowWalletId) {
+        await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
+        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+      }
+      const expectedValue = BigInt(toNativeUnits(lobby.amount));
+      const envKey = `EVM_ESCROW_${lobby.escrowWalletId}_ADDRESS`;
+      const expectedEscrow = process.env[envKey];
+      if (!expectedEscrow) {
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+      }
+      if (tx.to?.toLowerCase() !== expectedEscrow.toLowerCase()) {
+        await auditLogger.logSuspiciousActivity('EVM wager to wrong escrow', playerPublicKey, undefined, { lobbyId, expectedEscrow, actual: tx.to });
+        return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
+      }
+      if (tx.value !== expectedValue) {
+        return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
+      }
+    } else {
+      const connection = getConnection();
+      const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 });
+      if (!tx || !tx.transaction) {
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 400 });
+      }
+      const expectedLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL);
+      if (!lobby.escrowWalletId) {
+        await auditLogger.logSuspiciousActivity('Wager confirmation attempted for lobby without assigned escrow wallet', playerPublicKey, req.headers.get('x-forwarded-for') || undefined, { lobbyId, signature });
+        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+      }
+      const expectedEscrowAddress = process.env[`ESCROW_WALLET_${lobby.escrowWalletId}_PUBLIC_KEY`];
+      if (!expectedEscrowAddress) {
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+      }
+      const expectedEscrowKey = new PublicKey(expectedEscrowAddress);
+      const ixs = tx.transaction.message.compiledInstructions || [];
+      let valid = false;
+      for (const ix of ixs) {
+        const prog = tx.transaction.message.staticAccountKeys[ix.programIdIndex]?.toBase58?.();
+        if (prog !== SystemProgram.programId.toBase58()) continue;
+        if (!tx.meta) continue;
+        const accKeys = tx.transaction.message.staticAccountKeys;
+        const playerIdx = accKeys.findIndex(k => k.equals(playerKey));
+        if (playerIdx < 0) continue;
+        const pre = tx.meta.preBalances[playerIdx];
+        const post = tx.meta.postBalances[playerIdx];
+        if (pre - post < expectedLamports) continue;
+        const recipientIdx = tx.meta.postBalances.findIndex((b, i) => i !== playerIdx && (b - tx.meta!.preBalances[i]) >= expectedLamports);
+        if (recipientIdx >= 0) {
+          const recipientKey = accKeys[recipientIdx];
+          if (recipientKey.equals(expectedEscrowKey)) { valid = true; break; }
         }
       }
-    }
-
-    if (!valid) {
-      return NextResponse.json({ error: 'Wager transaction not verified' }, { status: 400 });
+      if (!valid) {
+        return NextResponse.json({ error: 'Wager transaction not verified' }, { status: 400 });
+      }
     }
 
     // Mark signature as used (database-backed)
