@@ -84,7 +84,9 @@ async function getPlayerUsername(playerId: string): Promise<string> {
 
 function addAiPlayer(lobbyId: string) {
   const lobby = lobbies.find(l => l.id === lobbyId);
-  if (lobby && lobby.players.length < lobby.capacity) {
+  // Strict guard: AI only allowed in tutorial lobbies
+  if (!lobby || lobby.matchType !== 'tutorial') return;
+  if (lobby.players.length < lobby.capacity) {
     const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
     const randomName = aiNames[Math.floor(Math.random() * aiNames.length)];
     
@@ -151,18 +153,10 @@ function removeOneAiPlayer(lobby: any) {
   if (idx >= 0) lobby.players.splice(idx, 1)
 }
 
-async function ensureTutorialAIFilledToCapacity(lobby: any) {
+function ensureTutorialAIFilledToCapacity(lobby: any) {
   if (lobby.matchType !== 'tutorial') return
-  
-  // Add AI players one at a time with a 1-second delay for visual effect
-  const slotsToFill = lobby.capacity - lobby.players.length
-  for (let i = 0; i < slotsToFill; i++) {
-    // Stagger AI additions by 1 second each
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    // Re-check if slot is still needed (human might have joined)
-    if (lobby.players.length < lobby.capacity) {
-      addAiPlayer(lobby.id)
-    }
+  while (lobby.players.length < lobby.capacity) {
+    addAiPlayer(lobby.id)
   }
 }
 
@@ -196,24 +190,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (lobby.players.length >= lobby.capacity) {
-      if (lobby.matchType === 'tutorial' && lobby.players.some((p: any) => p.isAi)) {
+      if (lobby.matchType === 'tutorial') {
         // Free a slot by removing one AI to prioritize real player
-        const removedAi = lobby.players.find((p: any) => p.isAi);
-        removeOneAiPlayer(lobby);
-        console.log(`🤖➡️👤 Replaced AI player ${removedAi?.username || 'AI'} with human player in lobby ${lobbyId}`);
-        
-        // Broadcast AI removal
-        try {
-          const socketIo = await getSocketInstance();
-          if (socketIo && removedAi) {
-            socketIo.to(lobbyId).emit('player_left_lobby', {
-              playerId: removedAi.playerId,
-              username: removedAi.username,
-              isAi: true,
-              replacedByHuman: true
-            });
-          }
-        } catch {}
+        removeOneAiPlayer(lobby)
       } else {
         return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
       }
@@ -501,43 +480,31 @@ export async function PUT(req: NextRequest) {
     if (lobby.matchType === 'tutorial') {
       const hasReadyHuman = lobby.players.some(p => !p.isAi && Boolean(p.isReady));
       if (hasReadyHuman) {
-        // Fill remaining slots with AI now (async with delays)
-        // Don't await - let it run in background so humans can still join
-        ensureTutorialAIFilledToCapacity(lobby).then(async () => {
-          // After AI backfill completes, start countdown
-          lobby.status = 'starting';
-          try {
-            const socketIo = await getSocketInstance();
-            if (socketIo) {
-              // Broadcast final roster (with AI filled)
-              const lobbyPlayers = lobby.players.map(p => ({
-                playerId: p.playerId,
-                username: p.username || p.playerId.slice(0, 8) + '...',
-                chickenName: p.chickenId || 'Default',
-                isReady: p.isAi ? true : Boolean((p as any).isReady),
-                isAi: p.isAi || false,
-              }));
-              socketIo.to(lobbyId).emit('lobby_updated', {
-                id: lobbyId,
-                players: lobbyPlayers,
-                capacity: lobby.capacity,
-                amount: lobby.amount,
-                currency: lobby.currency,
-                matchType: lobby.matchType
-              });
-              // Emit countdown to start
-              let c = 5;
-              const t = setInterval(() => {
-                socketIo.to(lobbyId).emit('match_starting', { countdown: c });
-                c--;
-                if (c < 0) {
-                  clearInterval(t);
-                  socketIo.to(lobbyId).emit('match_started');
-                }
-              }, 1000);
-            }
-          } catch {}
-        });
+        // Fill remaining slots with AI now for visibility, but let socket server manage countdown
+        ensureTutorialAIFilledToCapacity(lobby);
+        lobby.status = 'starting';
+        try {
+          const socketIo = await getSocketInstance();
+          if (socketIo) {
+            // Broadcast updated roster (with AI filled)
+            const lobbyPlayers = lobby.players.map(p => ({
+              playerId: p.playerId,
+              username: p.username || p.playerId.slice(0, 8) + '...',
+              chickenName: p.chickenId || 'Default',
+              isReady: p.isAi ? true : Boolean((p as any).isReady),
+              isAi: p.isAi || false,
+            }));
+            socketIo.to(lobbyId).emit('lobby_updated', {
+              id: lobbyId,
+              players: lobbyPlayers,
+              capacity: lobby.capacity,
+              amount: lobby.amount,
+              currency: lobby.currency,
+              matchType: lobby.matchType
+            });
+            // Do NOT emit countdown here; let server.js apply pre-countdown delay and handle cancellation
+          }
+        } catch {}
       }
     } else {
       // Ranked: start only when everyone ready and min humans met

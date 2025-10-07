@@ -98,6 +98,14 @@ preparePromise.then(() => {
     global.readyTimers = Object.create(null);
   }
 
+  // Pre-countdown visibility timers and active countdown flags
+  if (!global.preCountdownTimers) {
+    global.preCountdownTimers = Object.create(null);
+  }
+  if (!global.countdownActive) {
+    global.countdownActive = Object.create(null);
+  }
+
   // Presence map: lobbyId -> Set of wallet addresses currently in the socket room
   if (!global.lobbyPresence) {
     global.lobbyPresence = new Map();
@@ -166,6 +174,14 @@ preparePromise.then(() => {
         
         console.log(`🏟️ Client ${socket.id} joining lobby room: ${lobbyId}`);
         socket.join(lobbyId);
+        // If a new client joins before countdown starts, cancel any pre-countdown delay
+        try {
+          if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+            clearTimeout(global.preCountdownTimers[lobbyId]);
+            delete global.preCountdownTimers[lobbyId];
+            console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} due to new join`);
+          }
+        } catch {}
         
         // Update connection data for this lobby
         if (connection) {
@@ -222,7 +238,8 @@ preparePromise.then(() => {
                 playerId: player.playerId,
                 username: player.username || player.playerId.slice(0, 8) + '...',
                 chickenName: player.chickenId || 'Default',
-                isReady: player.isAi ? true : isReady,
+                // AI auto-ready only in tutorial lobbies
+                isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
                 isAi: player.isAi || false
               };
             });
@@ -342,6 +359,15 @@ preparePromise.then(() => {
           playerId: socket.id,
           timestamp: Date.now()
         });
+
+        // If someone leaves before countdown starts, cancel any pre-countdown delay
+        try {
+          if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+            clearTimeout(global.preCountdownTimers[lobbyId]);
+            delete global.preCountdownTimers[lobbyId];
+            console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} due to leave`);
+          }
+        } catch {}
       }
     });
 
@@ -434,7 +460,8 @@ preparePromise.then(() => {
               playerId: player.playerId,
               username: player.username || player.playerId.slice(0, 8) + '...',
               chickenName: player.chickenId || 'Default',
-              isReady: player.isAi ? true : isReady, // AI players are always ready
+              // AI auto-ready only in tutorial lobbies
+              isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
               isAi: player.isAi || false
             };
           });
@@ -862,14 +889,15 @@ preparePromise.then(() => {
             playerId: player.playerId,
             username: player.username || player.playerId.slice(0, 8) + '...',
             chickenName: player.chickenId || 'Default',
-            isReady: player.isAi ? true : isReady, // AI players are always ready
+            // AI auto-ready only in tutorial lobbies
+            isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
             isAi: player.isAi || false
           };
         });
         
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
-        const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
+        const readyPlayers = lobbyPlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = lobbyPlayers.length >= minPlayers && 
                        readyPlayers.length === lobbyPlayers.length && hasHumanReady;
@@ -907,28 +935,57 @@ preparePromise.then(() => {
         
         console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${lobbyPlayers.length} ready (min: ${minPlayers})`);
         
-        if (allReady) {
-          console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
-          
-          // Start countdown
-          let countdown = 5;
-          const countdownInterval = setInterval(() => {
-            io.to(lobbyId).emit('match_starting', { countdown });
-            countdown--;
-            
-            if (countdown < 0) {
-              clearInterval(countdownInterval);
-              io.to(lobbyId).emit('match_started');
-              
-              // Clean up lobby connections
-              for (const [id, connection] of activeConnections.entries()) {
-                if (connection.currentLobby === lobbyId) {
-                  delete connection.currentLobby;
-                  connection.isReady = false;
-                }
-              }
+        if (!allReady) {
+          // If readiness dropped, cancel any scheduled pre-countdown
+          try {
+            if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+              clearTimeout(global.preCountdownTimers[lobbyId]);
+              delete global.preCountdownTimers[lobbyId];
+              console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} (not all ready anymore)`);
             }
-          }, 1000);
+          } catch {}
+        }
+
+        if (allReady) {
+          // If countdown already running or scheduled, do nothing
+          if (global.countdownActive && global.countdownActive[lobbyId]) {
+            return;
+          }
+          if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+            return;
+          }
+
+          // Schedule a short pre-countdown delay so the roster is visible
+          global.preCountdownTimers[lobbyId] = setTimeout(async () => {
+            try {
+              // Mark countdown active
+              if (!global.countdownActive) global.countdownActive = Object.create(null);
+              global.countdownActive[lobbyId] = true;
+            } catch {}
+
+            console.log(`🚀 Lobby ${lobbyId} starting countdown!`);
+            let countdown = 5;
+            const countdownInterval = setInterval(() => {
+              try { io.to(lobbyId).emit('match_starting', { countdown }); } catch {}
+              countdown--;
+              if (countdown < 0) {
+                clearInterval(countdownInterval);
+                try { io.to(lobbyId).emit('match_started'); } catch {}
+                // Clean up lobby connections
+                for (const [id, connection] of activeConnections.entries()) {
+                  if (connection.currentLobby === lobbyId) {
+                    delete connection.currentLobby;
+                    connection.isReady = false;
+                  }
+                }
+                // Clear active flag at the end
+                try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+              }
+            }, 1000);
+
+            // Clear the pre-countdown timer reference
+            try { if (global.preCountdownTimers) delete global.preCountdownTimers[lobbyId]; } catch {}
+          }, 1500); // 1.5s visibility delay
         }
       } else {
         // Fallback to socket-only method
