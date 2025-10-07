@@ -120,6 +120,27 @@ preparePromise.then(() => {
       if (connection) {
         connection.walletAddress = walletAddress;
         console.log(`✅ Wallet ${walletAddress} registered to socket ${socket.id}`);
+
+        // Guard: if there is an older socket with the same wallet, clean it up to avoid ghost presence
+        try {
+          for (const [otherId, otherConn] of activeConnections.entries()) {
+            if (otherId !== socket.id && otherConn.walletAddress === walletAddress) {
+              const oldLobby = otherConn.currentLobby;
+              console.log(`🧹 Cleaning prior socket ${otherId} for wallet ${walletAddress}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
+              // Broadcast leave from old lobby if any
+              if (oldLobby) {
+                io.to(oldLobby).emit('player_left_lobby', { playerId: walletAddress, timestamp: Date.now() });
+              }
+              // Ensure presence maps are cleared
+              if (oldLobby && global.lobbyPresence?.has(oldLobby)) {
+                global.lobbyPresence.get(oldLobby).delete(walletAddress);
+              }
+              // Disconnect the old socket to prevent duplicate ghosts
+              try { otherConn.socket?.disconnect?.(true); } catch {}
+              activeConnections.delete(otherId);
+            }
+          }
+        } catch {}
       }
     });
 
@@ -752,6 +773,34 @@ preparePromise.then(() => {
           if (global.lobbyPresence && global.lobbyPresence.has(connection.currentLobby)) {
             global.lobbyPresence.get(connection.currentLobby).delete(connection.walletAddress);
           }
+          // Regardless of API success, immediately notify lobby to remove this player in UI
+          try {
+            io.to(connection.currentLobby).emit('player_left_lobby', {
+              playerId: connection.walletAddress,
+              timestamp: Date.now(),
+            });
+            // Emit refreshed lobby state using socket-side presence as fallback
+            const fallbackPlayers = [];
+            for (const [, conn] of activeConnections.entries()) {
+              if (conn.currentLobby === connection.currentLobby && conn.walletAddress) {
+                fallbackPlayers.push({
+                  playerId: conn.walletAddress,
+                  username: conn.walletAddress.slice(0, 8) + '...',
+                  chickenName: 'Default',
+                  isReady: !!conn.isReady,
+                  isAi: false,
+                });
+              }
+            }
+            io.to(connection.currentLobby).emit('lobby_updated', {
+              id: connection.currentLobby,
+              players: fallbackPlayers,
+              capacity: 8,
+              amount: 0,
+              currency: 'FREE',
+              matchType: connection.currentLobby.includes('tutorial') ? 'tutorial' : 'ranked',
+            });
+          } catch {}
         }
       } catch {}
 
