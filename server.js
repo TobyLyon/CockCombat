@@ -127,15 +127,7 @@ preparePromise.then(() => {
             if (otherId !== socket.id && otherConn.walletAddress === walletAddress) {
               const oldLobby = otherConn.currentLobby;
               console.log(`🧹 Cleaning prior socket ${otherId} for wallet ${walletAddress}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
-              // Broadcast leave from old lobby if any
-              if (oldLobby) {
-                io.to(oldLobby).emit('player_left_lobby', { playerId: walletAddress, timestamp: Date.now() });
-              }
-              // Ensure presence maps are cleared
-              if (oldLobby && global.lobbyPresence?.has(oldLobby)) {
-                global.lobbyPresence.get(oldLobby).delete(walletAddress);
-              }
-              // Disconnect the old socket to prevent duplicate ghosts
+              // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal
               try { otherConn.socket?.disconnect?.(true); } catch {}
               activeConnections.delete(otherId);
             }
@@ -763,6 +755,16 @@ preparePromise.then(() => {
       try {
         const connection = activeConnections.get(socket.id);
         if (connection && connection.currentLobby && connection.walletAddress) {
+          // If another socket for the same wallet remains in the same lobby, skip removal
+          let sameWalletStillConnected = false;
+          for (const [id, conn] of activeConnections.entries()) {
+            if (id !== socket.id && conn.walletAddress === connection.walletAddress && conn.currentLobby === connection.currentLobby) {
+              sameWalletStillConnected = true;
+              break;
+            }
+          }
+
+          if (!sameWalletStillConnected) {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           fetch(`${baseUrl}/api/lobbies`, {
             method: 'DELETE',
@@ -773,34 +775,16 @@ preparePromise.then(() => {
           if (global.lobbyPresence && global.lobbyPresence.has(connection.currentLobby)) {
             global.lobbyPresence.get(connection.currentLobby).delete(connection.walletAddress);
           }
-          // Regardless of API success, immediately notify lobby to remove this player in UI
-          try {
-            io.to(connection.currentLobby).emit('player_left_lobby', {
-              playerId: connection.walletAddress,
-              timestamp: Date.now(),
-            });
-            // Emit refreshed lobby state using socket-side presence as fallback
-            const fallbackPlayers = [];
-            for (const [, conn] of activeConnections.entries()) {
-              if (conn.currentLobby === connection.currentLobby && conn.walletAddress) {
-                fallbackPlayers.push({
-                  playerId: conn.walletAddress,
-                  username: conn.walletAddress.slice(0, 8) + '...',
-                  chickenName: 'Default',
-                  isReady: !!conn.isReady,
-                  isAi: false,
-                });
-              }
-            }
-            io.to(connection.currentLobby).emit('lobby_updated', {
-              id: connection.currentLobby,
-              players: fallbackPlayers,
-              capacity: 8,
-              amount: 0,
-              currency: 'FREE',
-              matchType: connection.currentLobby.includes('tutorial') ? 'tutorial' : 'ranked',
-            });
-          } catch {}
+            // Notify others in lobby about leave
+            try {
+              io.to(connection.currentLobby).emit('player_left_lobby', {
+                playerId: connection.walletAddress,
+                timestamp: Date.now(),
+              });
+            } catch {}
+          } else {
+            console.log(`↩️ Skipping removal for ${connection.walletAddress}; another socket is still connected in lobby ${connection.currentLobby}`);
+          }
         }
       } catch {}
 
