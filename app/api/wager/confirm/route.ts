@@ -8,6 +8,7 @@ import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
 import { isBsc, toNativeUnits } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
+import { ethers } from 'ethers';
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -84,7 +85,7 @@ async function handleWagerConfirmation(req: NextRequest) {
         await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
         return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
       }
-      const expectedValue = BigInt(toNativeUnits(lobby.amount));
+      const expectedValue = ethers.parseUnits(lobby.amount.toString(), 18);
       const envKey = `EVM_ESCROW_${lobby.escrowWalletId}_ADDRESS`;
       const expectedEscrow = process.env[envKey];
       if (!expectedEscrow) {

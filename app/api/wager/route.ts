@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { isBsc, toNativeUnits } from '@/lib/chain';
 import { evmEscrowService } from '@/lib/evm-escrow-service';
 import { getEvmProvider } from '@/lib/evm-config';
+import { ethers } from 'ethers';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
         lobby.escrowWalletId = w.id;
       }
       const provider = getEvmProvider();
-      const valueWei = BigInt(toNativeUnits(lobby.amount));
+      const valueWei = ethers.parseUnits(lobby.amount.toString(), 18);
       // Client will sign and send this transaction; we just return target + value
       return NextResponse.json({
         chain: 'bsc',

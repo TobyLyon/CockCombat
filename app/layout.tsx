@@ -13,12 +13,13 @@ export const metadata = {
     shortcut: "/images/logo%202.png",
     apple: "/images/logo%202.png",
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-  },
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 }
 
 export default function RootLayout({

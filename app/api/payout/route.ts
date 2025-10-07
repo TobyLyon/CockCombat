@@ -6,9 +6,10 @@ import { auditLogger } from '@/lib/audit-logger';
 import { monitoringService } from '@/lib/monitoring';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { isBsc, toNativeUnits } from '@/lib/chain';
+import { isBsc } from '@/lib/chain';
 import { evmEscrowService } from '@/lib/evm-escrow-service';
 import { getEvmExplorerUrl } from '@/lib/evm-config';
+import { ethers } from 'ethers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -187,8 +188,9 @@ export async function POST(request: Request) {
     let winnerSignature = '';
     let houseSignature = '';
     if (isBsc()) {
-      const houseCutWei = BigInt(toNativeUnits((prizePoolLamports / LAMPORTS_PER_SOL) * houseCutPercentage));
-      const winnerCutWei = BigInt(toNativeUnits((prizePoolLamports / LAMPORTS_PER_SOL) - (prizePoolLamports / LAMPORTS_PER_SOL) * houseCutPercentage));
+      const poolSol = prizePoolLamports / LAMPORTS_PER_SOL;
+      const houseCutWei = ethers.parseUnits((poolSol * houseCutPercentage).toString(), 18);
+      const winnerCutWei = ethers.parseUnits((poolSol - poolSol * houseCutPercentage).toString(), 18);
       const walletId = matchResult?.escrow_wallet_id as any | undefined;
       const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
       // Fallback to next wallet if not found
