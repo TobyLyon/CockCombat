@@ -212,6 +212,26 @@ preparePromise.then(() => {
               currency: lobby.currency,
               matchType: lobby.matchType
             });
+
+            // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
+            try {
+              const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
+              const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
+              const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
+              const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
+              if (allReady && lobbyId.includes('tutorial')) {
+                // Emit only to this socket to avoid double-emitting to the entire room
+                let c = 2;
+                const t = setInterval(() => {
+                  socket.emit('match_starting', { countdown: c });
+                  c--;
+                  if (c < 0) {
+                    clearInterval(t);
+                    socket.emit('match_started');
+                  }
+                }, 1000);
+              }
+            } catch {}
             
           } else {
             // Fallback for lobbies not in HTTP API (shouldn't happen for tutorial)
@@ -532,6 +552,39 @@ preparePromise.then(() => {
             winner: result.winner,
             battleData: result 
           });
+
+          // Record match (best-effort) in Supabase for auditing/payout flows
+          try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (supabaseUrl && supabaseServiceKey) {
+              const { createClient } = require('@supabase/supabase-js');
+              const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+              const winnerConn = activeConnections.get(result.winner);
+              const player1Conn = activeConnections.get(room.player1Id);
+              const player2Conn = activeConnections.get(room.player2Id);
+
+              const winnerWallet = winnerConn?.walletAddress || null;
+              const player1Wallet = player1Conn?.walletAddress || null;
+              const player2Wallet = player2Conn?.walletAddress || null;
+
+              // Insert or upsert into legacy 'matches' table for compatibility
+              await supabase.from('matches').upsert({
+                id: roomId,
+                player1_wallet: player1Wallet,
+                player2_wallet: player2Wallet,
+                winner_wallet: winnerWallet,
+                metadata: {
+                  source: 'socket_server',
+                  started_at: room.startTime || Date.now(),
+                  ended_at: Date.now(),
+                },
+              }, { onConflict: 'id' });
+            }
+          } catch (e) {
+            console.error('⚠️ Failed to record match result:', e);
+          }
           
           // Clean up room and reset player statuses
           const player1 = activeConnections.get(room.player1Id);
