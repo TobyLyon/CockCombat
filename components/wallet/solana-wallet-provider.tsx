@@ -3,7 +3,6 @@
 import React, { FC, ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { LedgerWalletAdapter, TorusWalletAdapter } from "@solana/wallet-adapter-wallets";
 import { clusterApiUrl, Commitment } from "@solana/web3.js";
 
 // Import CSS directly instead of using require
@@ -70,54 +69,53 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
     confirmTransactionInitialTimeout: 60000, // 60 seconds
   }), []);
 
-  // Initialize wallet adapters with deduplication
-  const wallets = useMemo(() => {
-    console.log('🔧 Initializing wallet adapters for production wallets...');
+  // Initialize wallet adapters safely on client after mount
+  const [wallets, setWallets] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        console.log('🔧 Initializing wallet adapters for production wallets...');
+        const mod = await import('@solana/wallet-adapter-wallets');
+        const candidates: any[] = [
+          mod.PhantomWalletAdapter,
+          mod.SolflareWalletAdapter,
+          mod.BackpackWalletAdapter,
+          mod.CoinbaseWalletAdapter,
+          mod.GlowWalletAdapter,
+          mod.ExodusWalletAdapter,
+          mod.LedgerWalletAdapter,
+          mod.TorusWalletAdapter,
+        ].filter(Boolean);
 
-    // Lazy import to avoid bundling all adapters unnecessarily
-    const {
-      PhantomWalletAdapter,
-      SolflareWalletAdapter,
-      BackpackWalletAdapter,
-      CoinbaseWalletAdapter,
-      GlowWalletAdapter,
-      ExodusWalletAdapter,
-    } = require('@solana/wallet-adapter-wallets');
+        const instances: any[] = [];
+        for (const Adapter of candidates) {
+          try {
+            if (typeof Adapter === 'function') {
+              const inst = new (Adapter as any)();
+              if (inst && typeof inst === 'object') {
+                instances.push(inst);
+              }
+            }
+          } catch (e) {
+            // Skip adapters that fail to construct in this environment
+          }
+        }
 
-    const allWallets = [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new GlowWalletAdapter(),
-      new ExodusWalletAdapter(),
-      new LedgerWalletAdapter(),
-      new TorusWalletAdapter(),
-    ];
+        // Dedupe by name
+        const unique = instances.reduce((acc: any[], cur: any) => {
+          if (!acc.find((w) => w?.name === cur?.name)) acc.push(cur);
+          return acc;
+        }, [] as any[]);
 
-    const allowedWalletNames = new Set([
-      'Phantom',
-      'Solflare',
-      'Backpack',
-      'Coinbase',
-      'Glow',
-      'Exodus',
-      'Ledger',
-      'Torus',
-    ]);
-
-    const filteredWallets = allWallets.filter((wallet: any) => allowedWalletNames.has(wallet.name));
-
-    const uniqueWallets = filteredWallets.reduce((acc: any[], current: any) => {
-      if (!acc.find((item) => item.name === current.name)) {
-        acc.push(current);
+        if (!cancelled) setWallets(unique);
+      } catch (e) {
+        console.error('Wallet adapter initialization failed', e);
+        if (!cancelled) setWallets([]);
       }
-      return acc;
-    }, [] as any[]);
+    })();
 
-    console.log(`🔗 Wallet list:`, uniqueWallets.map(w => w.name));
-
-    return uniqueWallets;
+    return () => { cancelled = true };
   }, []);
 
   return (
