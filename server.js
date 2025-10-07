@@ -80,6 +80,11 @@ app.prepare().then(() => {
     global.readyTimers = Object.create(null);
   }
 
+  // Presence map: lobbyId -> Set of wallet addresses currently in the socket room
+  if (!global.lobbyPresence) {
+    global.lobbyPresence = new Map();
+  }
+
   // Socket.io connection handling
   io.on('connection', (socket) => {
     console.log(`✅ Client connected: ${socket.id}`);
@@ -134,6 +139,13 @@ app.prepare().then(() => {
         if (connection) {
           connection.currentLobby = lobbyId;
           connection.isReady = false;
+          // Track presence
+          if (connection.walletAddress) {
+            if (!global.lobbyPresence.has(lobbyId)) {
+              global.lobbyPresence.set(lobbyId, new Set());
+            }
+            global.lobbyPresence.get(lobbyId).add(connection.walletAddress);
+          }
         }
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
@@ -235,6 +247,10 @@ app.prepare().then(() => {
         if (connection) {
           connection.currentLobby = null;
           connection.isReady = false;
+          // Remove from presence
+          if (connection.walletAddress && global.lobbyPresence && global.lobbyPresence.has(lobbyId)) {
+            global.lobbyPresence.get(lobbyId).delete(connection.walletAddress);
+          }
         }
         
         // Clean up ready timer if this was the last player in a free lobby
@@ -597,6 +613,10 @@ app.prepare().then(() => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lobbyId: connection.currentLobby, playerId: connection.walletAddress })
           }).catch(() => {});
+          // Also update presence map
+          if (global.lobbyPresence && global.lobbyPresence.has(connection.currentLobby)) {
+            global.lobbyPresence.get(connection.currentLobby).delete(connection.walletAddress);
+          }
         }
       } catch {}
 
