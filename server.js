@@ -21,13 +21,31 @@ try {
   console.warn('⚠️  Could not validate environment:', error.message);
 }
 
-const dev = process.env.NODE_ENV !== 'production';
+const socketOnly = process.env.SOCKET_ONLY === 'true';
+const dev = socketOnly ? true : process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = process.env.PORT || 3000;
 
-// Create Next.js app
-const app = next({ dev, hostname, port });
-const handle = app.getRequestHandler();
+// Create request handler (Next.js in normal mode; stub in SOCKET_ONLY mode)
+let handle;
+let preparePromise;
+if (socketOnly) {
+  handle = async (req, res) => {
+    try {
+      // Minimal OK for health checks; real API is on Vercel
+      res.statusCode = 200;
+      res.end('ok');
+    } catch (e) {
+      res.statusCode = 500;
+      res.end('internal server error');
+    }
+  };
+  preparePromise = Promise.resolve();
+} else {
+  const app = next({ dev, hostname, port });
+  handle = app.getRequestHandler();
+  preparePromise = app.prepare();
+}
 
 // Active connections and game rooms
 const activeConnections = new Map();
@@ -40,7 +58,7 @@ global.gameRooms = gameRooms;
 const usernameCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-app.prepare().then(() => {
+preparePromise.then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
