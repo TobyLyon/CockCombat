@@ -444,3 +444,65 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(lobby);
   });
 }
+
+// API handler to set player ready status (HTTP fallback when sockets unavailable)
+export async function PUT(req: NextRequest) {
+  return withRateLimit(req, RATE_LIMITS.LOBBY, async () => {
+    const BodySchema = z.object({
+      lobbyId: z.string().min(3),
+      playerId: z.string().min(3),
+      isReady: z.boolean(),
+    });
+
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { lobbyId, playerId, isReady } = parsed.data;
+
+    const lobby = lobbies.find(l => l.id === lobbyId);
+    if (!lobby) {
+      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+    }
+
+    const player = lobby.players.find(p => p.playerId === playerId);
+    if (!player) {
+      return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+    }
+
+    player.isReady = isReady;
+
+    // Broadcast via Socket.IO if available
+    try {
+      const socketIo = await getSocketInstance();
+      if (socketIo) {
+        socketIo.to(lobbyId).emit('player_ready_status', { playerId, isReady });
+
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: p.isAi || false
+        }));
+        socketIo.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        });
+      }
+    } catch {}
+
+    // Update status if all ready (HTTP path)
+    const minPlayers = lobby.matchType === 'tutorial' ? 1 : 4;
+    const allReady = lobby.players.length >= minPlayers && lobby.players.every(p => (p.isAi ? true : Boolean(p.isReady)));
+    if (allReady && lobby.matchType !== 'tutorial') {
+      lobby.status = 'starting';
+    }
+
+    return NextResponse.json(lobby);
+  });
+}

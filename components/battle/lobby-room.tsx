@@ -323,11 +323,25 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const newReadyState = !isReady;
     console.log(`🎯 Setting ready state to ${newReadyState} for player ${id}`);
     setIsReady(newReadyState);
-    socket.emit('player_ready', {
-      lobbyId: lobby.id,
-      playerId: id,
-      isReady: newReadyState
-    });
+    // Optimistic update current player in UI list
+    setPlayers(prev => prev.map(p => p.playerId === id ? { ...p, isReady: newReadyState } : p));
+
+    // Try socket first; if not connected, fallback to HTTP PUT
+    if (isConnected) {
+      socket.emit('player_ready', {
+        lobbyId: lobby.id,
+        playerId: id,
+        isReady: newReadyState
+      });
+    } else {
+      try {
+        await fetch('/api/lobbies', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lobbyId: lobby.id, playerId: id, isReady: newReadyState })
+        })
+      } catch {}
+    }
   }
 
   const handleWagerTransaction = async () => {
