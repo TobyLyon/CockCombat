@@ -250,13 +250,22 @@ export default function BattleArena() {
       console.log('🐔 Assigned random chicken:', randomChicken);
 
       // Join the lobby (no wager transaction needed yet)
-      const guestIdGenerated = joiningAsGuest ? `guest_${Math.random().toString(36).slice(2, 10)}` : null;
+      // Reuse stable guest id across refreshes to avoid ghost players
+      let guestIdGenerated: string | null = null;
+      if (joiningAsGuest) {
+        try {
+          const existing = typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null;
+          guestIdGenerated = existing || `guest_${Math.random().toString(36).slice(2, 10)}`;
+        } catch {
+          guestIdGenerated = `guest_${Math.random().toString(36).slice(2, 10)}`;
+        }
+      }
       const joinResponse = await fetch('/api/lobbies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          playerId: joiningAsGuest ? guestIdGenerated : publicKey!.toBase58(),
+          playerId: joiningAsGuest ? guestIdGenerated! : publicKey!.toBase58(),
           chickenId: randomChicken,
         }),
       });

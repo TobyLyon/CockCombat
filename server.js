@@ -168,6 +168,16 @@ preparePromise.then(() => {
         
         // Update connection data for this lobby
         if (connection) {
+          // If this wallet was in a different lobby, proactively remove from that room and presence
+          if (connection.currentLobby && connection.currentLobby !== lobbyId && connection.walletAddress) {
+            try {
+              io.to(connection.currentLobby).emit('player_left_lobby', { playerId: connection.walletAddress, timestamp: Date.now() });
+              if (global.lobbyPresence?.has(connection.currentLobby)) {
+                global.lobbyPresence.get(connection.currentLobby).delete(connection.walletAddress);
+              }
+              socket.leave(connection.currentLobby);
+            } catch {}
+          }
           connection.currentLobby = lobbyId;
           connection.isReady = false;
           // Track presence
@@ -225,6 +235,8 @@ preparePromise.then(() => {
               currency: lobby.currency,
               matchType: lobby.matchType
             });
+            // Also send the same state directly to the joining socket to avoid race conditions
+            try { socket.emit('lobby_updated', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
 
             // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
             try {
