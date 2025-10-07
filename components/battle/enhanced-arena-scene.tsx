@@ -440,56 +440,25 @@ function SceneContent({
       wasPecking.current = true;
       if (playSound) { playSound("punch"); playSound("hit"); }
 
-      // Forward-arc hit detection using horizontal distance and facing angle
+      // Improved hit detection: use horizontal (XZ) distance and slightly larger reach
       if (playerRef.current) {
         const playerPos = new THREE.Vector3();
         playerRef.current.getWorldPosition(playerPos);
-
-        const forwardVector = new THREE.Vector3(
-          -Math.sin(selfRotation.y),
-          0,
-          -Math.cos(selfRotation.y)
-        ).normalize();
-
-        const hitRange = 3.0;
-        const maxAngleRad = THREE.MathUtils.degToRad(75); // Forward cone width
-        const heightTolerance = 1.0;
-
-        let bestOpponentId: string | null = null;
-        let bestScore = -Infinity;
-
         for (const opponent of opponents) {
           if (!opponent.position || !opponent.isAlive) continue;
+          const opponentPos = opponent.position instanceof THREE.Vector3 ? opponent.position.clone() : new THREE.Vector3().fromArray(opponent.position as number[]);
 
-          const opponentPos = opponent.position instanceof THREE.Vector3
-            ? opponent.position.clone()
-            : new THREE.Vector3().fromArray(opponent.position as number[]);
+          // Compute horizontal distance only to avoid Y glitches during jumps
+          const dx = playerPos.x - opponentPos.x;
+          const dz = playerPos.z - opponentPos.z;
+          const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
 
-          const toOpponent = new THREE.Vector3(
-            opponentPos.x - playerPos.x,
-            0,
-            opponentPos.z - playerPos.z
-          );
-          const horizontalDistance = toOpponent.length();
-          if (horizontalDistance > hitRange) continue;
-
-          const dirToOpponent = toOpponent.clone().normalize();
-          const dot = THREE.MathUtils.clamp(forwardVector.dot(dirToOpponent), -1, 1);
-          const angle = Math.acos(dot);
-          if (angle > maxAngleRad) continue;
-
-          const verticalDelta = Math.abs((opponentPos.y ?? 0.85) - (playerPos.y ?? 0.85));
-          if (verticalDelta > heightTolerance) continue;
-
-          const score = (hitRange - horizontalDistance) + (maxAngleRad - angle);
-          if (score > bestScore) {
-            bestScore = score;
-            bestOpponentId = opponent.id;
+          // Slightly increase reach to improve corner-angle registration
+          const peckReach = 3.4;
+          if (horizontalDistance <= peckReach) {
+            if (onPlayerDamage) onPlayerDamage(opponent.id, 1);
+            break;
           }
-        }
-
-        if (bestOpponentId && onPlayerDamage) {
-          onPlayerDamage(bestOpponentId, 1);
         }
       }
       setTimeout(() => setSelfIsPecking(false), 250); // Peck duration
