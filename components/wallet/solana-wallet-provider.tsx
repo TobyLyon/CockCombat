@@ -56,6 +56,10 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
   defaultNetwork = DEFAULT_NETWORK,
   autoConnect = false
 }) => {
+  // Avoid running on server during prerender (e.g., /_not-found)
+  if (typeof window === 'undefined') {
+    return <>{children}</> as any;
+  }
   // Get network configuration
   const network = NETWORKS[defaultNetwork] || NETWORKS.devnet;
   const endpoint = CUSTOM_RPC || network.endpoint;
