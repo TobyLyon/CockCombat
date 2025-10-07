@@ -38,11 +38,13 @@ export default function WaitingQueue({
   const lastCountRef = useRef<number>(0)
   const stableTicksRef = useRef<number>(0)
   // Expected participants captured at entry (humans + any AIs present at start)
-  const expectedCountRef = useRef<number>(() => {
-    const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
-    const initial = Array.isArray(lobby.players) ? lobby.players.length : 0
-    return Math.max(minPlayersRequired, initial)
-  }) as React.MutableRefObject<number>
+  // For tutorial: expect full capacity (AI will backfill).
+  // For ranked: expect at least min humans or the current lobby size at entry.
+  const expectedCountRef = useRef<number>(
+    lobby.matchType === 'tutorial'
+      ? lobby.capacity
+      : Math.max(4, Array.isArray(lobby.players) ? lobby.players.length : 0)
+  )
 
   useEffect(() => {
     // Poll the specific lobby for status updates
