@@ -192,7 +192,7 @@ preparePromise.then(() => {
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrl = `http://localhost:${port}`;
           const response = await fetch(`${baseUrl}/api/lobbies`);
           const lobbies = await response.json();
           const lobby = lobbies.find(l => l.id === lobbyId);
@@ -414,7 +414,7 @@ preparePromise.then(() => {
       }
       try {
         // Fetch lobby data from API to get real usernames and player list
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrl = `http://localhost:${port}`;
         const response = await fetch(`${baseUrl}/api/lobbies`);
         const lobbies = await response.json();
         const lobby = lobbies.find(l => l.id === lobbyId);
@@ -614,7 +614,7 @@ preparePromise.then(() => {
               try {
                 // Try to infer lobby from participants' last lobby or from room metadata (not stored here), so fallback to unknown
                 // Here we compute prize pool based on live lobby amounts if we can find a matching lobby; otherwise skip
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const baseUrl = `http://localhost:${port}`;
                 const lobbyRes = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
                 const lobbies = lobbyRes ? await lobbyRes.json().catch(() => []) : [];
                 // Find any ranked lobby with either player wallet present
@@ -765,45 +765,49 @@ preparePromise.then(() => {
     // Handle disconnect
     socket.on('disconnect', (reason) => {
       console.log(`❌ Client disconnected: ${socket.id}. Reason: ${reason}`);
-      
-      // Attempt to remove the player from their current lobby via API (keeps server state clean)
+
+      // Gracefully handle wallet handoff/reconnects: wait briefly before removing
       try {
         const connection = activeConnections.get(socket.id);
-        if (connection && connection.currentLobby && connection.walletAddress) {
-          // If another socket for the same wallet remains in the same lobby, skip removal
-          let sameWalletStillConnected = false;
-          for (const [id, conn] of activeConnections.entries()) {
-            if (id !== socket.id && conn.walletAddress === connection.walletAddress && conn.currentLobby === connection.currentLobby) {
-              sameWalletStillConnected = true;
-              break;
-            }
-          }
+        const lobbyAtDisconnect = connection?.currentLobby;
+        const walletAtDisconnect = connection?.walletAddress;
 
-          if (!sameWalletStillConnected) {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          fetch(`${baseUrl}/api/lobbies`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lobbyId: connection.currentLobby, playerId: connection.walletAddress })
-          }).catch(() => {});
-          // Also update presence map
-          if (global.lobbyPresence && global.lobbyPresence.has(connection.currentLobby)) {
-            global.lobbyPresence.get(connection.currentLobby).delete(connection.walletAddress);
-          }
+        const tryRemoveAfterGrace = () => {
+          try {
+            if (!lobbyAtDisconnect || !walletAtDisconnect) return;
+            // If any other socket with the same wallet is connected, skip removal
+            for (const [id, conn] of activeConnections.entries()) {
+              if (id !== socket.id && conn.walletAddress === walletAtDisconnect) {
+                console.log(`↩️ Handoff detected for ${walletAtDisconnect}; skipping removal from ${lobbyAtDisconnect}`);
+                return;
+              }
+            }
+
+            const baseUrl = `http://localhost:${port}`;
+            fetch(`${baseUrl}/api/lobbies`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lobbyId: lobbyAtDisconnect, playerId: walletAtDisconnect })
+            }).catch(() => {});
+            // Also update presence map
+            if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) {
+              global.lobbyPresence.get(lobbyAtDisconnect).delete(walletAtDisconnect);
+            }
             // Notify others in lobby about leave
             try {
-              io.to(connection.currentLobby).emit('player_left_lobby', {
-                playerId: connection.walletAddress,
+              io.to(lobbyAtDisconnect).emit('player_left_lobby', {
+                playerId: walletAtDisconnect,
                 timestamp: Date.now(),
               });
             } catch {}
-          } else {
-            console.log(`↩️ Skipping removal for ${connection.walletAddress}; another socket is still connected in lobby ${connection.currentLobby}`);
-          }
-        }
+          } catch {}
+        };
+
+        // Small grace period to allow immediate reconnection/handoff
+        setTimeout(tryRemoveAfterGrace, 1500);
       } catch {}
 
-      // Remove from active connections
+      // Remove this socket from active connections immediately; presence uses wallet map above
       activeConnections.delete(socket.id);
 
       // Check if player was in a game room
@@ -836,7 +840,7 @@ preparePromise.then(() => {
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {
       // Fetch lobby data from API to get the real player list
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+      const baseUrl = `http://localhost:${port}`;
       const response = await fetch(`${baseUrl}/api/lobbies`);
       const lobbies = await response.json();
       const lobby = lobbies.find(l => l.id === lobbyId);
@@ -874,7 +878,7 @@ preparePromise.then(() => {
         if (!lobbyId.includes('tutorial')) {
           try {
             // Fetch the live lobby from API to inspect hasWagered flags and escrow wallet
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const baseUrl = `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`);
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);

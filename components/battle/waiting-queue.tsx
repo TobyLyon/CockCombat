@@ -128,17 +128,11 @@ export default function WaitingQueue({
       try { playSound('button') } catch {}
       onStartBattle()
     }
-    const onArenaLoading = (data: { countdown: number }) => {
-      // show a short 3s overlay while arena textures load
-      setCountdown(typeof data?.countdown === 'number' ? data.countdown : null)
-    }
     socket.on('match_starting', onStarting)
     socket.on('match_started', onStarted)
-    socket.on('arena_loading', onArenaLoading)
     return () => {
       socket.off('match_starting', onStarting)
       socket.off('match_started', onStarted)
-      socket.off('arena_loading', onArenaLoading)
     }
   }, [socket, isConnected, onStartBattle, playSound])
 

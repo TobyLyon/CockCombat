@@ -154,7 +154,7 @@ export function useMultiplayer() {
 
   // Join matchmaking queue
   const joinQueue = useCallback(
-    (chickenData: any) => {
+    (chickenData: any = {}) => {
       if (!connected || !socket || !publicKey) {
         setError("Not connected to game server")
         return
@@ -167,6 +167,7 @@ export function useMultiplayer() {
         name: `Player_${publicKey.toString().slice(0, 6)}`,
         chicken: chickenData,
         walletAddress: publicKey.toString(),
+        lobbyId: chickenData?.lobbyId, // optional: propagate lobby context for ranked
       }
 
       // Join queue

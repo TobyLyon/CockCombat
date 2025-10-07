@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
     try {
       lobby.players = lobby.players.filter(p => p.playerId !== playerId);
     } catch {}
-
+    
     const player = { 
       playerId: playerId, 
       chickenId: actualChickenId, 
