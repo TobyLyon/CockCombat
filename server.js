@@ -156,15 +156,14 @@ app.prepare().then(() => {
             console.log(`🔄 Refreshing lobby state for all players in ${lobbyId}`);
             
             const lobbyPlayers = lobby.players.map(player => {
-              // Check ready status from socket connections
+              // Check ready status from socket connections PER PLAYER
               let isReady = false;
-              for (const [connectionId, conn] of activeConnections.entries()) {
-                if (conn.currentLobby === lobbyId) {
-                  isReady = conn.isReady || false;
+              for (const [, conn] of activeConnections.entries()) {
+                if (conn.currentLobby === lobbyId && conn.walletAddress === player.playerId) {
+                  isReady = !!conn.isReady;
                   break;
                 }
               }
-              
               return {
                 playerId: player.playerId,
                 username: player.username || player.playerId.slice(0, 8) + '...',
@@ -339,14 +338,12 @@ app.prepare().then(() => {
           const lobbyPlayers = lobby.players.map(player => {
             // Check if this player has a socket connection with ready status
             let isReady = false;
-            for (const [connectionId, connection] of activeConnections.entries()) {
-              if (connection.currentLobby === lobbyId && 
-                  (connection.walletAddress === player.playerId || connectionId === socket.id)) {
-                isReady = connection.isReady || false;
+            for (const [, connection] of activeConnections.entries()) {
+              if (connection.currentLobby === lobbyId && connection.walletAddress === player.playerId) {
+                isReady = !!connection.isReady;
                 break;
               }
             }
-            
             return {
               playerId: player.playerId,
               username: player.username || player.playerId.slice(0, 8) + '...',
