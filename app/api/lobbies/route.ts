@@ -146,6 +146,18 @@ function addAiPlayer(lobbyId: string) {
   }
 }
 
+function removeOneAiPlayer(lobby: any) {
+  const idx = lobby.players.findIndex((p: any) => p.isAi)
+  if (idx >= 0) lobby.players.splice(idx, 1)
+}
+
+function ensureTutorialAIFilledToCapacity(lobby: any) {
+  if (lobby.matchType !== 'tutorial') return
+  while (lobby.players.length < lobby.capacity) {
+    addAiPlayer(lobby.id)
+  }
+}
+
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
@@ -176,7 +188,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (lobby.players.length >= lobby.capacity) {
-      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+      if (lobby.matchType === 'tutorial') {
+        // Free a slot by removing one AI to prioritize real player
+        removeOneAiPlayer(lobby)
+      } else {
+        return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+      }
     }
 
     // Require authentication for non-tutorial lobbies
@@ -316,15 +333,13 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
-  // Tutorial lobbies: backfill ONLY up to minimum players (2) with AI
+    // Tutorial lobbies: fill remaining slots with AI (real players take priority and can replace AI)
   if (lobby.matchType === 'tutorial') {
     if (!lobbyTimers.has(lobbyId)) {
-      console.log(`⏳ Scheduling AI backfill (to min players) for tutorial lobby ${lobbyId}`);
+      console.log(`⏳ Scheduling AI backfill to capacity for tutorial lobby ${lobbyId}`);
       const timer = setTimeout(() => {
         try {
-          // Ensure we only fill to 2 total players (minRequired) for tutorial
-          const minRequired = 2;
-          while (lobby.players.length < minRequired) addAiPlayer(lobbyId);
+          ensureTutorialAIFilledToCapacity(lobby)
         } finally {
           lobbyTimers.delete(lobbyId);
         }
