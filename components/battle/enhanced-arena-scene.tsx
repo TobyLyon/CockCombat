@@ -632,6 +632,10 @@ function SceneContent({
   // ----- JSX to render the scene -----
   return (
     <>
+      {/* In-arena 3-second final countdown overlay */}
+      <Html center style={{ pointerEvents: 'none' }}>
+        <FinalArenaCountdown />
+      </Html>
       {/* Lights */}
       <ambientLight intensity={0.5} />
       <directionalLight 
@@ -697,6 +701,31 @@ function SceneContent({
       />
     </>
   );
+}
+
+// Simple 3s countdown shown in the arena when the battle scene first mounts
+function FinalArenaCountdown() {
+  const [value, setValue] = useState(3)
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    let v = 3
+    setValue(v)
+    const t = setInterval(() => {
+      v -= 1
+      setValue(v)
+      if (v <= 0) { clearInterval(t); setDone(true) }
+    }, 1000)
+    return () => clearInterval(t)
+  }, [])
+  if (done) return null
+  return (
+    <div className="pixel-font" style={{
+      position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
+      fontSize: '72px', color: '#FFD400', textShadow: '6px 6px 0 rgba(0,0,0,0.85)'
+    }}>
+      {value}
+    </div>
+  )
 }
 
 // BarbedWireFence component

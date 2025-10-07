@@ -109,12 +109,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       // Register the player identifier (wallet or guest id) with the socket
       socket.emit('register_wallet', id);
       
-      // Wait for server ack to prevent join race
-      const onAck = () => {
-        socket.off('wallet_registered', onAck)
-        socket.emit('join_lobby_room', lobby.id)
+      // Wait for wallet_registered ACK before joining room (prevents race)
+      const tryJoin = () => socket.emit('join_lobby_room', lobby.id);
+      const acked = (typeof window !== 'undefined') && (window as any).__socket_wallet_registered;
+      if (acked) {
+        tryJoin();
+      } else {
+        const ackListener = () => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }
+        socket.on?.('wallet_registered', ackListener as any)
+        // Safety timeout (500ms) to proceed even if ACK missed
+        setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }, 500)
       }
-      socket.on('wallet_registered', onAck)
       
       // Request current lobby state after joining
       const requestLobbyState = () => {
@@ -122,9 +127,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         socket.emit('get_lobby_state', lobby.id);
       };
       
-      // Request immediately and after delays to ensure join/backfill are complete
+      // Request immediately and after small delays to ensure join is complete
       requestLobbyState();
-      const stateTimer = setTimeout(requestLobbyState, 200);
+      const stateTimer = setTimeout(requestLobbyState, 300);
       const stateTimer2 = setTimeout(requestLobbyState, 900);
       
       // Also set a periodic refresh every 5 seconds to keep lobby in sync
@@ -132,6 +137,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
       return () => {
         clearTimeout(stateTimer);
+        clearTimeout(stateTimer2);
         clearInterval(refreshInterval);
         console.log(`🚪 Leaving lobby room: ${lobby.id}`);
         socket.emit('leave_lobby_room', lobby.id);

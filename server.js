@@ -120,6 +120,7 @@ preparePromise.then(() => {
       if (connection) {
         connection.walletAddress = walletAddress;
         console.log(`✅ Wallet ${walletAddress} registered to socket ${socket.id}`);
+        try { socket.emit('wallet_registered', { walletAddress }); } catch {}
 
         // Guard: if there is an older socket with the same wallet, clean it up to avoid ghost presence
         try {
@@ -133,9 +134,6 @@ preparePromise.then(() => {
             }
           }
         } catch {}
-
-        // Acknowledge registration so client can proceed to join the lobby room
-        try { socket.emit('wallet_registered', { ok: true }); } catch {}
       }
     });
 
@@ -240,6 +238,8 @@ preparePromise.then(() => {
             });
             // Also send the same state directly to the joining socket to avoid race conditions
             try { socket.emit('lobby_updated', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
+            // Handshake: confirm to the joiner that the lobby is synced
+            try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
 
             // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
             try {
@@ -906,7 +906,7 @@ preparePromise.then(() => {
         if (allReady) {
           console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
           
-          // Start initial lobby countdown
+          // Start countdown
           let countdown = 5;
           const countdownInterval = setInterval(() => {
             io.to(lobbyId).emit('match_starting', { countdown });
@@ -914,23 +914,15 @@ preparePromise.then(() => {
             
             if (countdown < 0) {
               clearInterval(countdownInterval);
-              // Emit a short arena-load countdown to allow textures to settle
-              let arenaCountdown = 3;
-              const arenaInterval = setInterval(() => {
-                io.to(lobbyId).emit('arena_loading', { countdown: arenaCountdown });
-                arenaCountdown--;
-                if (arenaCountdown < 0) {
-                  clearInterval(arenaInterval);
-                  io.to(lobbyId).emit('match_started');
-                  // Clean up lobby connections
-                  for (const [id, connection] of activeConnections.entries()) {
-                    if (connection.currentLobby === lobbyId) {
-                      delete connection.currentLobby;
-                      connection.isReady = false;
-                    }
-                  }
+              io.to(lobbyId).emit('match_started');
+              
+              // Clean up lobby connections
+              for (const [id, connection] of activeConnections.entries()) {
+                if (connection.currentLobby === lobbyId) {
+                  delete connection.currentLobby;
+                  connection.isReady = false;
                 }
-              }, 1000);
+              }
             }
           }, 1000);
         }

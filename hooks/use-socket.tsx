@@ -51,6 +51,14 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       setIsConnected(true);
     });
 
+    // Handshake ACKs
+    socketInstance.on('wallet_registered', () => {
+      try { (window as any).__socket_wallet_registered = true } catch {}
+    })
+    socketInstance.on('lobby_synced', (payload: any) => {
+      try { (window as any).__socket_lobby_synced = payload?.id || true } catch {}
+    })
+
     socketInstance.on('disconnect', () => {
       console.log('❌ Socket disconnected');
       setIsConnected(false);
