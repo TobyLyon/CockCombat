@@ -111,18 +111,8 @@ export default function NavBar() {
           aria-label="Music volume"
         />
         <span className="hidden sm:block text-sm text-yellow-100 w-10 md:w-12 text-right select-none font-medium">{Math.round(volume * 100)}%</span>
-      </div>
 
-      {/* Center - Title */}
-      <div className="flex basis-1/3 justify-center items-center">
-        <h1 className="text-2xl md:text-4xl font-bold pixel-font text-center text-yellow-400 drop-shadow-[3px_3px_0px_#000000] animate-pulse" style={{ animationDuration: '2s' }}>
-        {title}
-      </h1>
-      </div>
-
-      {/* Right side - Copy token (enhanced), Twitter, Balances, Wallet */}
-      <div className="flex basis-1/3 items-center justify-end gap-1 sm:gap-2 md:gap-3 min-w-0 flex-shrink-0">
-        {/* Copy Token - desktop sleeker pill */}
+        {/* Copy Token - moved to left group after music controls */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
           className={`hidden sm:inline-flex items-center gap-2 px-4 py-1 rounded-full border transition-colors duration-150 min-w-[180px] ${
@@ -151,6 +141,17 @@ export default function NavBar() {
         >
           {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-yellow-300" />}
         </button>
+      </div>
+
+      {/* Center - Title */}
+      <div className="flex basis-1/3 justify-center items-center">
+        <h1 className="text-2xl md:text-4xl font-bold pixel-font text-center text-yellow-400 drop-shadow-[3px_3px_0px_#000000] animate-pulse" style={{ animationDuration: '2s' }}>
+        {title}
+      </h1>
+      </div>
+
+      {/* Right side - Socials, Balances, Wallet */}
+      <div className="flex basis-1/3 items-center justify-end gap-1 sm:gap-2 md:gap-3 min-w-0 flex-shrink-0">
 
         {/* Twitter / X */}
         <a

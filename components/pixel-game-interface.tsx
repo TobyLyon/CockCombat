@@ -272,10 +272,15 @@ export default function PixelGameInterface() {
           style={{ width: '100%', height: '100%' }}
           dpr={[1, 1.5]}
           gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
-          onCreated={({ gl, events }) => {
+          onCreated={({ gl }) => {
             try {
-              const canvas = gl.getContext()?.canvas as HTMLCanvasElement | undefined
-              canvas?.addEventListener('webglcontextlost', (e) => e.preventDefault(), false)
+              const canvasEl = (gl as any)?.domElement as HTMLCanvasElement | undefined
+              if (canvasEl) {
+                const onLost = (e: any) => { try { e.preventDefault() } catch {} }
+                const onRestored = () => { try { (gl as any)?.resetState?.() } catch {} }
+                canvasEl.addEventListener('webglcontextlost', onLost, false)
+                canvasEl.addEventListener('webglcontextrestored', onRestored, false)
+              }
             } catch {}
           }}
           shadows
