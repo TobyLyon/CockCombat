@@ -252,9 +252,14 @@ export default function PixelGameInterface() {
     <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-b from-[#87CEEB] via-[#B0D4E3] to-[#E8F4F8] flex flex-col">
       {/* Epic Title */}
       <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
-        <h1 className="text-7xl md:text-8xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font">
-          COCK COMBAT
-        </h1>
+        <div className="relative inline-block">
+          <h1 className="text-7xl md:text-8xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font pr-10">
+            COCK COMBAT
+          </h1>
+          <span className="absolute -top-2 -right-1 md:-top-3 md:-right-2 bg-yellow-400 text-black border border-yellow-500 text-[10px] md:text-xs font-extrabold px-1.5 py-0.5 rounded leading-none shadow">
+            BETA
+          </span>
+        </div>
         <p className="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
           Battle Royale on Solana
         </p>
