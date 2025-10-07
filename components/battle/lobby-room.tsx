@@ -275,34 +275,30 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }, [isConnected, lobby.id])
 
-  // Initial lobby data setup - ensure current player is included, preserve AI readiness
+  // Initial lobby data setup - trust server list and dedupe by playerId
   useEffect(() => {
     const id = getCurrentPlayerId();
     if (id && lobbyData.players) {
-      const currentPlayerInLobby = lobbyData.players.find(p => p.playerId === id);
-      
-      if (currentPlayerInLobby || lobbyData.players.length) {
-        // Convert lobby players to display format, ensuring current player is included
-        const displayPlayers = lobbyData.players.map(player => ({
-          playerId: player.playerId,
-          username: player.username || player.playerId.slice(0, 8) + '...',
-          chickenName: player.chickenId || 'Default',
-          isReady: player.isAi ? true : Boolean((player as any).isReady),
-          isAi: player.isAi || false
-        }));
-        // Optimistic include of current player if not present yet
-        if (!displayPlayers.some(p => p.playerId === id)) {
-          displayPlayers.unshift({
-            playerId: id,
-            username: 'You',
-            chickenName: 'Default',
-            isReady: isReady,
-            isAi: false,
-          })
-        }
-        
+      if (lobbyData.players.length) {
+        // Convert and deduplicate
+        const seen = new Set<string>();
+        const displayPlayers = lobbyData.players.reduce((acc: LobbyPlayer[], player: any) => {
+          const pid = String(player.playerId);
+          if (!seen.has(pid)) {
+            seen.add(pid);
+            acc.push({
+              playerId: pid,
+              username: player.username || pid.slice(0, 8) + '...',
+              chickenName: player.chickenId || 'Default',
+              isReady: player.isAi ? true : Boolean((player as any).isReady),
+              isAi: !!player.isAi,
+            });
+          }
+          return acc;
+        }, []);
+
         setPlayers(displayPlayers);
-        console.log('🎯 Set initial players from lobby data:', displayPlayers);
+        console.log('🎯 Set initial players from lobby data (deduped):', displayPlayers);
       }
     }
   }, [publicKey, lobbyData, playerIdentifier]);

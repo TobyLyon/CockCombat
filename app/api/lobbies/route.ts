@@ -161,7 +161,14 @@ function ensureTutorialAIFilledToCapacity(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
-    // Do not clear tutorial lobbies automatically; keep state stable to avoid flicker
+    // Safety: keep tutorial lobby filled with AI so clients always see expected roster
+    try {
+      for (const lobby of lobbies) {
+        if (lobby.matchType === 'tutorial') {
+          ensureTutorialAIFilledToCapacity(lobby);
+        }
+      }
+    } catch {}
     return NextResponse.json(lobbies);
   });
 }
