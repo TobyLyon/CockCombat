@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -37,6 +37,12 @@ export default function WaitingQueue({
   // Track stable full-roster to auto-advance without asking users to ready again
   const lastCountRef = useRef<number>(0)
   const stableTicksRef = useRef<number>(0)
+  // Expected participants captured at entry (humans + any AIs present at start)
+  const expectedCountRef = useRef<number>(() => {
+    const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
+    const initial = Array.isArray(lobby.players) ? lobby.players.length : 0
+    return Math.max(minPlayersRequired, initial)
+  }) as React.MutableRefObject<number>
 
   useEffect(() => {
     // Poll the specific lobby for status updates
@@ -69,11 +75,12 @@ export default function WaitingQueue({
             setCountdown(updatedLobby.countdown);
           }
 
-          // Tutorial confirmation: once everyone is loaded (AI fills to capacity), auto-advance after brief stability
-          if (updatedLobby.matchType === 'tutorial') {
+          // Confirmation: for both tutorial and ranked, once roster reaches expected size and is stable, advance
+          {
             const currentCount = (updatedLobby.players || []).length
-            const atCapacity = currentCount === updatedLobby.capacity
-            if (atCapacity) {
+            const target = Math.min(updatedLobby.capacity, expectedCountRef.current)
+            const atTarget = currentCount >= target
+            if (atTarget) {
               if (lastCountRef.current === currentCount) {
                 stableTicksRef.current += 1
               } else {
