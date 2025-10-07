@@ -306,6 +306,10 @@ preparePromise.then(() => {
         connection.status = 'queued';
         connection.playerData = playerData;
         connection.joinedAt = Date.now();
+        // Persist wallet address if provided by client so we can map winners -> wallets
+        if (playerData && typeof playerData.walletAddress === 'string' && playerData.walletAddress.length > 0) {
+          connection.walletAddress = playerData.walletAddress;
+        }
         activeConnections.set(socket.id, connection);
       }
 

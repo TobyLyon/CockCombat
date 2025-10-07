@@ -46,7 +46,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
       if (isHumanWinner && publicKey && prizeAmount > 0) {
         setPayoutStatus('processing');
         try {
-          const response = await fetch('/api/payout', {
+          const response = await fetch('/api/payout/forward', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

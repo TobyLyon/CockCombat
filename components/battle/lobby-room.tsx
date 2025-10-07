@@ -411,6 +411,25 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
   const currentPlayer = players.find(p => p.playerId === getCurrentPlayerId())
 
+  // Fail-safe: for tutorial/free matches, if everyone is ready and we didn't
+  // receive a countdown (e.g., due to a dropped socket event), auto-advance.
+  useEffect(() => {
+    if (
+      lobby.matchType === 'tutorial' &&
+      allPlayersReady &&
+      (countdown === null || typeof countdown !== 'number')
+    ) {
+      // Debounce slightly to avoid racing against a late countdown event
+      const t = setTimeout(() => {
+        // Double-check still ready and no countdown
+        if (lobby.matchType === 'tutorial' && allPlayersReady && (countdown === null || typeof countdown !== 'number')) {
+          onStartMatch()
+        }
+      }, 500)
+      return () => clearTimeout(t)
+    }
+  }, [lobby.matchType, allPlayersReady, countdown, onStartMatch])
+
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
       {/* Countdown Overlay */}
