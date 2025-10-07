@@ -109,8 +109,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       // Register the player identifier (wallet or guest id) with the socket
       socket.emit('register_wallet', id);
       
-      // Then join the lobby room
-      socket.emit('join_lobby_room', lobby.id);
+      // Wait for server ack to prevent join race
+      const onAck = () => {
+        socket.off('wallet_registered', onAck)
+        socket.emit('join_lobby_room', lobby.id)
+      }
+      socket.on('wallet_registered', onAck)
       
       // Request current lobby state after joining
       const requestLobbyState = () => {
@@ -118,9 +122,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         socket.emit('get_lobby_state', lobby.id);
       };
       
-      // Request immediately and after a delay to ensure join is complete
+      // Request immediately and after delays to ensure join/backfill are complete
       requestLobbyState();
       const stateTimer = setTimeout(requestLobbyState, 200);
+      const stateTimer2 = setTimeout(requestLobbyState, 900);
       
       // Also set a periodic refresh every 5 seconds to keep lobby in sync
       const refreshInterval = setInterval(requestLobbyState, 5000);

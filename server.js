@@ -133,6 +133,9 @@ preparePromise.then(() => {
             }
           }
         } catch {}
+
+        // Acknowledge registration so client can proceed to join the lobby room
+        try { socket.emit('wallet_registered', { ok: true }); } catch {}
       }
     });
 
@@ -903,7 +906,7 @@ preparePromise.then(() => {
         if (allReady) {
           console.log(`🚀 Lobby ${lobbyId} is ready to start!`);
           
-          // Start countdown
+          // Start initial lobby countdown
           let countdown = 5;
           const countdownInterval = setInterval(() => {
             io.to(lobbyId).emit('match_starting', { countdown });
@@ -911,15 +914,23 @@ preparePromise.then(() => {
             
             if (countdown < 0) {
               clearInterval(countdownInterval);
-              io.to(lobbyId).emit('match_started');
-              
-              // Clean up lobby connections
-              for (const [id, connection] of activeConnections.entries()) {
-                if (connection.currentLobby === lobbyId) {
-                  delete connection.currentLobby;
-                  connection.isReady = false;
+              // Emit a short arena-load countdown to allow textures to settle
+              let arenaCountdown = 3;
+              const arenaInterval = setInterval(() => {
+                io.to(lobbyId).emit('arena_loading', { countdown: arenaCountdown });
+                arenaCountdown--;
+                if (arenaCountdown < 0) {
+                  clearInterval(arenaInterval);
+                  io.to(lobbyId).emit('match_started');
+                  // Clean up lobby connections
+                  for (const [id, connection] of activeConnections.entries()) {
+                    if (connection.currentLobby === lobbyId) {
+                      delete connection.currentLobby;
+                      connection.isReady = false;
+                    }
+                  }
                 }
-              }
+              }, 1000);
             }
           }, 1000);
         }
