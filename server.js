@@ -246,7 +246,7 @@ preparePromise.then(() => {
               const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
               if (allReady && lobbyId.includes('tutorial')) {
                 // Emit only to this socket to avoid double-emitting to the entire room
-                let c = 2;
+                let c = 5;
                 const t = setInterval(() => {
                   socket.emit('match_starting', { countdown: c });
                   c--;
