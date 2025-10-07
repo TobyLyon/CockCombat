@@ -161,18 +161,7 @@ function ensureTutorialAIFilledToCapacity(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
-    // Auto-sanitize tutorial lobbies: if no humans, clear AI and reset status
-    try {
-      for (const lobby of lobbies) {
-        if ((lobby as any)?.matchType === 'tutorial') {
-          const hasHuman = (lobby.players || []).some(p => !p.isAi);
-          if (!hasHuman && lobby.players.length > 0) {
-            lobby.players = [];
-            lobby.status = 'open';
-          }
-        }
-      }
-    } catch {}
+    // Do not clear tutorial lobbies automatically; keep state stable to avoid flicker
     return NextResponse.json(lobbies);
   });
 }
@@ -264,6 +253,11 @@ export async function POST(req: NextRequest) {
     // Get the player's username
     const username = await getPlayerUsername(playerId);
     
+    // De-duplicate any prior entry for this player in this lobby
+    try {
+      lobby.players = lobby.players.filter(p => p.playerId !== playerId);
+    } catch {}
+
     const player = { 
       playerId: playerId, 
       chickenId: actualChickenId, 
