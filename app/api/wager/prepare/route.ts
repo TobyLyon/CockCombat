@@ -48,7 +48,17 @@ export async function POST(req: NextRequest) {
     // Get connection and escrow wallet
     const connection = getConnection();
     escrowService.setConnection(connection);
-    const escrowWallet = await escrowService.getNextWallet();
+    // All players in a lobby must use the same escrow wallet; if assigned, reuse it
+    let escrowWallet;
+    if (lobby.escrowWalletId) {
+      escrowWallet = escrowService.getWallet(lobby.escrowWalletId as any);
+      if (!escrowWallet) {
+        return NextResponse.json({ error: 'Escrow wallet not available', details: `Wallet ${lobby.escrowWalletId} not configured` }, { status: 500 });
+      }
+    } else {
+      escrowWallet = await escrowService.getNextWallet();
+      lobby.escrowWalletId = escrowWallet.id;
+    }
 
     const playerPubkey = new PublicKey(session.user.id);
 

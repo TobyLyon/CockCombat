@@ -130,7 +130,10 @@ export function printEnvironmentStatus(): void {
   console.log(`   Network: ${process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet'}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   House Cut: ${(parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04') * 100).toFixed(1)}%`);
-  console.log(`   Escrow Wallets: ${[hasWalletA, hasWalletB, hasWalletC].filter(Boolean).length}/3`);
+  const escrowConfiguredCount = Number(!!process.env.ESCROW_WALLET_A_PUBLIC_KEY && !!process.env.ESCROW_WALLET_A_PRIVATE_KEY)
+    + Number(!!process.env.ESCROW_WALLET_B_PUBLIC_KEY && !!process.env.ESCROW_WALLET_B_PRIVATE_KEY)
+    + Number(!!process.env.ESCROW_WALLET_C_PUBLIC_KEY && !!process.env.ESCROW_WALLET_C_PRIVATE_KEY);
+  console.log(`   Escrow Wallets: ${escrowConfiguredCount}/3`);
   console.log('\n');
 }
 

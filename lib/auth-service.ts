@@ -6,7 +6,7 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import { sign } from '@noble/ed25519';
+import { verify as ed25519Verify } from '@noble/ed25519';
 import { createClient } from '@supabase/supabase-js';
 import bs58 from 'bs58';
 
@@ -90,7 +90,7 @@ class AuthService {
       const messageBytes = new TextEncoder().encode(message);
       
       // Verify the signature using ed25519
-      const isValid = await sign.verify(signatureBytes, messageBytes, publicKey.toBytes());
+      const isValid = await ed25519Verify(signatureBytes, messageBytes, publicKey.toBytes());
       
       return isValid;
     } catch (error) {
