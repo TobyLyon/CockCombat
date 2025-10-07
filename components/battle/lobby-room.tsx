@@ -177,7 +177,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       // Update players list with the lobby data
       if (updatedLobby.players) {
         console.log('Setting players:', updatedLobby.players);
-        setPlayers(updatedLobby.players);
+        // Map to display format (no client placeholders)
+        const mapped: LobbyPlayer[] = updatedLobby.players.map((p: any) => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: !!p.isAi,
+        }))
+        setPlayers(mapped);
       }
     };
 

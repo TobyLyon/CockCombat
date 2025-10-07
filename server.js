@@ -192,7 +192,7 @@ preparePromise.then(() => {
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
         try {
-          const baseUrl = `http://localhost:${port}`;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           const response = await fetch(`${baseUrl}/api/lobbies`);
           const lobbies = await response.json();
           const lobby = lobbies.find(l => l.id === lobbyId);
@@ -414,7 +414,7 @@ preparePromise.then(() => {
       }
       try {
         // Fetch lobby data from API to get real usernames and player list
-          const baseUrl = `http://localhost:${port}`;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
         const response = await fetch(`${baseUrl}/api/lobbies`);
         const lobbies = await response.json();
         const lobby = lobbies.find(l => l.id === lobbyId);
@@ -614,7 +614,7 @@ preparePromise.then(() => {
               try {
                 // Try to infer lobby from participants' last lobby or from room metadata (not stored here), so fallback to unknown
                 // Here we compute prize pool based on live lobby amounts if we can find a matching lobby; otherwise skip
-                const baseUrl = `http://localhost:${port}`;
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
                 const lobbyRes = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
                 const lobbies = lobbyRes ? await lobbyRes.json().catch(() => []) : [];
                 // Find any ranked lobby with either player wallet present
@@ -639,7 +639,7 @@ preparePromise.then(() => {
                   }).select('id').single();
                   if (!mrErr && mr?.id) {
                     // Trigger payout via internal API with server secret
-                    const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${`http://localhost:${port}`}/api/payout`;
+                    const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${(process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`)}/api/payout`;
                     const serverSecret = process.env.PAYOUT_SERVER_SECRET;
                     if (serverSecret) {
                       const res = await fetch(payoutUrl, {
@@ -783,7 +783,7 @@ preparePromise.then(() => {
               }
             }
 
-            const baseUrl = `http://localhost:${port}`;
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             fetch(`${baseUrl}/api/lobbies`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
@@ -840,7 +840,7 @@ preparePromise.then(() => {
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {
       // Fetch lobby data from API to get the real player list
-      const baseUrl = `http://localhost:${port}`;
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
       const response = await fetch(`${baseUrl}/api/lobbies`);
       const lobbies = await response.json();
       const lobby = lobbies.find(l => l.id === lobbyId);
@@ -878,7 +878,7 @@ preparePromise.then(() => {
         if (!lobbyId.includes('tutorial')) {
           try {
             // Fetch the live lobby from API to inspect hasWagered flags and escrow wallet
-            const baseUrl = `http://localhost:${port}`;
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`);
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);
