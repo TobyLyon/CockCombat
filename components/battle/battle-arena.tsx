@@ -16,7 +16,7 @@ import BattleHUD from './battle-hud';
 import GameOver from './game-over';
 import WinnerCelebration from './winner-celebration';
 import { useGameState, GameState } from "@/contexts/GameStateContext"
-import { Lobby } from "@/app/api/lobbies/route";
+import { Lobby } from "@/lib/lobbies";
 import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
 import ArenaBackground from "./arena-background"

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Gamepad2 } from "lucide-react"
-import { Lobby } from "@/app/api/lobbies/route"
+import { Lobby } from "@/lib/lobbies"
 
 export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onMatchFound }) {
   const { connectionStatus, inQueue, inBattle, opponent, gameState, queueTime, joinQueue, leaveQueue, error } =

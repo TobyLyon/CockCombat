@@ -27,6 +27,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
     const isProd = process.env.NODE_ENV === 'production';
+    // Allow polling fallback in prod if websocket hard-fails
     const transports = isProd ? ['websocket'] : ['polling', 'websocket'];
 
     // Attempt connection with configured path; if it errors with 404, retry with default '/socket.io'
@@ -65,10 +66,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
       setIsConnected(false);
 
-      // If we get 404 against the primary custom path, try the default Socket.IO path once
+      // If we get 404 or persistent websocket error against the primary custom path, try default '/socket.io' and enable polling
       const is404 = (error && (error as any).description === 404) || /404/i.test(String((error as any)?.message || ''));
+      const isWsErr = /websocket error/i.test(String((error as any)?.message || ''));
       const usedPrimary = (socketInstance.io.opts.path === primaryPath);
-      if (is404 && usedPrimary) {
+      if ((is404 || isWsErr) && usedPrimary) {
         try {
           console.log('🔁 Retrying Socket.io with fallback path', fallbackPath);
           socketInstance.off();
@@ -77,7 +79,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         socketInstance = io(socketUrl, {
           path: fallbackPath,
           addTrailingSlash: false,
-          transports,
+          transports: ['polling','websocket'],
           reconnection: true,
           reconnectionAttempts: 10,
           reconnectionDelay: 1000,

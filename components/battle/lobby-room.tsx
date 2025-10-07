@@ -8,7 +8,7 @@ import { useSocket } from "@/hooks/use-socket"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Lobby } from "@/app/api/lobbies/route"
+import { Lobby } from "@/lib/lobbies"
 import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { toast } from "sonner"
 
@@ -264,7 +264,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }, [isConnected, lobby.id])
 
-  // Initial lobby data setup - ensure current player is included
+  // Initial lobby data setup - ensure current player is included, preserve AI readiness
   useEffect(() => {
     const id = getCurrentPlayerId();
     if (id && lobbyData.players) {
@@ -276,7 +276,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           playerId: player.playerId,
           username: player.username || player.playerId.slice(0, 8) + '...',
           chickenName: player.chickenId || 'Default',
-          isReady: false,
+          isReady: player.isAi ? true : Boolean((player as any).isReady),
           isAi: player.isAi || false
         }));
         

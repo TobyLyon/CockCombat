@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Clock, Users, Trophy, AlertCircle, Loader2, Check } from "lucide-react"
 import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/utils"
-import { Lobby } from "@/app/api/lobbies/route"
+import { Lobby } from "@/lib/lobbies"
 
 interface WaitingQueueProps {
   lobby: Lobby;

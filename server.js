@@ -75,6 +75,11 @@ app.prepare().then(() => {
 
   console.log('🚀 Socket.io server initialized');
 
+  // Initialize global readyTimers map used by tutorial lobby countdowns
+  if (!global.readyTimers) {
+    global.readyTimers = Object.create(null);
+  }
+
   // Socket.io connection handling
   io.on('connection', (socket) => {
     console.log(`✅ Client connected: ${socket.id}`);
