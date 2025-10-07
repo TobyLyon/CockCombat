@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, Users, Trophy, AlertCircle, Loader2, Check } from "lucide-react"
 import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/utils"
 import { Lobby } from "@/lib/lobbies"
+import { useSocket } from "@/hooks/use-socket"
 
 interface WaitingQueueProps {
   lobby: Lobby;
@@ -29,9 +30,13 @@ export default function WaitingQueue({
   playSound,
 }: WaitingQueueProps) {
   const { publicKey } = useWallet()
+  const { socket, isConnected } = useSocket()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
+  // Track stable full-roster to auto-advance without asking users to ready again
+  const lastCountRef = useRef<number>(0)
+  const stableTicksRef = useRef<number>(0)
 
   useEffect(() => {
     // Poll the specific lobby for status updates
@@ -63,6 +68,30 @@ export default function WaitingQueue({
           if (updatedLobby.countdown && updatedLobby.countdown > 0) {
             setCountdown(updatedLobby.countdown);
           }
+
+          // Tutorial confirmation: once everyone is loaded (AI fills to capacity), auto-advance after brief stability
+          if (updatedLobby.matchType === 'tutorial') {
+            const currentCount = (updatedLobby.players || []).length
+            const atCapacity = currentCount === updatedLobby.capacity
+            if (atCapacity) {
+              if (lastCountRef.current === currentCount) {
+                stableTicksRef.current += 1
+              } else {
+                stableTicksRef.current = 1
+                lastCountRef.current = currentCount
+              }
+              // Two stable polls (~4s) indicates fully loaded and stable
+              if (stableTicksRef.current >= 2) {
+                try { playSound('button') } catch {}
+                onStartBattle()
+                clearInterval(interval)
+              }
+            } else {
+              // Reset if roster not full yet
+              stableTicksRef.current = 0
+              lastCountRef.current = currentCount
+            }
+          }
         }
       } catch (error) {
         console.error("Error polling for lobby status:", error);
@@ -81,6 +110,37 @@ export default function WaitingQueue({
       return () => clearTimeout(timer)
     }
   }, [countdown])
+
+  // Listen to socket server signals to advance immediately
+  useEffect(() => {
+    if (!socket) return
+    const onStarting = (data: { countdown: number }) => setCountdown(typeof data?.countdown === 'number' ? data.countdown : null)
+    const onStarted = () => {
+      try { playSound('button') } catch {}
+      onStartBattle()
+    }
+    socket.on('match_starting', onStarting)
+    socket.on('match_started', onStarted)
+    return () => {
+      socket.off('match_starting', onStarting)
+      socket.off('match_started', onStarted)
+    }
+  }, [socket, isConnected, onStartBattle, playSound])
+
+  // Ensure we are in the lobby room while on the waiting screen
+  useEffect(() => {
+    if (!socket || !isConnected) return
+    // register wallet/guest id
+    try {
+      const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+      if (id) socket.emit('register_wallet', id)
+    } catch {}
+    socket.emit('join_lobby_room', lobby.id)
+    socket.emit('get_lobby_state', lobby.id)
+    return () => {
+      socket.emit('leave_lobby_room', lobby.id)
+    }
+  }, [socket, isConnected, lobby.id, publicKey])
 
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
