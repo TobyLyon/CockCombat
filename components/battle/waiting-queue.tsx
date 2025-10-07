@@ -136,6 +136,64 @@ export default function WaitingQueue({
     }
   }, [socket, isConnected, onStartBattle, playSound])
 
+  // Listen for lobby roster updates over socket (server truth), with refresh requests
+  useEffect(() => {
+    if (!socket || !isConnected) return
+
+    const onLobbyUpdated = (payload: any) => {
+      console.log('[WaitingQueue] lobby_updated received:', payload)
+      if (!payload || payload.id !== lobby.id) {
+        console.log('[WaitingQueue] Ignoring lobby_updated - wrong lobby or no payload', { payloadId: payload?.id, expectedId: lobby.id })
+        return
+      }
+      // Merge only the fields we expect; keep existing fields like highRoller/status
+      setCurrentLobby(prev => ({
+        ...prev,
+        players: Array.isArray(payload.players) ? payload.players : prev.players,
+        capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
+        amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
+        currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
+        matchType: (payload.matchType as any) || prev.matchType,
+      }))
+      // Recompute readiness state
+      const playersArr = Array.isArray(payload.players) ? payload.players : currentLobby.players
+      const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
+      const hasEnoughPlayers = (playersArr || []).length >= minPlayersRequired
+      const allReadyNow = hasEnoughPlayers && (playersArr || []).every((p: any) => p.isReady || p.isAi)
+      setAllPlayersReady(allReadyNow)
+      console.log('[WaitingQueue] Updated currentLobby players:', playersArr?.length || 0)
+    }
+
+    const onLobbySync = (payload: any) => {
+      console.log('[WaitingQueue] lobby_synced received:', payload)
+      if (!payload || payload.id !== lobby.id) return
+      setCurrentLobby(prev => ({
+        ...prev,
+        players: Array.isArray(payload.players) ? payload.players : prev.players,
+        capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
+        amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
+        currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
+        matchType: (payload.matchType as any) || prev.matchType,
+      }))
+      console.log('[WaitingQueue] Synced currentLobby players:', payload.players?.length || 0)
+    }
+
+    const onRefreshLobbyState = () => {
+      console.log('[WaitingQueue] refresh_lobby_state requested, emitting get_lobby_state')
+      socket.emit('get_lobby_state', lobby.id)
+    }
+
+    socket.on('lobby_updated', onLobbyUpdated)
+    socket.on('lobby_synced', onLobbySync)
+    socket.on('refresh_lobby_state', onRefreshLobbyState)
+
+    return () => {
+      socket.off('lobby_updated', onLobbyUpdated)
+      socket.off('lobby_synced', onLobbySync)
+      socket.off('refresh_lobby_state', onRefreshLobbyState)
+    }
+  }, [socket, isConnected, lobby.id, lobby.matchType, currentLobby.players])
+
   // Ensure we are in the lobby room while on the waiting screen
   useEffect(() => {
     if (!socket || !isConnected) return

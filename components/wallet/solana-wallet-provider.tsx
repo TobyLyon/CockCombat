@@ -43,6 +43,7 @@ const NETWORKS: { [key: string]: NetworkConfigType } = {
 
 // Default to devnet for development, change to mainnet-beta for production
 const DEFAULT_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet";
+const CUSTOM_RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || null;
 
 export interface SolanaWalletProviderProps {
   children: ReactNode;
@@ -57,6 +58,7 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
 }) => {
   // Get network configuration
   const network = NETWORKS[defaultNetwork] || NETWORKS.devnet;
+  const endpoint = CUSTOM_RPC || network.endpoint;
   
   // Connection config with better reliability
   const connectionConfig = useMemo(() => ({
@@ -66,38 +68,56 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
 
   // Initialize wallet adapters with deduplication
   const wallets = useMemo(() => {
-    console.log('🔧 Re-initializing wallet adapters with more aggressive filtering...');
-    
+    console.log('🔧 Initializing wallet adapters for production wallets...');
+
+    // Lazy import to avoid bundling all adapters unnecessarily
+    const {
+      PhantomWalletAdapter,
+      SolflareWalletAdapter,
+      BackpackWalletAdapter,
+      CoinbaseWalletAdapter,
+      GlowWalletAdapter,
+      ExodusWalletAdapter,
+    } = require('@solana/wallet-adapter-wallets');
+
     const allWallets = [
-      // Phantom is a Standard Wallet; it injects itself. Avoid double registration in UI.
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new BackpackWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      new GlowWalletAdapter(),
+      new ExodusWalletAdapter(),
       new LedgerWalletAdapter(),
       new TorusWalletAdapter(),
     ];
 
-    console.log('📦 Created base wallet adapter instances:', allWallets.map(w => w.name));
+    const allowedWalletNames = new Set([
+      'Phantom',
+      'Solflare',
+      'Backpack',
+      'Coinbase',
+      'Glow',
+      'Exodus',
+      'Ledger',
+      'Torus',
+    ]);
 
-    const allowedWalletNames = new Set(['Ledger', 'Torus']);
-    
-    const filteredWallets = allWallets.filter(wallet => {
-      const isAllowed = allowedWalletNames.has(wallet.name);
-      console.log(`${isAllowed ? '✅' : '🚫'} Filtering: ${wallet.name} is ${isAllowed ? 'ALLOWED' : 'DENIED'}`);
-      return isAllowed;
-    });
+    const filteredWallets = allWallets.filter((wallet: any) => allowedWalletNames.has(wallet.name));
 
-    const uniqueWallets = filteredWallets.reduce((acc, current) => {
-        if (!acc.find((item) => item.name === current.name)) {
-            acc.push(current);
-        }
-        return acc;
+    const uniqueWallets = filteredWallets.reduce((acc: any[], current: any) => {
+      if (!acc.find((item) => item.name === current.name)) {
+        acc.push(current);
+      }
+      return acc;
     }, [] as any[]);
 
-    console.log(`🔗 Final unique wallet list contains ${uniqueWallets.length} wallet(s):`, uniqueWallets.map(w => w.name));
+    console.log(`🔗 Wallet list:`, uniqueWallets.map(w => w.name));
 
     return uniqueWallets;
   }, []);
 
   return (
-    <ConnectionProvider endpoint={network.endpoint} config={connectionConfig}>
+    <ConnectionProvider endpoint={endpoint} config={connectionConfig}>
       <WalletProvider 
         wallets={wallets} 
         autoConnect={autoConnect}

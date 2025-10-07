@@ -24,10 +24,20 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
+  // Disable experimental features that cause hangs with Three.js
+  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
+  webpack: (config, { isServer }) => {
+    // Don't attempt to bundle Three.js on server
+    if (isServer) {
+      config.externals.push({
+        'three': 'three',
+        '@react-three/fiber': '@react-three/fiber',
+        '@react-three/drei': '@react-three/drei',
+      })
+    }
+    // Disable cache to prevent hangs
+    config.cache = false
+    return config
   },
   // Add security headers
   async headers() {

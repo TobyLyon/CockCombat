@@ -5,52 +5,94 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { toast } from 'sonner'
 
 export function useWalletAuth() {
-  const { connected, publicKey } = useWallet()
+  const { connected, publicKey, signMessage } = useWallet()
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
-  // Simple authentication based on wallet connection
   useEffect(() => {
-    setAuthenticated(connected && !!publicKey)
-  }, [connected, publicKey])
+    // If wallet disconnects, drop session state locally
+    if (!connected) {
+      setAuthenticated(false)
+      setSessionId(null)
+    }
+  }, [connected])
 
   const signIn = useCallback(async () => {
     if (!connected || !publicKey) {
       toast.error("Please connect your wallet first.")
       return false
     }
+    if (!signMessage) {
+      toast.error("Your wallet does not support message signing.")
+      return false
+    }
     
     setLoading(true)
-
     try {
-      // Simple wallet-based authentication
-      // Just verify we have a connected wallet
-      console.log('Wallet authenticated:', publicKey.toBase58())
-      
-      // Small delay to show loading state
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
+      const walletAddress = publicKey.toBase58()
+
+      // 1) Get nonce and human-readable message
+      const nonceRes = await fetch('/api/auth/nonce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress }),
+      })
+      if (!nonceRes.ok) {
+        const err = await nonceRes.json().catch(() => ({}))
+        throw new Error(err?.error || 'Failed to get nonce')
+      }
+      const { nonce, message } = await nonceRes.json()
+
+      // 2) Sign message with wallet
+      const messageBytes = new TextEncoder().encode(message)
+      const signatureBytes = await signMessage(messageBytes)
+      const signature = (await import('bs58')).default.encode(signatureBytes)
+
+      // 3) Verify on server and mint a session
+      const verifyRes = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress, signature, nonce }),
+      })
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json().catch(() => ({}))
+        throw new Error(err?.error || 'Authentication failed')
+      }
+      const verifyJson = await verifyRes.json()
+
+      setSessionId(verifyJson.sessionId)
       setAuthenticated(true)
       return true
-      
     } catch (error) {
-      console.error("Authentication error", error)
-      toast.error("Authentication failed.", {
-        description: error instanceof Error ? error.message : "An unexpected error occurred."
+      console.error('Authentication error', error)
+      toast.error('Authentication failed.', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred.'
       })
       return false
     } finally {
       setLoading(false)
     }
-  }, [publicKey, connected])
+  }, [publicKey, connected, signMessage])
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     setLoading(true)
+    try {
+      if (sessionId && publicKey) {
+        // Best-effort server invalidation
+        await fetch('/api/auth/session', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        }).catch(() => null)
+      }
+    } finally {
     setAuthenticated(false)
-    // Small delay for UX
+      setSessionId(null)
     await new Promise(resolve => setTimeout(resolve, 300))
     setLoading(false)
   }
+  }, [sessionId, publicKey])
 
   return { authenticated, loading, signIn, signOut }
 } 
