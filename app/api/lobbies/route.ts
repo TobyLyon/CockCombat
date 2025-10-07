@@ -161,7 +161,12 @@ function ensureTutorialAIFilledToCapacity(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
-    // Do not clear tutorial lobbies automatically; keep state stable to avoid flicker
+    // Ensure tutorial lobbies are filled with AI before returning state
+    for (const lobby of lobbies) {
+      if (lobby.matchType === 'tutorial') {
+        ensureTutorialAIFilledToCapacity(lobby);
+      }
+    }
     return NextResponse.json(lobbies);
   });
 }
@@ -215,48 +220,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if player is already in the lobby
-    const existingPlayer = lobby.players.find(p => p.playerId === playerId);
-    if (existingPlayer) {
-    // Get socket instance and broadcast current lobby state
-    try {
-      const socketIo = await getSocketInstance();
-      if (socketIo) {
-        // Convert lobby players to socket format with usernames
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: false,
-          isAi: p.isAi || false
-        }));
-        
-        // Broadcast current state to the lobby room
-        socketIo.to(lobbyId).emit('lobby_updated', {
-          id: lobbyId,
-          players: lobbyPlayers,
-          capacity: lobby.capacity,
-          amount: lobby.amount,
-          currency: lobby.currency,
-          matchType: lobby.matchType
-        });
-      }
-    } catch (error) {
-      console.log('Could not broadcast lobby state:', error);
+    // De-duplicate any prior entry for this player in this lobby (handles reconnects/handoffs)
+    const hadPriorEntry = lobby.players.some(p => p.playerId === playerId);
+    if (hadPriorEntry) {
+      console.log(`♻️ Removing prior entry for ${playerId} in lobby ${lobbyId} (reconnect/handoff)`);
     }
-    
-      return NextResponse.json({ error: 'Player already in lobby' }, { status: 400 });
-    }
+    lobby.players = lobby.players.filter(p => p.playerId !== playerId);
     
     const actualChickenId = chickenId || 'default-chicken';
     
     // Get the player's username
     const username = await getPlayerUsername(playerId);
-    
-    // De-duplicate any prior entry for this player in this lobby
-    try {
-      lobby.players = lobby.players.filter(p => p.playerId !== playerId);
-    } catch {}
     
     const player = { 
       playerId: playerId, 
