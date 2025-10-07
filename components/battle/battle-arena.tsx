@@ -189,6 +189,23 @@ export default function BattleArena() {
     }
   };
 
+  const leaveCurrentLobby = async () => {
+    try {
+      if (joinedLobby) {
+        const id = getCurrentPlayerId();
+        if (id) {
+          await fetch('/api/lobbies', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lobbyId: joinedLobby.id, playerId: id })
+          });
+        }
+      }
+    } catch {}
+    setInLobbyRoom(false);
+    setJoinedLobby(null);
+  };
+
   const getCurrentPlayerId = (): string | undefined => {
     try {
       if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58();
@@ -493,10 +510,7 @@ export default function BattleArena() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => {
-                        setInLobbyRoom(false);
-                        setJoinedLobby(null);
-                      }}
+                      onClick={leaveCurrentLobby}
                       className="bg-red-600/20 border-red-600 text-red-400 hover:bg-red-600/30 h-8 w-8 p-0 flex items-center justify-center"
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -511,20 +525,7 @@ export default function BattleArena() {
                   <LobbyRoom
                     lobby={joinedLobby}
                     playerIdentifier={guestId || publicKey?.toBase58() || undefined}
-                    onLeaveLobby={async () => {
-                      try {
-                        const id = getCurrentPlayerId();
-                        if (id) {
-                          await fetch('/api/lobbies', {
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ lobbyId: joinedLobby.id, playerId: id })
-                          });
-                        }
-                      } catch {}
-                      setInLobbyRoom(false);
-                      setJoinedLobby(null);
-                    }}
+                    onLeaveLobby={leaveCurrentLobby}
                     onStartMatch={() => {
                       setInLobbyRoom(false);
                       joinQueue();

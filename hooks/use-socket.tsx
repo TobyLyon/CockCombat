@@ -103,6 +103,9 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       console.log('🧹 Cleaning up socket connection');
+      try {
+        socketInstance.emit?.('leave_lobby_room', (window as any)?.currentLobbyId || undefined);
+      } catch {}
       socketInstance.disconnect();
     };
   }, []);
