@@ -161,14 +161,6 @@ function ensureTutorialAIFilledToCapacity(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
-    // Safety: keep tutorial lobby filled with AI so clients always see expected roster
-    try {
-      for (const lobby of lobbies) {
-        if (lobby.matchType === 'tutorial') {
-          ensureTutorialAIFilledToCapacity(lobby);
-        }
-      }
-    } catch {}
     return NextResponse.json(lobbies);
   });
 }
@@ -346,22 +338,7 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
-    // Tutorial lobbies: fill remaining slots with AI (real players take priority and can replace AI)
-  if (lobby.matchType === 'tutorial') {
-    if (!lobbyTimers.has(lobbyId)) {
-      console.log(`⏳ Scheduling AI backfill to capacity for tutorial lobby ${lobbyId}`);
-      const timer = setTimeout(() => {
-        try {
-          ensureTutorialAIFilledToCapacity(lobby)
-        } finally {
-          lobbyTimers.delete(lobbyId);
-        }
-      }, 500);
-      lobbyTimers.set(lobbyId, timer);
-    } else {
-      console.log(`AI backfill already scheduled for ${lobbyId}`);
-    }
-  }
+  // Tutorial lobbies: do NOT backfill immediately; AI are added at ready-time
 
   if (lobby.players.length === lobby.capacity && lobby.matchType !== 'tutorial') {
     lobby.status = 'starting';
@@ -497,11 +474,52 @@ export async function PUT(req: NextRequest) {
       }
     } catch {}
 
-    // Update status if all ready (HTTP path)
-    const minPlayers = lobby.matchType === 'tutorial' ? 1 : 4;
-    const allReady = lobby.players.length >= minPlayers && lobby.players.every(p => (p.isAi ? true : Boolean(p.isReady)));
-    if (allReady && lobby.matchType !== 'tutorial') {
-      lobby.status = 'starting';
+    // Ready-time AI policy
+    if (lobby.matchType === 'tutorial') {
+      const hasReadyHuman = lobby.players.some(p => !p.isAi && Boolean(p.isReady));
+      if (hasReadyHuman) {
+        // Fill remaining slots with AI now
+        ensureTutorialAIFilledToCapacity(lobby);
+        lobby.status = 'starting';
+        try {
+          const socketIo = await getSocketInstance();
+          if (socketIo) {
+            // Broadcast updated roster (with AI filled)
+            const lobbyPlayers = lobby.players.map(p => ({
+              playerId: p.playerId,
+              username: p.username || p.playerId.slice(0, 8) + '...',
+              chickenName: p.chickenId || 'Default',
+              isReady: p.isAi ? true : Boolean((p as any).isReady),
+              isAi: p.isAi || false,
+            }));
+            socketIo.to(lobbyId).emit('lobby_updated', {
+              id: lobbyId,
+              players: lobbyPlayers,
+              capacity: lobby.capacity,
+              amount: lobby.amount,
+              currency: lobby.currency,
+              matchType: lobby.matchType
+            });
+            // Emit countdown to start
+            let c = 5;
+            const t = setInterval(() => {
+              socketIo.to(lobbyId).emit('match_starting', { countdown: c });
+              c--;
+              if (c < 0) {
+                clearInterval(t);
+                socketIo.to(lobbyId).emit('match_started');
+              }
+            }, 1000);
+          }
+        } catch {}
+      }
+    } else {
+      // Ranked: start only when everyone ready and min humans met
+      const minPlayers = 4;
+      const allReady = lobby.players.length >= minPlayers && lobby.players.every(p => (p.isAi ? true : Boolean(p.isReady)));
+      if (allReady) {
+        lobby.status = 'starting';
+      }
     }
 
     return NextResponse.json(lobby);
