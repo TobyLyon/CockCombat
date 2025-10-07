@@ -528,7 +528,13 @@ export default function BattleArena() {
                     onLeaveLobby={leaveCurrentLobby}
                     onStartMatch={() => {
                       setInLobbyRoom(false);
-                      joinQueue();
+                      if (joinedLobby && (joinedLobby.matchType === 'tutorial' || joinedLobby.amount === 0)) {
+                        // Tutorial/free matches: skip global queue and go straight to battle
+                        startBattle();
+                      } else {
+                        // Ranked/paid: proceed through matchmaking queue
+                        joinQueue();
+                      }
                     }}
                   />
                 </div>
