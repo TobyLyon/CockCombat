@@ -146,6 +146,12 @@ export default function WaitingQueue({
         console.log('[WaitingQueue] Ignoring lobby_updated - wrong lobby or no payload', { payloadId: payload?.id, expectedId: lobby.id })
         return
       }
+      
+      // Check for new AI players
+      const prevPlayers = currentLobby.players || []
+      const newPlayers = Array.isArray(payload.players) ? payload.players : prevPlayers
+      const newAiPlayers = newPlayers.filter((p: any) => p.isAi && !prevPlayers.some((pp: any) => pp.playerId === p.playerId))
+      
       // Merge only the fields we expect; keep existing fields like highRoller/status
       setCurrentLobby(prev => ({
         ...prev,
@@ -155,6 +161,7 @@ export default function WaitingQueue({
         currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
         matchType: (payload.matchType as any) || prev.matchType,
       }))
+      
       // Recompute readiness state
       const playersArr = Array.isArray(payload.players) ? payload.players : currentLobby.players
       const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
@@ -306,11 +313,19 @@ export default function WaitingQueue({
                 {players.map((player, index) => (
                   <motion.li 
                     key={player.playerId || index} 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, x: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    transition={{ 
+                      duration: 0.3,
+                      delay: player.isAi ? index * 0.15 : 0,
+                      type: "spring",
+                      stiffness: 200
+                    }}
                     className={`flex items-center justify-between rounded-lg p-2 lg:p-3 transition-colors ${
                       player.isReady 
                         ? 'bg-green-900/30 border border-green-600/50' 
+                        : player.isAi 
+                        ? 'bg-blue-900/20 border border-blue-600/30'
                         : 'bg-[#1a1a1a]'
                     }`}
                   >
