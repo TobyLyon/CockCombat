@@ -77,7 +77,7 @@
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.169.0",
-    
+    "typescript": "^5",
     "vaul": "^0.9.6",
     "ws": "latest",
     "zod": "^3.24.1"
@@ -87,7 +87,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.30.0",
-    "eslint-config-next": "15.3.4",
-    "typescript": "^5"
+    "eslint-config-next": "15.3.4"
   }
 }

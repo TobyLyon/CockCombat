@@ -200,6 +200,9 @@ importers:
       three:
         specifier: ^0.169.0
         version: 0.169.0
+      typescript:
+        specifier: ^5
+        version: 5.8.3
       vaul:
         specifier: ^0.9.6
         version: 0.9.9(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -225,9 +228,6 @@ importers:
       eslint-config-next:
         specifier: 15.3.4
         version: 15.3.4(eslint@9.30.0(jiti@1.21.7))(typescript@5.8.3)
-      typescript:
-        specifier: ^5
-        version: 5.8.3
 
 packages:
 
