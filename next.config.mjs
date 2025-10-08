@@ -1,3 +1,4 @@
+import path from 'path'
 let userConfig = undefined
 try {
   // try to import ESM first
@@ -34,6 +35,12 @@ const nextConfig = {
         '@react-three/fiber': '@react-three/fiber',
         '@react-three/drei': '@react-three/drei',
       })
+    }
+    // Ensure @ alias resolves to project root for production builds
+    config.resolve = config.resolve || {}
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@': path.resolve(process.cwd()),
     }
     // Enable filesystem cache to speed up rebuilds
     config.cache = {
