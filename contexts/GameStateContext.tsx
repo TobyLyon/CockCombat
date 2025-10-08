@@ -57,6 +57,8 @@ interface GameStateContextType {
   syncLobbyPlayers: (players: Array<{ playerId: string; username?: string; chickenName?: string; isAi?: boolean }>) => void;
   matchMeta?: { amount: number; currency: string; matchType: string; humanCount: number } | null;
   setMatchMeta: (meta: { amount: number; currency: string; matchType: string; humanCount: number }) => void;
+  battleStartAt: number | null;
+  battleEndAt: number | null;
 }
 
 // Create the context with default values
@@ -213,6 +215,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const [lastDefeatedChickenId, setLastDefeatedChickenId] = useState<string | null>(null);
   const [prizeAmount, setPrizeAmount] = useState(0); // Track prize amount for winner
   const [matchMeta, setMatchMeta] = useState<{ amount: number; currency: string; matchType: string; humanCount: number } | null>(null);
+  const [battleStartAt, setBattleStartAt] = useState<number | null>(null);
+  const [battleEndAt, setBattleEndAt] = useState<number | null>(null);
   
   // Player data - use mock data from mocks/game-data.ts
   const [players, setPlayers] = useState<PlayerStatus[]>(initialPlayers);
@@ -381,6 +385,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
             console.log("All players defeated.");
             setPrizeAmount(0);
           }
+          setBattleEndAt(Date.now());
           setGameState('gameOver');
         }
         return updatedPlayers;
@@ -527,6 +532,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setPlayers(positionedPlayers);
     
     // Change game state to battle
+    setBattleStartAt(Date.now());
     setGameState('battle');
     playSound('battle_start');
   }, [players, lobbyPlayers, playSound]);
@@ -695,6 +701,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     syncLobbyPlayers,
     matchMeta,
     setMatchMeta,
+    battleStartAt,
+    battleEndAt,
   };
   
   // Cleanup Three.js resources when unmounted

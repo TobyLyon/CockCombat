@@ -16,7 +16,7 @@ interface GameOverProps {
 }
 
 const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
-  const { playSound, players, prizeAmount, matchMeta } = useGameState();
+  const { playSound, players, prizeAmount, matchMeta, battleStartAt, battleEndAt } = useGameState();
   const { publicKey } = useWallet();
   const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [autoExitTimer, setAutoExitTimer] = useState(10); // 10 second auto-exit
@@ -38,12 +38,23 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
     return () => clearInterval(interval)
   }, [onExit])
 
+  // Derived match details
+  const totalPlayers = players.length;
+  const humanCount = matchMeta?.humanCount || 0;
+  const aiCount = Math.max(0, totalPlayers - humanCount);
+  const entryPerPlayer = matchMeta?.amount || 0;
+  const currency = matchMeta?.currency || 'SOL';
+  const isTutorial = (matchMeta?.matchType || 'tutorial') === 'tutorial' || entryPerPlayer === 0;
+  const grossPool = isTutorial ? 0 : entryPerPlayer * Math.max(1, humanCount);
+  const netWinner = isTutorial ? 0 : Number((grossPool * 0.96).toFixed(2));
+  const durationSec = battleStartAt && battleEndAt ? Math.max(0, Math.round((battleEndAt - battleStartAt) / 1000)) : null;
+
   // Play sound and trigger payout on component mount
   useEffect(() => {
-    playSound(isHumanWinner ? 'win' : 'lose');
+    playSound(isHumanWinner ? 'victory' : 'death');
 
     const handlePayout = async () => {
-      if (isHumanWinner && publicKey && prizeAmount > 0) {
+      if (isHumanWinner && publicKey && grossPool > 0) {
         setPayoutStatus('processing');
         try {
           const response = await fetch('/api/payout/forward', {
@@ -51,7 +62,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               winnerAddress: publicKey.toBase58(),
-              prizePoolLamports: prizeAmount * LAMPORTS_PER_SOL,
+              prizePoolLamports: grossPool * LAMPORTS_PER_SOL,
             }),
           });
 
@@ -73,7 +84,20 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
     handlePayout();
   }, [isHumanWinner, playSound, publicKey, prizeAmount]);
 
-  const totalPlayers = players.length;
+  const handleShare = () => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cockcombat.game';
+      const title = isHumanWinner ? 'I just won a Cock Combat match!' : 'I just finished a Cock Combat match!';
+      const prizeText = `Prize: ${netWinner.toFixed(2)} ${currency}`;
+      const typeText = `Mode: ${isTutorial ? 'Tutorial' : 'Ranked'}`;
+      const rosterText = `Players: ${humanCount} human${humanCount===1?'':'s'}${aiCount>0?` + ${aiCount} AI`:''}`;
+      const durText = durationSec !== null ? `Duration: ${durationSec}s` : '';
+      const text = encodeURIComponent([title, prizeText, typeText, rosterText, durText, '#CockCombat #Solana'].filter(Boolean).join(' | '));
+      const url = encodeURIComponent(origin);
+      const intent = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
+      window.open(intent, '_blank', 'noopener,noreferrer');
+    } catch {}
+  };
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
@@ -112,11 +136,11 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             <p className="text-gray-400 text-sm mb-1">PLAYERS</p>
             <p className="text-3xl font-bold text-white">{totalPlayers}</p>
           </div>
-          {isHumanWinner && matchMeta && matchMeta.amount > 0 && (
+          {isHumanWinner && (
             <div className="text-center">
               <p className="text-gray-400 text-sm mb-1">PRIZE</p>
               <p className="text-3xl font-bold text-yellow-400">
-                {(matchMeta.amount * Math.max(1, matchMeta.humanCount) * 0.96).toFixed(2)} {matchMeta.currency}
+                {netWinner.toFixed(2)} {currency}
               </p>
             </div>
           )}
@@ -133,6 +157,40 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
           )}
         </div>
 
+        {/* Match Summary */}
+        <div className="grid grid-cols-2 gap-4 mb-4 bg-black/30 p-4 rounded-lg text-white/90 text-sm">
+          <div>
+            <p className="text-white/60 text-[11px]">Match Type</p>
+            <p className="font-semibold">{isTutorial ? 'Tutorial' : 'Ranked'}</p>
+          </div>
+          <div>
+            <p className="text-white/60 text-[11px]">Entry (per player)</p>
+            <p className="font-semibold">{entryPerPlayer.toFixed(2)} {currency}</p>
+          </div>
+          <div>
+            <p className="text-white/60 text-[11px]">Humans</p>
+            <p className="font-semibold">{humanCount}</p>
+          </div>
+          <div>
+            <p className="text-white/60 text-[11px]">AI</p>
+            <p className="font-semibold">{aiCount}</p>
+          </div>
+          <div>
+            <p className="text-white/60 text-[11px]">Gross Pool</p>
+            <p className="font-semibold">{grossPool.toFixed(2)} {currency}</p>
+          </div>
+          <div>
+            <p className="text-white/60 text-[11px]">Winner (net)</p>
+            <p className="font-semibold text-yellow-300">{netWinner.toFixed(2)} {currency}</p>
+          </div>
+          {durationSec !== null && (
+            <div className="col-span-2">
+              <p className="text-white/60 text-[11px]">Duration</p>
+              <p className="font-semibold">{durationSec}s</p>
+            </div>
+          )}
+        </div>
+
         {/* Buttons */}
         <div className="flex flex-col gap-3">
           <Button
@@ -141,6 +199,14 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-4 px-8 rounded-lg text-xl pixel-font shadow-lg"
           >
             Return to Lobbies
+          </Button>
+          <Button
+            onClick={handleShare}
+            size="sm"
+            variant="outline"
+            className="border-white/30 text-white hover:bg-white/10"
+          >
+            Share to X (Twitter)
           </Button>
           <p className="text-gray-400 text-sm">
             Auto-returning in {autoExitTimer}s...
