@@ -110,6 +110,15 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.49.4
         version: 2.49.4(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+      '@types/node':
+        specifier: ^22
+        version: 22.14.1
+      '@types/react':
+        specifier: ^19
+        version: 19.1.2
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.1.2(@types/react@19.1.2)
       '@web3uikit/icons':
         specifier: ^1.1.2
         version: 1.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -213,15 +222,6 @@ importers:
         specifier: ^3.24.1
         version: 3.24.3
     devDependencies:
-      '@types/node':
-        specifier: ^22
-        version: 22.14.1
-      '@types/react':
-        specifier: ^19
-        version: 19.1.2
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.1.2(@types/react@19.1.2)
       eslint:
         specifier: ^9.30.0
         version: 9.30.0(jiti@1.21.7)
