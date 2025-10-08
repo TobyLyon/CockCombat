@@ -26,12 +26,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Disable experimental features that cause hangs with Three.js
-  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
-  experimental: {
-    // Prevent R3F from being bundled on server
-    serverComponentsExternalPackages: ['three', '@react-three/fiber', '@react-three/drei'],
-  },
+  // Prevent R3F/Three from being bundled on the server
+  serverExternalPackages: ['three', '@react-three/fiber', '@react-three/drei'],
   webpack: (config, { isServer }) => {
     // Don't attempt to bundle Three.js on server
     if (isServer) {
