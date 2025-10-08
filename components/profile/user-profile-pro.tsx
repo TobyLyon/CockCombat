@@ -143,13 +143,7 @@ export default function UserProfilePro() {
           <div className="bg-purple-800/40 px-3 py-1.5 rounded-lg border border-purple-700/50">
             <span className="text-yellow-400 font-bold">{(profile?.token_balance ?? 0).toLocaleString()} $CLUCK</span>
           </div>
-          {/* Native SOL only shown on Solana */}
-          {/* Hidden on BSC */}
-          {getTokenMintAddress() && (
-            <div className="bg-purple-800/40 px-3 py-1.5 rounded-lg border border-purple-700/50 text-sm text-purple-100">
-              <span>$COCK: {splBalance.toFixed(2)}</span>
-            </div>
-          )}
+          {/* EVM-only build: remove Solana token balance display */}
         </div>
       </div>
 
