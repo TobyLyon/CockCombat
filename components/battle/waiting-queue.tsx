@@ -10,6 +10,7 @@ import { Clock, Users, Trophy, AlertCircle, Loader2, Check } from "lucide-react"
 import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/utils"
 import { Lobby } from "@/lib/lobbies"
 import { useSocket } from "@/hooks/use-socket"
+import { useGameState } from "@/contexts/GameStateContext"
 
 interface WaitingQueueProps {
   lobby: Lobby;
@@ -34,6 +35,7 @@ export default function WaitingQueue({
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
+  const { syncLobbyPlayers } = useGameState()
   // Track stable full-roster to auto-advance without asking users to ready again
   const lastCountRef = useRef<number>(0)
   const stableTicksRef = useRef<number>(0)
@@ -67,11 +69,8 @@ export default function WaitingQueue({
             return { ...prev, ...updatedLobby, players: keepPlayers } as Lobby;
           });
           
-          // Check if all players are ready (minimum requirements met)
-          const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4;
-          const hasEnoughPlayers = updatedLobby.players.length >= minPlayersRequired;
-          const allReady = hasEnoughPlayers && updatedLobby.players.every((p: any) => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
-          setAllPlayersReady(allReady);
+          // Sync authoritative roster to game state for spawn control
+          try { syncLobbyPlayers((updatedLobby.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
           
           // If the lobby is starting, trigger the battle
           if (updatedLobby.status === 'starting') {
@@ -80,35 +79,7 @@ export default function WaitingQueue({
             clearInterval(interval); // Stop polling once the match starts
           }
           
-          // Handle countdown from server
-          if (updatedLobby.countdown && updatedLobby.countdown > 0) {
-            setCountdown(updatedLobby.countdown);
-          }
-
-          // Confirmation: for both tutorial and ranked, once roster reaches expected size and is stable, advance
-          {
-            const currentCount = (updatedLobby.players || []).length
-            const target = Math.min(updatedLobby.capacity, expectedCountRef.current)
-            const atTarget = currentCount >= target
-            if (atTarget) {
-              if (lastCountRef.current === currentCount) {
-                stableTicksRef.current += 1
-              } else {
-                stableTicksRef.current = 1
-                lastCountRef.current = currentCount
-              }
-              // Two stable polls (~4s) indicates fully loaded and stable
-              if (stableTicksRef.current >= 2) {
-                try { playSound('button') } catch {}
-                onStartBattle()
-                clearInterval(interval)
-              }
-            } else {
-              // Reset if roster not full yet
-              stableTicksRef.current = 0
-              lastCountRef.current = currentCount
-            }
-          }
+          // Do not run any readiness-based auto-advance here; this screen is connection-only
         }
       } catch (error) {
         console.error("Error polling for lobby status:", error);
@@ -118,31 +89,43 @@ export default function WaitingQueue({
     return () => clearInterval(interval);
   }, [isConnected, lobby.id, lobby.matchType, onStartBattle, playSound]);
 
-  // Countdown effect
-  useEffect(() => {
-    if (countdown !== null && countdown > 0) {
-      const timer = setTimeout(() => {
-        setCountdown(countdown - 1)
-      }, 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [countdown])
+  // We do not display a countdown in this secondary confirmation screen
 
-  // Listen to socket server signals to advance immediately
+  // Listen for queue phase events; advance on round_start
   useEffect(() => {
     if (!socket) return
-    const onStarting = (data: { countdown: number }) => setCountdown(typeof data?.countdown === 'number' ? data.countdown : null)
+    const onQueueBegin = (payload: any) => {
+      // Optionally display who is expected and a short info
+      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.wallet.slice(0,8)+"...", isAi: p.isAi }))) } catch {}
+    }
+    const onArenaLock = (payload: any) => {
+      // Replace roster with locked list
+      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.wallet.slice(0,8)+"...", isAi: p.isAi }))) } catch {}
+      // Show a small 3s countdown if desired
+    }
+    const onRoundCountdown = (p: any) => {
+      const c = typeof p?.count === 'number' ? p.count : null
+      if (c !== null) setCountDownSafe(c)
+    }
     const onStarted = () => {
       try { playSound('button') } catch {}
       onStartBattle()
     }
-    socket.on('match_starting', onStarting)
-    socket.on('match_started', onStarted)
+    socket.on('queue_begin', onQueueBegin)
+    socket.on('arena_lock_roster', onArenaLock)
+    socket.on('round_countdown', onRoundCountdown)
+    socket.on('round_start', onStarted)
     return () => {
-      socket.off('match_starting', onStarting)
-      socket.off('match_started', onStarted)
+      socket.off('queue_begin', onQueueBegin)
+      socket.off('arena_lock_roster', onArenaLock)
+      socket.off('round_countdown', onRoundCountdown)
+      socket.off('round_start', onStarted)
     }
   }, [socket, isConnected, onStartBattle, playSound])
+
+  const setCountDownSafe = (c: number) => {
+    setCountdown(c)
+  }
 
   // Listen for lobby roster updates over socket (server truth), with refresh requests
   useEffect(() => {
@@ -168,13 +151,9 @@ export default function WaitingQueue({
           matchType: (payload.matchType as any) || prev.matchType,
         } as Lobby;
       })
-      // Recompute readiness state
-      const playersArr = Array.isArray(payload.players) ? payload.players : currentLobby.players
-      const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
-      const hasEnoughPlayers = (playersArr || []).length >= minPlayersRequired
-      const allReadyNow = hasEnoughPlayers && (playersArr || []).every((p: any) => p.isReady || (lobby.matchType === 'tutorial' && p.isAi))
-      setAllPlayersReady(allReadyNow)
-      console.log('[WaitingQueue] Updated currentLobby players:', playersArr?.length || 0)
+      // Sync roster to game state for spawning (connected-only semantics)
+      try { syncLobbyPlayers((payload.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
+      console.log('[WaitingQueue] Updated currentLobby players:', (payload.players || []).length || 0)
     }
 
     const onLobbySync = (payload: any) => {
@@ -192,6 +171,7 @@ export default function WaitingQueue({
           matchType: (payload.matchType as any) || prev.matchType,
         } as Lobby
       })
+      try { syncLobbyPlayers((payload.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
       console.log('[WaitingQueue] Synced currentLobby players:', payload.players?.length || 0)
     }
 
@@ -232,7 +212,7 @@ export default function WaitingQueue({
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-4 lg:p-6 max-w-6xl w-full mx-auto max-h-full overflow-hidden relative">
       
-      {/* Countdown Overlay */}
+      {/* Countdown Overlay (3..0 from server round_countdown) */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (
           <motion.div

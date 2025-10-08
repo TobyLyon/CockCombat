@@ -53,6 +53,8 @@ interface GameStateContextType {
   hasInteracted: boolean;
   setHasInteracted: (value: boolean) => void;
   prizeAmount: number; // Track the prize amount for the winner
+  // Sync roster for the secondary confirmation from live lobby/socket
+  syncLobbyPlayers: (players: Array<{ playerId: string; username?: string; chickenName?: string; isAi?: boolean }>) => void;
 }
 
 // Create the context with default values
@@ -521,6 +523,23 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setGameState('battle');
     playSound('battle_start');
   }, [players, lobbyPlayers, playSound]);
+
+  // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
+  const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {
+    // Convert incoming roster to PlayerStatus list with defaults
+    const converted: PlayerStatus[] = (list || []).map((p, index) => ({
+      id: String(p.playerId),
+      name: p.username,
+      isPlayer: false,
+      position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
+      rotation: new THREE.Euler(0, 0, 0),
+      hp: 3,
+      maxHp: 3,
+      isAlive: true,
+      visible: true,
+    }));
+    setLobbyPlayers(converted);
+  }, []);
   
   // Leave queue
   const leaveQueue = useCallback(() => {
@@ -656,6 +675,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     hasInteracted,
     setHasInteracted: () => {}, // Provide empty function
     prizeAmount,
+    syncLobbyPlayers,
   };
   
   // Cleanup Three.js resources when unmounted

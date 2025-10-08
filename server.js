@@ -110,6 +110,13 @@ preparePromise.then(() => {
   if (!global.lobbyPresence) {
     global.lobbyPresence = new Map();
   }
+  // Queue session tracking: matchSessionId -> session data
+  if (!global.queueSessions) {
+    global.queueSessions = new Map();
+  }
+  if (!global.activeQueueForLobby) {
+    global.activeQueueForLobby = new Map();
+  }
 
   // Socket.io connection handling
   io.on('connection', (socket) => {
@@ -835,6 +842,30 @@ preparePromise.then(() => {
       }
     });
 
+    // Queue presence and assets acks
+    socket.on('queue_presence', (payload) => {
+      try {
+        const { matchSessionId, wallet, latencyMs } = payload || {};
+        if (!matchSessionId || !wallet) return;
+        const session = global.queueSessions && global.queueSessions.get(matchSessionId);
+        if (!session) return;
+        session.presenceAcks.set(wallet, Date.now());
+        // Optional: broadcast presence update to lobby
+        const lobbyId = session.lobbyId;
+        try { io.to(lobbyId).emit('queue_presence_update', { wallet, latencyMs }); } catch {}
+      } catch {}
+    });
+
+    socket.on('assets_loaded', (payload) => {
+      try {
+        const { matchSessionId, wallet } = payload || {};
+        if (!matchSessionId || !wallet) return;
+        const session = global.queueSessions && global.queueSessions.get(matchSessionId);
+        if (!session) return;
+        session.assetsAcks.set(wallet, Date.now());
+      } catch {}
+    });
+
     // Handle spectate match
     socket.on('spectate_match', ({ matchId }) => {
       console.log(`👁️ Spectator ${socket.id} joining match ${matchId}`);
@@ -1129,6 +1160,8 @@ preparePromise.then(() => {
                 // Do not reset readiness here; keep it through transition
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+                // Begin server-side queue confirmation phase
+                try { await startQueuePhase(lobbyId, io); } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
               }
             }, 1000);
 
@@ -1188,6 +1221,136 @@ preparePromise.then(() => {
       }
     } catch (error) {
       console.error('❌ Error checking lobby ready status:', error);
+    }
+  }
+
+  // Begin queue confirmation phase for a lobby
+  async function startQueuePhase(lobbyId, io) {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+      const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+      const all = response ? await response.json().catch(() => []) : [];
+      const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+      if (!lobby) return;
+
+      // Build expected roster from API (tutorial may include AI; ranked is humans only)
+      let expectedRoster = (lobby.players || []).map(p => ({ wallet: p.playerId, isAi: !!p.isAi }));
+      const isTutorial = lobby.matchType === 'tutorial';
+      if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
+
+      const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const arenaSeed = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const ackDeadlineMs = 4000;
+
+      const session = {
+        id: matchSessionId,
+        lobbyId,
+        expectedRoster,
+        arenaSeed,
+        createdAt: Date.now(),
+        ackDeadlineMs,
+        presenceAcks: new Map(), // wallet -> ts
+        assetsAcks: new Map(),   // wallet -> ts
+      };
+      try { global.queueSessions.set(matchSessionId, session); } catch {}
+      try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
+
+      // Notify clients to begin queue confirmation
+      io.to(lobbyId).emit('queue_begin', {
+        matchSessionId,
+        expectedRoster,
+        arenaSeed,
+        serverNow: Date.now(),
+        ackDeadlineMs,
+        minHumans: isTutorial ? 1 : 4,
+        escrowId: lobby.escrowWalletId || null,
+      });
+
+      // Deadline to finalize the roster
+      session.deadlineTimer = setTimeout(() => finalizeQueueSession(matchSessionId, io), ackDeadlineMs);
+    } catch (e) {
+      console.warn('startQueuePhase error:', e?.message || e);
+    }
+  }
+
+  // Finalize a queue session: lock roster and schedule round start (or cancel/refund)
+  async function finalizeQueueSession(matchSessionId, io) {
+    const session = global.queueSessions && global.queueSessions.get(matchSessionId);
+    if (!session) return;
+    const { lobbyId, expectedRoster, presenceAcks, assetsAcks } = session;
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+      const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+      const all = response ? await response.json().catch(() => []) : [];
+      const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+      const isTutorial = lobby ? lobby.matchType === 'tutorial' : false;
+
+      const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => p.wallet);
+      const presentHumans = requiredHumans.filter(w => presenceAcks.has(w) && assetsAcks.has(w));
+
+      // Ranked cancellation if insufficient humans
+      const minHumans = isTutorial ? 1 : 4;
+      if (!isTutorial && presentHumans.length < minHumans) {
+        try {
+          // Refund all expected humans (best-effort)
+          for (const w of requiredHumans) {
+            try {
+              await fetch(`${baseUrl}/api/wager/refund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players' }),
+              }).catch(() => {});
+            } catch {}
+          }
+        } catch {}
+        try { io.to(lobbyId).emit('match_cancelled', { reason: 'insufficient_players' }); } catch {}
+        try { global.queueSessions.delete(matchSessionId); } catch {}
+        try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+        return;
+      }
+
+      // Build final roster: include present humans; tutorial also keeps any AI in expected roster
+      const finalRoster = expectedRoster.filter(p => p.isAi || presentHumans.includes(p.wallet));
+
+      // Refund any paid human who failed the queue handshake (ranked only)
+      if (!isTutorial) {
+        const failedHumans = requiredHumans.filter(w => !presentHumans.includes(w));
+        for (const w of failedHumans) {
+          try {
+            await fetch(`${baseUrl}/api/wager/refund`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show' }),
+            }).catch(() => {});
+          } catch {}
+        }
+      }
+
+      // Lock roster and schedule a synchronized round start
+      const roundStartAtEpochMs = Date.now() + 3000;
+      try {
+        io.to(lobbyId).emit('arena_lock_roster', {
+          matchSessionId,
+          finalRoster,
+          arenaSeed: session.arenaSeed,
+          roundStartAtEpochMs,
+        });
+      } catch {}
+
+      // Emit 3..0 countdown aligned to round start
+      let c = 3;
+      const interval = setInterval(() => {
+        try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+        c--;
+        if (c < 0) {
+          clearInterval(interval);
+          try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
+          try { global.queueSessions.delete(matchSessionId); } catch {}
+          try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+        }
+      }, 1000);
+    } catch (e) {
+      console.warn('finalizeQueueSession error:', e?.message || e);
     }
   }
 

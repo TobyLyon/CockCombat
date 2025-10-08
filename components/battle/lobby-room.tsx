@@ -44,6 +44,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
   const httpPollRef = useRef<number | null>(null)
+  // Track that we've transitioned to the queue after the first check
+  const transitionedToQueueRef = useRef<boolean>(false)
 
   // Debug: log layout to find why the ready bar might be off-screen
   useEffect(() => {
@@ -139,8 +141,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         clearTimeout(stateTimer);
         clearTimeout(stateTimer2);
         clearInterval(refreshInterval);
-        console.log(`🚪 Leaving lobby room: ${lobby.id}`);
-        socket.emit('leave_lobby_room', lobby.id);
+        // If we already transitioned to queue (second check), keep room membership during handoff
+        if (!transitionedToQueueRef.current) {
+          console.log(`🚪 Leaving lobby room: ${lobby.id}`);
+          socket.emit('leave_lobby_room', lobby.id);
+        } else {
+          console.log(`⏸️ Preserving lobby room membership during queue transition: ${lobby.id}`);
+        }
       };
     }
   }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);
@@ -223,6 +230,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const handleMatchStarted = () => {
       console.log('🎮 Match started!');
+      transitionedToQueueRef.current = true;
       onStartMatch();
     };
 
