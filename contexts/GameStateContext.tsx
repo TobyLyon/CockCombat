@@ -224,9 +224,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Sound volume normalizations
   const SOUND_VOLUMES = {
-    punch: 1.5, // Increased from 0.7 to 1.5 for much louder punch sound
-    hit: 1.5, // Added hit sound at the same volume as punch
-    strong_punch: 1.2, // Increased from 0.6 to 1.2
+    punch: 1.8,
+    hit: 1.8,
+    strong_punch: 0.9, // Slightly reduced final blow
     die: 0.8,
     pickup: 0.7,
     jump: 0.5,
@@ -247,8 +247,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     arena: '/sounds/arena.mp3',
     background: '/sounds/background.mp3',
     background_music: '/sounds/background.mp3',  // Add alias for background music
-    battle_start: '/sounds/arena.mp3',  // Add alias for battle music
-    victory: '/sounds/JESUS_CHRIST_2.MP3'  // Changed to JESUS_CHRIST_2.MP3
+    battle_start: '/sounds/arena.mp3',
+    victory: '/sounds/die.mp3',
+    killstreak: '/sounds/killstreaks/chicken_spree.mp3'
   };
 
   // Initialize background music player

@@ -604,6 +604,25 @@ preparePromise.then(() => {
         
         // Broadcast to all players in the room
         io.to(roomId).emit('action_result', result);
+
+        // Killstreak: when the same attacker kills 3 in a row, trigger lobby-wide sound
+        try {
+          if (result.battleOver) {
+            room.killLog = room.killLog || [];
+            room.killLog.push({ killer: socket.id, ts: Date.now() });
+            const recent = room.killLog.slice(-3);
+            if (recent.length === 3 && recent.every(k => k.killer === socket.id)) {
+              io.to(roomId).emit('chat_message', {
+                id: `ks-${Date.now()}`,
+                user: { name: 'System', address: '0x000' },
+                message: `🔥 CHICKEN SPREE!`,
+                timestamp: new Date().toISOString(),
+                isPrediction: true,
+              });
+              io.to(roomId).emit('play_sound', { key: 'killstreak' });
+            }
+          }
+        } catch {}
         io.to(roomId).emit('game_state_update', room.gameState);
 
         // Broadcast battle event to spectators as chat message
@@ -659,6 +678,7 @@ preparePromise.then(() => {
             winner: result.winner,
             battleData: result 
           });
+          try { io.to(roomId).emit('play_sound', { key: 'victory' }); } catch {}
 
           // Record match (best-effort) in Supabase for auditing/payout flows
           try {

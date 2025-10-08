@@ -52,6 +52,7 @@ export default function BattleArena() {
     playSound,
     setGameState
   } = useGameState();
+  const { socket } = useSocket();
   
   // Local state for chicken selection since we removed it from the context
   const [selectedChicken, setSelectedChicken] = useState(null);
@@ -59,6 +60,17 @@ export default function BattleArena() {
   // Get the player from the players array
   const playerChicken = players.find(p => p.isPlayer);
   const playerHP = playerChicken?.hp || 3;
+  // Listen for server sound triggers (killstreak, victory)
+  useEffect(() => {
+    if (!socket || !playSound) return;
+    const onPlaySound = (payload: any) => {
+      const key = payload?.key as string | undefined;
+      if (!key) return;
+      try { playSound(key); } catch {}
+    };
+    socket.on?.('play_sound', onPlaySound);
+    return () => socket.off?.('play_sound', onPlaySound);
+  }, [socket, playSound]);
   
   // Check if player is victorious (player is alive and all others are dead)
   const isVictorious = Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);

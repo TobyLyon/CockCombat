@@ -187,6 +187,8 @@ export const soundMap: { [key: string]: string } = {
   jump: '/sounds/jump.mp3',       // Use jump.mp3 for jump sounds
   click: '/sounds/click.mp3',     // This one exists
   background_music: '/sounds/background.mp3', // Add background music for main menu/landing page
+  killstreak: '/sounds/killstreaks/chicken_spree.mp3',
+  victory: '/sounds/die.mp3',
 };
 
 // Arena configuration - Scaled values

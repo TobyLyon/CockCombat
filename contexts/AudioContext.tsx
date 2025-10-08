@@ -5,9 +5,9 @@ import { soundMap } from '@/mocks/game-data';
 
 // Define sound volume normalizations
 const SOUND_VOLUMES = {
-  punch: 1.5, // Louder punch sound
-  hit: 1.5, // Added hit sound at the same volume as punch
-  strong_punch: 1.2,
+  punch: 1.8, // Louder punch
+  hit: 1.8, // Match punch
+  strong_punch: 0.9, // Slightly reduced final blow
   die: 0.8,
   jump: 0.5,
   land: 0.4,
