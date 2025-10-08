@@ -94,7 +94,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const getCurrentPlayerId = () => {
     try {
       if (playerIdentifier) return playerIdentifier
-      if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58()
+      if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58()
       if (typeof window !== 'undefined') return localStorage.getItem('guest_id') || undefined
     } catch {}
     return undefined

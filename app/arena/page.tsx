@@ -1,4 +1,6 @@
-import BattleArena from "@/components/battle/battle-arena"
+import dynamic from "next/dynamic"
+
+const BattleArena = dynamic(() => import("@/components/battle/battle-arena"), { ssr: false })
 
 export const viewport = {
   width: 'device-width',

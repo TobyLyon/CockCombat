@@ -8,9 +8,10 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Button } from "@/components/ui/button"
 import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye } from "lucide-react"
 import Link from "next/link"
-import EnhancedArenaScene from "./enhanced-arena-scene"
+import dynamic from "next/dynamic"
+const EnhancedArenaScene = dynamic(() => import("./enhanced-arena-scene"), { ssr: false })
 import WaitingQueue from "./waiting-queue"
-import LobbyRoom from "./lobby-room"
+const LobbyRoom = dynamic(() => import("./lobby-room"), { ssr: false })
 import { useAudio } from "@/contexts/AudioContext"
 import BattleHUD from './battle-hud';
 import GameOver from './game-over';
@@ -21,6 +22,7 @@ import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
 import { motion } from "framer-motion"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
+import { useSocket } from "@/hooks/use-socket"
 
 export default function BattleArena() {
   const router = useRouter()
