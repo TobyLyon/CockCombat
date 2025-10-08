@@ -526,19 +526,28 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
   const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {
-    // Convert incoming roster to PlayerStatus list with defaults
-    const converted: PlayerStatus[] = (list || []).map((p, index) => ({
-      id: String(p.playerId),
-      name: p.username,
-      isPlayer: false,
-      position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
-      rotation: new THREE.Euler(0, 0, 0),
-      hp: 3,
-      maxHp: 3,
-      isAlive: true,
-      visible: true,
-    }));
-    setLobbyPlayers(converted);
+    // Replace roster while preserving existing per-chicken colors; assign realistic colors for new entries
+    setLobbyPlayers(prev => {
+      const byId = new Map(prev.map(p => [p.id, p]));
+      const next: PlayerStatus[] = (list || []).map((p) => {
+        const id = String(p.playerId);
+        const prevEntry = byId.get(id);
+        const colors = prevEntry?.colors || generateChickenColors();
+        return {
+          id,
+          name: p.username,
+          isPlayer: false,
+          position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
+          rotation: new THREE.Euler(0, 0, 0),
+          colors,
+          hp: 3,
+          maxHp: 3,
+          isAlive: true,
+          visible: true,
+        };
+      });
+      return next;
+    });
   }, []);
   
   // Leave queue

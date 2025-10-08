@@ -474,6 +474,19 @@ preparePromise.then(() => {
       const connection = activeConnections.get(socket.id);
       if (connection) {
         connection.isReady = isReady;
+        // Ensure wallet and lobby are linked immediately to avoid first-join races
+        try {
+          if (!connection.walletAddress && typeof playerId === 'string') {
+            connection.walletAddress = playerId;
+          }
+          if (!connection.currentLobby && typeof lobbyId === 'string') {
+            connection.currentLobby = lobbyId;
+          }
+          if (connection.walletAddress && typeof lobbyId === 'string') {
+            if (!global.lobbyPresence.has(lobbyId)) global.lobbyPresence.set(lobbyId, new Set());
+            global.lobbyPresence.get(lobbyId).add(connection.walletAddress);
+          }
+        } catch {}
         
         // Broadcast ready status to all players in the lobby
         io.to(lobbyId).emit('player_ready_status', {

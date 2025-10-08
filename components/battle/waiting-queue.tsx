@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Avatar } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Clock, Users, Trophy, AlertCircle, Loader2, Check } from "lucide-react"
+import { Users, Trophy, AlertCircle, Loader2, Check } from "lucide-react"
 import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/utils"
 import { Lobby } from "@/lib/lobbies"
 import { useSocket } from "@/hooks/use-socket"
@@ -33,7 +33,8 @@ export default function WaitingQueue({
   const { publicKey } = useWallet()
   const { socket, isConnected } = useSocket()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  // No countdown on the secondary confirmation screen
+  const [countdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
   const { syncLobbyPlayers } = useGameState()
   // Track stable full-roster to auto-advance without asking users to ready again
@@ -89,9 +90,9 @@ export default function WaitingQueue({
     return () => clearInterval(interval);
   }, [isConnected, lobby.id, lobby.matchType, onStartBattle, playSound]);
 
-  // We do not display a countdown in this secondary confirmation screen
+  // No countdown ticking on this screen
 
-  // Listen for queue phase events; advance on round_start
+  // Listen for queue phase events; advance on round_start (no local countdown display)
   useEffect(() => {
     if (!socket) return
     const onQueueBegin = (payload: any) => {
@@ -101,11 +102,6 @@ export default function WaitingQueue({
     const onArenaLock = (payload: any) => {
       // Replace roster with locked list
       try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.wallet.slice(0,8)+"...", isAi: p.isAi }))) } catch {}
-      // Show a small 3s countdown if desired
-    }
-    const onRoundCountdown = (p: any) => {
-      const c = typeof p?.count === 'number' ? p.count : null
-      if (c !== null) setCountDownSafe(c)
     }
     const onStarted = () => {
       try { playSound('button') } catch {}
@@ -113,19 +109,13 @@ export default function WaitingQueue({
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
-    socket.on('round_countdown', onRoundCountdown)
     socket.on('round_start', onStarted)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('arena_lock_roster', onArenaLock)
-      socket.off('round_countdown', onRoundCountdown)
       socket.off('round_start', onStarted)
     }
   }, [socket, isConnected, onStartBattle, playSound])
-
-  const setCountDownSafe = (c: number) => {
-    setCountdown(c)
-  }
 
   // Listen for lobby roster updates over socket (server truth), with refresh requests
   useEffect(() => {
@@ -212,49 +202,7 @@ export default function WaitingQueue({
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-4 lg:p-6 max-w-6xl w-full mx-auto max-h-full overflow-hidden relative">
       
-      {/* Countdown Overlay (3..0 from server round_countdown) */}
-      <AnimatePresence>
-        {countdown !== null && countdown > 0 && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            className="absolute inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg"
-          >
-            <div className="text-center">
-              <motion.div
-                key={countdown}
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 1.2, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="text-6xl sm:text-8xl font-bold text-yellow-400 pixel-font mb-4 drop-shadow-lg"
-                style={{ 
-                  textShadow: '4px 4px 0px rgba(0,0,0,0.8), 8px 8px 0px rgba(255,170,0,0.3)' 
-                }}
-              >
-                {countdown}
-              </motion.div>
-              <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xl sm:text-2xl text-gray-300 pixel-font mb-4"
-              >
-                BATTLE STARTING...
-              </motion.p>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="flex items-center justify-center gap-2 text-lg text-yellow-400"
-              >
-                <Clock className="h-5 w-5 animate-pulse" />
-                <span>Get ready to fight!</span>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* No countdown overlay on this screen */}
 
       {/* Ready Status Banner */}
       <AnimatePresence>
