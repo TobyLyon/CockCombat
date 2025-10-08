@@ -225,7 +225,7 @@ preparePromise.then(() => {
             // Instead, just refresh the lobby state for everyone
             console.log(`🔄 Refreshing lobby state for all players in ${lobbyId}`);
             
-            const lobbyPlayers = lobby.players.map(player => {
+            let lobbyPlayers = lobby.players.map(player => {
               // Check ready status from socket connections PER PLAYER
               let isReady = false;
               for (const [, conn] of activeConnections.entries()) {
@@ -243,6 +243,27 @@ preparePromise.then(() => {
                 isAi: player.isAi || false
               };
             });
+
+            // Presence-based fallback: if API list is empty but sockets are present, synthesize players from presence
+            try {
+              const presence = global.lobbyPresence?.get(lobbyId) || new Set();
+              if (lobbyPlayers.length === 0 && presence.size > 0) {
+                lobbyPlayers = [];
+                for (const addr of presence.values()) {
+                  let ready = false;
+                  for (const [, c] of activeConnections.entries()) {
+                    if (c.currentLobby === lobbyId && c.walletAddress === addr) { ready = !!c.isReady; break; }
+                  }
+                  lobbyPlayers.push({
+                    playerId: addr,
+                    username: addr.slice(0, 8) + '...',
+                    chickenName: 'Default',
+                    isReady: ready,
+                    isAi: false,
+                  });
+                }
+              }
+            } catch {}
             
             // Broadcast updated lobby state to all players in the room
             io.to(lobbyId).emit('lobby_updated', {
@@ -447,7 +468,7 @@ preparePromise.then(() => {
         
         if (lobby) {
           // Merge API lobby players with socket ready status
-          const lobbyPlayers = lobby.players.map(player => {
+          let lobbyPlayers = lobby.players.map(player => {
             // Check if this player has a socket connection with ready status
             let isReady = false;
             for (const [, connection] of activeConnections.entries()) {
@@ -465,6 +486,27 @@ preparePromise.then(() => {
               isAi: player.isAi || false
             };
           });
+
+          // Presence-based fallback if API is empty
+          try {
+            const presence = global.lobbyPresence?.get(lobbyId) || new Set();
+            if (lobbyPlayers.length === 0 && presence.size > 0) {
+              lobbyPlayers = [];
+              for (const addr of presence.values()) {
+                let ready = false;
+                for (const [, c] of activeConnections.entries()) {
+                  if (c.currentLobby === lobbyId && c.walletAddress === addr) { ready = !!c.isReady; break; }
+                }
+                lobbyPlayers.push({
+                  playerId: addr,
+                  username: addr.slice(0, 8) + '...',
+                  chickenName: 'Default',
+                  isReady: ready,
+                  isAi: false,
+                });
+              }
+            }
+          } catch {}
           
           console.log(`📋 Sending lobby state for ${lobbyId}:`, lobbyPlayers);
           

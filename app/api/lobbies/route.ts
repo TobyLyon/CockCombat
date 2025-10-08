@@ -219,10 +219,17 @@ export async function POST(req: NextRequest) {
     // Check if player is already in the lobby
     const existingPlayer = lobby.players.find(p => p.playerId === playerId);
     if (existingPlayer) {
-    // Get socket instance and broadcast current lobby state
+    // Get socket instance and broadcast current lobby state (and presence add)
     try {
       const socketIo = await getSocketInstance();
       if (socketIo) {
+        try {
+          if ((global as any).lobbyPresence) {
+            const set = (global as any).lobbyPresence.get(lobbyId) || new Set();
+            set.add(playerId);
+            (global as any).lobbyPresence.set(lobbyId, set);
+          }
+        } catch {}
         // Convert lobby players to socket format with usernames
         const lobbyPlayers = lobby.players.map(p => ({
           playerId: p.playerId,
@@ -265,6 +272,15 @@ export async function POST(req: NextRequest) {
       username: username 
     };
     lobby.players.push(player);
+
+    // Track presence immediately
+    try {
+      if ((global as any).lobbyPresence) {
+        const set = (global as any).lobbyPresence.get(lobbyId) || new Set();
+        set.add(playerId);
+        (global as any).lobbyPresence.set(lobbyId, set);
+      }
+    } catch {}
 
     // Assign escrow wallet when first player joins (for non-tutorial matches)
     if (!lobby.escrowWalletId && lobby.matchType !== 'tutorial' && lobby.amount > 0) {
@@ -340,7 +356,7 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
-  // Tutorial lobbies: do NOT backfill immediately; AI are added at ready-time
+  // Tutorial lobbies: backfill when first human is ready (waiting-queue will show AI). Do not purge humans.
 
   if (lobby.players.length === lobby.capacity && lobby.matchType !== 'tutorial') {
     lobby.status = 'starting';
