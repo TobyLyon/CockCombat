@@ -1,4 +1,4 @@
-import { supabase, Profile, Chicken, Match, Transaction, Achievement, FunStats } from './supabase'
+import { supabase, getWriteClient, Profile, Chicken, Match, Transaction, Achievement, FunStats } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
 
 /**
@@ -34,7 +34,8 @@ export class ProfileService {
   static async createProfile(walletAddress: string, username: string): Promise<Profile | null> {
     console.log(`Creating profile for ${walletAddress} with username ${username}`);
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('profiles')
         .insert({
           wallet_address: walletAddress,
@@ -58,7 +59,8 @@ export class ProfileService {
    */
   static async updateProfile(walletAddress: string, updates: Partial<Profile>): Promise<Profile | null> {
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('profiles')
         .update(updates)
         .eq('wallet_address', walletAddress)
@@ -128,7 +130,8 @@ export class ProfileService {
    */
   static async createChicken(chicken: Partial<Chicken>): Promise<Chicken | null> {
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('chickens')
         .insert([chicken])
         .select()
@@ -151,7 +154,8 @@ export class ProfileService {
    */
   static async updateChicken(chickenId: string, updates: Partial<Chicken>): Promise<Chicken | null> {
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('chickens')
         .update(updates)
         .eq('id', chickenId)
@@ -175,6 +179,7 @@ export class ProfileService {
    */
   static async setActiveChicken(walletAddress: string, chickenId: string): Promise<boolean> {
     try {
+      const db = getWriteClient()
       const { error } = await supabase
         .from('profiles')
         .update({ active_chicken_id: chickenId })
@@ -302,7 +307,8 @@ export class ProfileService {
    */
   static async recordTransaction(transaction: Partial<Transaction>): Promise<Transaction | null> {
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('transactions')
         .insert([transaction])
         .select()

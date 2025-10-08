@@ -9,6 +9,15 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null as any
 
+// Server-side admin client for privileged writes (requires service role)
+export const supabaseAdmin = (typeof window === 'undefined'
+  && process.env.NEXT_PUBLIC_SUPABASE_URL
+  && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.SUPABASE_SERVICE_ROLE_KEY as string)
+  : null as any
+
+export const getWriteClient = () => supabaseAdmin || supabase
+
 // Define database types
 export type UserProfile = Profile // Add alias for compatibility
 export type Profile = {
