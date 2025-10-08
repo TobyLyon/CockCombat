@@ -1,6 +1,6 @@
 "use client"
 
-import LoadingPixelChicken from "@/components/ui/loading-pixel-chicken"
+import LoadingPixelChicken from "../components/ui/loading-pixel-chicken"
 
 export default function Loading() {
   return (
