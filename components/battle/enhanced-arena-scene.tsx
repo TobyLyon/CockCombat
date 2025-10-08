@@ -66,6 +66,9 @@ const controlsMap: ControlMapItem[] = [
   { name: Controls.peck, keys: ["Space", "Mouse0"] } // Spacebar or left mouse click for pecking
 ];
 
+// Reduced rotation sensitivity (radians per second)
+const ROTATION_SPEED = 0.9;
+
 interface SceneContentAndLogicProps extends EnhancedArenaSceneProps {
   onPlayerDamage?: (targetPlayerId: string, damageAmount?: number) => void;
   players?: PlayerStatus[]; // Ensure players is also defined here (or inherit properly)
@@ -554,9 +557,11 @@ function SceneContent({
     // if (right) moveVector.x += 1;
 
 
-    // Handle rotation
-    if (left) selfRotation.y += 0.1; // Rotate left (adjust speed as needed)
-    if (right) selfRotation.y -= 0.1; // Rotate right
+    // Handle rotation with deltaTime scaling and clamping
+    if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
+    if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
+    if (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2;
+    if (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2;
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
@@ -953,9 +958,19 @@ export default React.memo(function EnhancedArenaScene({
             antialias: true,
             alpha: false,
             preserveDrawingBuffer: false,
-            powerPreference: "high-performance"
+            powerPreference: "high-performance",
+            stencil: false
           }}
-          dpr={[1, 2]}
+          dpr={[1, 1.5]}
+          onCreated={({ gl }) => {
+            try {
+              const canvas = gl.domElement as HTMLCanvasElement;
+              const onLost = (e: Event) => { e.preventDefault?.(); console.warn('⚠️ WebGL context lost in EnhancedArena, preventing default'); };
+              const onRestored = () => { console.info('✅ WebGL context restored in EnhancedArena'); };
+              canvas.addEventListener('webglcontextlost', onLost as any, { passive: false } as any);
+              canvas.addEventListener('webglcontextrestored', onRestored as any, { passive: true } as any);
+            } catch {}
+          }}
         >
           <color attach="background" args={['#87CEEB']} />
           <fog attach="fog" args={['#87CEEB', 30, 500]} />

@@ -243,6 +243,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   // Sound mappings
   const soundMap: { [key: string]: string } = {
     punch: '/sounds/punch.mp3',
+    hit: '/sounds/punch.mp3',
     strong_punch: '/sounds/strong_punch.mp3',
     death: '/sounds/die.mp3',
     pickup: '/sounds/pickup.mp3',
