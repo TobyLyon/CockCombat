@@ -2,28 +2,28 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
-import { useWallet } from "@/hooks/use-wallet"
+import { WalletMultiButton } from "../wallet/wallet-multi-button"
+import { useWallet } from "../../hooks/use-wallet"
 // Solana modal removed in EVM-only build
-import { isBsc } from "@/lib/chain"
-import { Button } from "@/components/ui/button"
+import { isBsc } from "../../lib/chain"
+import { Button } from "../ui/button"
 import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 const EnhancedArenaScene = dynamic(() => import("./enhanced-arena-scene"), { ssr: false })
 import WaitingQueue from "./waiting-queue"
 const LobbyRoom = dynamic(() => import("./lobby-room"), { ssr: false })
-import { useAudio } from "@/contexts/AudioContext"
+import { useAudio } from "../../contexts/AudioContext"
 import BattleHUD from './battle-hud';
 import GameOver from './game-over';
 import WinnerCelebration from './winner-celebration';
-import { useGameState, GameState } from "@/contexts/GameStateContext"
-import { Lobby } from "@/lib/lobbies";
+import { useGameState, GameState } from "../../contexts/GameStateContext"
+import { Lobby } from "../../lib/lobbies";
 // Solana web3 removed in EVM-only build
 import { motion } from "framer-motion"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
-import { useSocket } from "@/hooks/use-socket"
+import { useSocket } from "../../hooks/use-socket"
 
 export default function BattleArena() {
   const router = useRouter()

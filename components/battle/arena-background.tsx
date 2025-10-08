@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useMemo } from "react"
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber"
 import * as THREE from "three"
 import { TextureLoader } from "three"
-import { PixelChicken } from "@/components/3d/pixel-chicken-viewer"
+import { PixelChicken } from "../3d/pixel-chicken-viewer"
 
 export default function ArenaBackground() {
   const [sceneIndex, setSceneIndex] = useState(0)
