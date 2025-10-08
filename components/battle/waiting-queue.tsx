@@ -47,7 +47,10 @@ export default function WaitingQueue({
   )
 
   useEffect(() => {
-    // Poll the specific lobby for status updates
+    // If sockets are connected, rely on realtime updates and skip HTTP polling
+    if (isConnected) return;
+
+    // Poll the specific lobby for status updates (fallback when sockets unavailable)
     const interval = setInterval(async () => {
       try {
         const response = await fetch('/api/lobbies');
@@ -57,7 +60,12 @@ export default function WaitingQueue({
         const updatedLobby = lobbies.find(l => l.id === lobby.id);
 
         if (updatedLobby) {
-          setCurrentLobby(updatedLobby);
+          // Do not allow HTTP fallback to shrink roster below the current socket state
+          setCurrentLobby(prev => {
+            const nextPlayers = Array.isArray(updatedLobby.players) ? updatedLobby.players : [];
+            const keepPlayers = (prev?.players || []).length > nextPlayers.length ? prev.players : nextPlayers;
+            return { ...prev, ...updatedLobby, players: keepPlayers } as Lobby;
+          });
           
           // Check if all players are ready (minimum requirements met)
           const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4;
@@ -108,7 +116,7 @@ export default function WaitingQueue({
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
-  }, [lobby.id, lobby.matchType, onStartBattle, playSound]);
+  }, [isConnected, lobby.id, lobby.matchType, onStartBattle, playSound]);
 
   // Countdown effect
   useEffect(() => {
@@ -147,14 +155,19 @@ export default function WaitingQueue({
         return
       }
       // Merge only the fields we expect; keep existing fields like highRoller/status
-      setCurrentLobby(prev => ({
-        ...prev,
-        players: Array.isArray(payload.players) ? payload.players : prev.players,
-        capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
-        amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
-        currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
-        matchType: (payload.matchType as any) || prev.matchType,
-      }))
+      setCurrentLobby(prev => {
+        const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players;
+        // Prevent regressions (e.g., falling back to HTTP with smaller list overwriting socket state)
+        const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers;
+        return {
+          ...prev,
+          players: mergedPlayers,
+          capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
+          amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
+          currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
+          matchType: (payload.matchType as any) || prev.matchType,
+        } as Lobby;
+      })
       // Recompute readiness state
       const playersArr = Array.isArray(payload.players) ? payload.players : currentLobby.players
       const minPlayersRequired = lobby.matchType === 'tutorial' ? 1 : 4
