@@ -508,7 +508,6 @@ function SceneContent({
     if (peckPressed && !selfIsPecking && !wasPecking.current) {
       setSelfIsPecking(true);
       wasPecking.current = true;
-      if (playSound) { playSound("punch"); playSound("hit"); }
 
       // Improved hit detection: use horizontal (XZ) distance and slightly larger reach
       if (playerRef.current) {
@@ -526,7 +525,7 @@ function SceneContent({
           // Slightly increase reach to improve corner-angle registration
           const peckReach = 3.4;
           if (horizontalDistance <= peckReach) {
-            if (onPlayerDamage) onPlayerDamage(opponent.id, 1);
+            if (onPlayerDamage) onPlayerDamage(opponent.id, 1); // will play punch/kill sound via handler
             break;
           }
         }

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import * as THREE from 'three';
 import { mockPlayers, soundMap } from '@/mocks/game-data';
 import { useProfile } from '@/contexts/ProfileContext';
+import { useWallet } from '@/hooks/use-wallet';
 import { useAudio } from './AudioContext'; // Import useAudio
 
 // Define player status interface
@@ -208,6 +209,7 @@ const initialPlayers = [...mockPlayers];
 // Provider component
 export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useProfile();
+  const { publicKey } = useWallet();
   // Game state
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [selectedChicken, setSelectedChicken] = useState<any>(null);
@@ -508,11 +510,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     console.log('Starting battle with players:', players);
     
     // Use the exact chickens from the lobby for the battle
+    const myId = (() => { try { return publicKey?.toBase58?.() || publicKey?.toString?.() || null } catch { return null } })();
     const battlePlayers = [
       // Include the player (ensure named with profile username if available)
       ...players.filter(p => p.isPlayer).map(p => ({ ...p, name: profile?.username || p.name || 'You' })),
       // Include all the lobby chickens with their exact names and appearance
-      ...lobbyPlayers
+      ...lobbyPlayers.filter(lp => !(myId && lp.id === myId))
     ];
     
     // Position ALL chickens (including player) around the ring
@@ -537,14 +540,17 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setBattleStartAt(Date.now());
     setGameState('battle');
     playSound('battle_start');
-  }, [players, lobbyPlayers, playSound, profile?.username]);
+  }, [players, lobbyPlayers, playSound, profile?.username, publicKey]);
 
   // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
   const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {
     // Replace roster while preserving existing per-chicken colors; assign realistic colors for new entries
     setLobbyPlayers(prev => {
       const byId = new Map(prev.map(p => [p.id, p]));
-      const next: PlayerStatus[] = (list || []).map((p) => {
+      const myId = (() => { try { return publicKey?.toBase58?.() || publicKey?.toString?.() || null } catch { return null } })();
+      const source = Array.isArray(list) ? list : []
+      const filtered = myId ? source.filter((p: any) => String(p.playerId) !== myId) : source
+      const next: PlayerStatus[] = filtered.map((p) => {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || generateChickenColors();
@@ -564,7 +570,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       });
       return next;
     });
-  }, []);
+  }, [publicKey]);
   
   // Leave queue
   const leaveQueue = useCallback(() => {
