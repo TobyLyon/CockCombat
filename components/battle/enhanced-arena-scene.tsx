@@ -142,10 +142,21 @@ function SimpleBarn({ position = [0,0,0] as [number, number, number] }) {
         <boxGeometry args={[8, 5, 6]} />
         <meshStandardMaterial map={woodTexture} color="#B22222" roughness={0.8} />
       </mesh>
-      {/* Gable roof */}
-      <mesh position={[0, 5.5, 0]} rotation={[0, 0, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0, 5.5, 6.4, 4]} />
+      {/* Gable roof: two sloped panels + ridge cap to avoid clipping */}
+      {/* Left slope */}
+      <mesh position={[-2.2, 5.6, 0]} rotation={[0, 0, Math.PI / 6]} castShadow receiveShadow>
+        <boxGeometry args={[4.6, 0.2, 6.4]} />
         <meshStandardMaterial color="#5b3a29" roughness={0.9} />
+      </mesh>
+      {/* Right slope */}
+      <mesh position={[2.2, 5.6, 0]} rotation={[0, 0, -Math.PI / 6]} castShadow receiveShadow>
+        <boxGeometry args={[4.6, 0.2, 6.4]} />
+        <meshStandardMaterial color="#5b3a29" roughness={0.9} />
+      </mesh>
+      {/* Ridge cap */}
+      <mesh position={[0, 6.05, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.25, 0.2, 6.5]} />
+        <meshStandardMaterial color="#4a3621" roughness={0.85} />
       </mesh>
       {/* Front door */}
       <mesh position={[0, 1.5, 3.05]} castShadow>
