@@ -62,8 +62,8 @@ const controlsMap: ControlMapItem[] = [
   { name: Controls.backward, keys: ["ArrowDown", "KeyS"] },
   { name: Controls.left, keys: ["ArrowLeft", "KeyA"] },
   { name: Controls.right, keys: ["ArrowRight", "KeyD"] },
-  { name: Controls.jump, keys: ["ShiftLeft", "ShiftRight"] }, // Shift for jumping
-  { name: Controls.peck, keys: ["Space", "Mouse0"] } // Spacebar or left mouse click for pecking
+  { name: Controls.jump, keys: ["Space"] }, // Space for jumping
+  { name: Controls.peck, keys: ["ShiftLeft", "ShiftRight", "Mouse0"] } // Shift or left mouse click for pecking
 ];
 
 // Reduced rotation sensitivity (radians per second)
