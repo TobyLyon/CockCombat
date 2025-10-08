@@ -329,14 +329,28 @@ export async function POST(req: NextRequest) {
         timestamp: Date.now()
       });
 
-      // Also broadcast the full lobby update
-      const lobbyPlayers = lobby.players.map(p => ({
-        playerId: p.playerId,
-        username: p.username || p.playerId.slice(0, 8) + '...',
-        chickenName: p.chickenId || 'Default',
-        isReady: false,
-        isAi: p.isAi || false
-      }));
+      // Also broadcast the full lobby update (ensure current ready states are preserved for humans and AIs always ready in tutorial)
+      const lobbyPlayers = lobby.players.map(p => {
+        // Preserve socket-known readiness if available; fall back to stored flag; AI auto-ready in tutorial
+        let isReady = Boolean(p.isReady)
+        try {
+          const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
+          if (presence && presence.has(p.playerId)) {
+            // Probe activeConnections to read current isReady
+            for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+              if (conn.currentLobby === lobbyId && conn.walletAddress === p.playerId) { isReady = !!conn.isReady; break }
+            }
+          }
+        } catch {}
+        if (lobby.matchType === 'tutorial' && p.isAi) isReady = true
+        return {
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady,
+          isAi: p.isAi || false
+        }
+      });
       
       socketIo.to(lobbyId).emit('lobby_updated', {
         id: lobbyId,

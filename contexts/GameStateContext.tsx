@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { mockPlayers, soundMap } from '@/mocks/game-data';
+import { useProfile } from '@/contexts/ProfileContext';
 import { useAudio } from './AudioContext'; // Import useAudio
 
 // Define player status interface
@@ -206,6 +207,7 @@ const initialPlayers = [...mockPlayers];
 
 // Provider component
 export function GameStateProvider({ children }: { children: React.ReactNode }) {
+  const { profile } = useProfile();
   // Game state
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [selectedChicken, setSelectedChicken] = useState<any>(null);
@@ -507,8 +509,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     
     // Use the exact chickens from the lobby for the battle
     const battlePlayers = [
-      // Include the player
-      ...players.filter(p => p.isPlayer),
+      // Include the player (ensure named with profile username if available)
+      ...players.filter(p => p.isPlayer).map(p => ({ ...p, name: profile?.username || p.name || 'You' })),
       // Include all the lobby chickens with their exact names and appearance
       ...lobbyPlayers
     ];
@@ -535,7 +537,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setBattleStartAt(Date.now());
     setGameState('battle');
     playSound('battle_start');
-  }, [players, lobbyPlayers, playSound]);
+  }, [players, lobbyPlayers, playSound, profile?.username]);
 
   // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
   const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {

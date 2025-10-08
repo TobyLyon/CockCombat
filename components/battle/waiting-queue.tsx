@@ -64,14 +64,16 @@ export default function WaitingQueue({
 
         if (updatedLobby) {
           // Do not allow HTTP fallback to shrink roster below the current socket state
+          let effectivePlayers: any[] = []
           setCurrentLobby(prev => {
             const nextPlayers = Array.isArray(updatedLobby.players) ? updatedLobby.players : [];
             const keepPlayers = (prev?.players || []).length > nextPlayers.length ? prev.players : nextPlayers;
+            effectivePlayers = keepPlayers
             return { ...prev, ...updatedLobby, players: keepPlayers } as Lobby;
           });
           
-          // Sync authoritative roster to game state for spawn control
-          try { syncLobbyPlayers((updatedLobby.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
+          // Sync roster for spawning using the effective (non-regressing) list
+          try { syncLobbyPlayers((effectivePlayers || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
           
           // If the lobby is starting or already started, trigger the battle (HTTP fallback)
           if (updatedLobby.status === 'starting' || updatedLobby.status === 'started') {
@@ -140,10 +142,12 @@ export default function WaitingQueue({
         return
       }
       // Merge only the fields we expect; keep existing fields like highRoller/status
+      let mergedPlayersLocal: any[] = []
       setCurrentLobby(prev => {
         const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players;
         // Prevent regressions (e.g., falling back to HTTP with smaller list overwriting socket state)
         const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers;
+        mergedPlayersLocal = mergedPlayers
         return {
           ...prev,
           players: mergedPlayers,
@@ -154,16 +158,18 @@ export default function WaitingQueue({
         } as Lobby;
       })
       // Sync roster to game state for spawning (connected-only semantics)
-      try { syncLobbyPlayers((payload.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
+      try { syncLobbyPlayers((mergedPlayersLocal || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
       console.log('[WaitingQueue] Updated currentLobby players:', (payload.players || []).length || 0)
     }
 
     const onLobbySync = (payload: any) => {
       console.log('[WaitingQueue] lobby_synced received:', payload)
       if (!payload || payload.id !== lobby.id) return
+      let mergedPlayersLocal: any[] = []
       setCurrentLobby(prev => {
         const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players
         const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers
+        mergedPlayersLocal = mergedPlayers
         return {
           ...prev,
           players: mergedPlayers,
@@ -173,7 +179,7 @@ export default function WaitingQueue({
           matchType: (payload.matchType as any) || prev.matchType,
         } as Lobby
       })
-      try { syncLobbyPlayers((payload.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
+      try { syncLobbyPlayers((mergedPlayersLocal || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
       console.log('[WaitingQueue] Synced currentLobby players:', payload.players?.length || 0)
     }
 
