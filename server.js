@@ -196,7 +196,8 @@ preparePromise.then(() => {
             } catch {}
           }
           connection.currentLobby = lobbyId;
-          connection.isReady = false;
+          // Preserve previous ready state; secondary confirmation should not reset readiness
+          connection.isReady = Boolean(connection.isReady);
           // Track presence
           if (connection.walletAddress) {
             if (!global.lobbyPresence.has(lobbyId)) {
@@ -1125,13 +1126,7 @@ preparePromise.then(() => {
               if (countdown < 0) {
                 clearInterval(countdownInterval);
                 try { io.to(lobbyId).emit('match_started'); } catch {}
-                // Clean up lobby connections
-                for (const [id, connection] of activeConnections.entries()) {
-                  if (connection.currentLobby === lobbyId) {
-                    delete connection.currentLobby;
-                    connection.isReady = false;
-                  }
-                }
+                // Do not reset readiness here; keep it through transition
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
               }
