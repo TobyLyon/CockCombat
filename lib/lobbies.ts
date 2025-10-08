@@ -24,6 +24,9 @@ const CURRENCY = isBsc() ? 'BNB' : 'SOL';
 export const lobbies: Lobby[] = [
   // Single FREE tutorial lobby
   { id: 'tutorial-1', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
+  // Low-wager BNB lobbies for accessibility (~$6.6 and ~$13.2 at ~$1.32k/BNB)
+  { id: 'lobby-0.005', amount: 0.005, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
+  { id: 'lobby-0.01', amount: 0.01, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'lobby-0.05', amount: 0.05, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'lobby-0.1', amount: 0.1, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'lobby-0.25', amount: 0.25, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
