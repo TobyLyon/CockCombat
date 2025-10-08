@@ -268,7 +268,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize background music player
   const playBackgroundMusic = useCallback((track: 'background' | 'arena') => {
-    const trackPath = `/sounds/${track}.mp3`;
+    const trackPath = track === 'background'
+      ? '/sounds/chicken-soundscape.mp3'
+      : '/sounds/arena.mp3';
     
     // Create audio element if it doesn't exist
     if (!backgroundMusicRef.current) {
@@ -654,10 +656,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     if (!hasInteracted || !audioEnabled) return;
 
     // Determine target music based on game state
-    let targetTrack: 'background' | 'arena' | null = null;
-    if (gameState === 'battle') {
-      targetTrack = 'arena' as const;
-    } else if (gameState === 'lobby' || gameState === 'queue') {
+    // Play soundscape on lobby/queue; stop when in arena (battle)
+    let targetTrack: 'background' | null = null;
+    if (gameState === 'lobby' || gameState === 'queue') {
       targetTrack = 'background' as const;
     }
 
