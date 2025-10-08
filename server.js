@@ -1498,6 +1498,8 @@ preparePromise.then(() => {
       gameState.battleStatus = 'ended';
       opponent.status = 'defeated';
       currentPlayer.status = 'winner';
+      // Trigger victory sound on server
+      try { room && room.player1Id && room.player2Id && global.socketIo && global.socketIo.to(room.player1Id).emit('play_sound', { key: 'victory' }); } catch {}
     } else {
       // Switch turns
       gameState.turn = isPlayer1 ? room.player2Id : room.player1Id;

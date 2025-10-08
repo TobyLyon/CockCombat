@@ -228,7 +228,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const SOUND_VOLUMES = {
     punch: 1.8,
     hit: 1.8,
-    strong_punch: 0.9, // Slightly reduced final blow
+    strong_punch: 0.35, // ~-9 dB relative trim for killshots
     die: 0.8,
     pickup: 0.7,
     jump: 0.5,
@@ -248,9 +248,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     button: '/sounds/click.mp3',
     arena: '/sounds/arena.mp3',
     background: '/sounds/background.mp3',
-    background_music: '/sounds/background.mp3',  // Add alias for background music
+    background_music: '/sounds/background.mp3',
     battle_start: '/sounds/arena.mp3',
-    victory: '/sounds/die.mp3',
+    victory: '/sounds/JESUS_CHRIST_2.mp3',
     killstreak: '/sounds/killstreaks/chicken_spree.mp3'
   };
 
@@ -352,11 +352,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       }
       
       newHp = targetPlayer.hp - damageAmount;
-      playSound('punch');
+      // Play regular hit sound on non-lethal hits
+      const isKillshot = newHp <= 0;
+      playSound(isKillshot ? 'strong_punch' : 'punch');
       
       if (newHp <= 0) {
         // Player is defeated
-        playSound('death');
         setLastDefeatedChickenId(targetPlayerId);
         
         const updatedPlayers = currentPlayers.map(p =>
@@ -370,6 +371,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
             const winner = alivePlayers[0];
             console.log(`Winner found: ${winner.id}`);
             setPrizeAmount(updatedPlayers.length);
+            // Trigger victory sound for the winner locally
+            try { playSound('victory'); } catch {}
           } else {
             console.log("All players defeated.");
             setPrizeAmount(0);
