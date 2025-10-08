@@ -52,7 +52,8 @@ export default function BattleArena() {
     startBattle,
     exitBattle,
     playSound,
-    setGameState
+    setGameState,
+    setMatchMeta
   } = useGameState();
   const { socket } = useSocket();
   
@@ -553,6 +554,11 @@ export default function BattleArena() {
                       setInLobbyRoom(false);
                       // Always go through the confirmation queue screen
                       joinQueue();
+                      // Capture match meta for post-game display
+                      try {
+                        const humans = (joinedLobby.players || []).filter(p => !p.isAi).length || 0;
+                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || 'SOL', matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
+                      } catch {}
                     }}
                   />
                 </div>

@@ -55,6 +55,8 @@ interface GameStateContextType {
   prizeAmount: number; // Track the prize amount for the winner
   // Sync roster for the secondary confirmation from live lobby/socket
   syncLobbyPlayers: (players: Array<{ playerId: string; username?: string; chickenName?: string; isAi?: boolean }>) => void;
+  matchMeta?: { amount: number; currency: string; matchType: string; humanCount: number } | null;
+  setMatchMeta: (meta: { amount: number; currency: string; matchType: string; humanCount: number }) => void;
 }
 
 // Create the context with default values
@@ -210,6 +212,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const [chickensLeft, setChickensLeft] = useState(7); // Start with 7 chickens (including player)
   const [lastDefeatedChickenId, setLastDefeatedChickenId] = useState<string | null>(null);
   const [prizeAmount, setPrizeAmount] = useState(0); // Track prize amount for winner
+  const [matchMeta, setMatchMeta] = useState<{ amount: number; currency: string; matchType: string; humanCount: number } | null>(null);
   
   // Player data - use mock data from mocks/game-data.ts
   const [players, setPlayers] = useState<PlayerStatus[]>(initialPlayers);
@@ -689,6 +692,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setHasInteracted: () => {}, // Provide empty function
     prizeAmount,
     syncLobbyPlayers,
+    matchMeta,
+    setMatchMeta,
   };
   
   // Cleanup Three.js resources when unmounted

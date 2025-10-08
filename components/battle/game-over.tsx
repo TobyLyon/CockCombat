@@ -16,7 +16,7 @@ interface GameOverProps {
 }
 
 const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
-  const { playSound, players, prizeAmount } = useGameState();
+  const { playSound, players, prizeAmount, matchMeta } = useGameState();
   const { publicKey } = useWallet();
   const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [autoExitTimer, setAutoExitTimer] = useState(10); // 10 second auto-exit
@@ -112,11 +112,11 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             <p className="text-gray-400 text-sm mb-1">PLAYERS</p>
             <p className="text-3xl font-bold text-white">{totalPlayers}</p>
           </div>
-          {isHumanWinner && prizeAmount > 0 && (
+          {isHumanWinner && matchMeta && matchMeta.amount > 0 && (
             <div className="text-center">
               <p className="text-gray-400 text-sm mb-1">PRIZE</p>
               <p className="text-3xl font-bold text-yellow-400">
-                {(prizeAmount * 0.96).toFixed(2)} SOL
+                {(matchMeta.amount * Math.max(1, matchMeta.humanCount) * 0.96).toFixed(2)} {matchMeta.currency}
               </p>
             </div>
           )}
