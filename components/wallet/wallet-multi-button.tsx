@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Copy, Check, LogOut, Wallet, User } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useProfile } from "@/contexts/ProfileContext"
 
 export interface WalletMultiButtonProps {
   onClickSound?: () => void;
@@ -28,6 +29,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
   const [copied, setCopied] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const { profile } = useProfile()
 
   useEffect(() => {
     setMounted(true)
@@ -123,7 +125,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
           whileTap={{ scale: 0.95 }}
         >
           <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-          <span className="truncate min-w-0 max-w-[70px] sm:max-w-[100px]">{publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}</span>
+          <span className="truncate min-w-0 max-w-[120px] sm:max-w-[160px]">{profile?.username?.trim() || `${publicKey?.toString().slice(0, 4)}...${publicKey?.toString().slice(-4)}`}</span>
         </motion.button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[200px]">
