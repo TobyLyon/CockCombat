@@ -22,6 +22,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     disconnect,
     wallet: selectedWallet,
     select,
+    wallets,
   } = useWallet()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
@@ -70,16 +71,45 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     )
   }
 
-  // If not connected, render appropriate connect button per chain
+  // If not connected, render connect with wallet chooser (MetaMask, Coinbase, Brave, etc.) when available
   if (!connected) {
+    const hasChoices = Array.isArray(wallets) && wallets.length > 1
+    if (!hasChoices) {
+      return (
+        <button
+          onClick={async () => { if (onClickSound) onClickSound(); try { await select?.(); } catch {} }}
+          className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
+        >
+          <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+          <span>Connect Wallet</span>
+        </button>
+      )
+    }
     return (
-      <button
-        onClick={async () => { if (onClickSound) onClickSound(); try { await select?.(); } catch {} }}
-        className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
-      >
-        <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-        <span>Connect Wallet</span>
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <motion.button
+            className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+            <span>{connecting ? 'Connecting...' : 'Connect Wallet'}</span>
+          </motion.button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[200px]">
+          <div className="px-2 py-1.5 text-xs text-gray-400 border-b border-[#555555]">Choose Wallet</div>
+          {wallets.map((w) => (
+            <DropdownMenuItem
+              key={w.key}
+              onClick={async () => { if (onClickSound) onClickSound(); try { await select?.(w.key); } catch {} }}
+              className="cursor-pointer hover:bg-[#444444]"
+            >
+              {w.adapter.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 
