@@ -83,7 +83,7 @@ enum GameState {
 
 // Replace the ArenaFloor component to use the optimized texture loading
 function ArenaFloor() {
-  const floorTexture = useTexture("/textures/grass/coast_sand_rocks_02_diff_4k.jpg");
+  const floorTexture = useTexture("/textures/grass/Grass005_1K-PNG_Color.png");
 
   // Apply texture settings directly to the loaded texture
   useEffect(() => {
@@ -108,6 +108,46 @@ function ArenaFloor() {
       <meshStandardMaterial map={floorTexture} roughness={0.9} />
     </Plane>
   );
+}
+
+// Simple, realistic barn component reused across scenes
+function SimpleBarn({ position = [0,0,0] as [number, number, number] }) {
+  const woodTexture = useTexture("/textures/wood/WoodFloor044_1K-PNG_Color.png");
+  useEffect(() => {
+    if (woodTexture) {
+      woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping;
+      woodTexture.generateMipmaps = true;
+      woodTexture.minFilter = THREE.LinearMipmapLinearFilter;
+      woodTexture.magFilter = THREE.LinearFilter;
+      woodTexture.needsUpdate = true;
+    }
+  }, [woodTexture]);
+  return (
+    <group position={position}>
+      {/* Body */}
+      <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+        <boxGeometry args={[8, 5, 6]} />
+        <meshStandardMaterial map={woodTexture} color="#B22222" roughness={0.8} />
+      </mesh>
+      {/* Gable roof */}
+      <mesh position={[0, 5.5, 0]} rotation={[0, 0, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0, 5.5, 6.4, 4]} />
+        <meshStandardMaterial color="#5b3a29" roughness={0.9} />
+      </mesh>
+      {/* Front door */}
+      <mesh position={[0, 1.5, 3.05]} castShadow>
+        <boxGeometry args={[2.2, 3, 0.1]} />
+        <meshStandardMaterial color="#8B0000" roughness={0.85} />
+      </mesh>
+      {/* Simple windows */}
+      {[-2.5, 2.5].map((x, i) => (
+        <mesh key={`w2-${i}`} position={[x, 2.8, 3.06]}>
+          <boxGeometry args={[1.2, 0.9, 0.1]} />
+          <meshStandardMaterial color="#f0f8ff" roughness={0.2} />
+        </mesh>
+      ))}
+    </group>
+  )
 }
 
 function SceneContent({
@@ -669,6 +709,9 @@ function SceneContent({
       <ArenaFloor />
       <BarbedWireFence />
       {staticDecorations}
+
+      {/* Simple Barn placed outside the ring */}
+      <SimpleBarn position={[ARENA_CONFIG.ringRadius + 8, 0, -ARENA_CONFIG.ringRadius - 6]} />
 
       {/* Opponent Chickens */}
       {players && playerChicken && (

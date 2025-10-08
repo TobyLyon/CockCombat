@@ -796,7 +796,7 @@ function ArenaEnvironment() {
       } catch {}
       return tex as THREE.Texture
     }, [])
-    sandTexture = useLoader(TextureLoader, '/textures/stone/sandy_gravel_02_diff_4k.jpg')
+    sandTexture = useLoader(TextureLoader, '/textures/grass/Grass005_1K-PNG_Color.png')
     
     // Configure texture repeating for tiling
     sandTexture.wrapS = sandTexture.wrapT = THREE.RepeatWrapping
@@ -852,8 +852,8 @@ function ArenaEnvironment() {
 function ForestEnvironment() {
   let grassTexture, barkTexture
   try {
-    grassTexture = useLoader(TextureLoader, '/textures/grass/coast_sand_rocks_02_diff_4k.jpg')
-    barkTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+    grassTexture = useLoader(TextureLoader, '/textures/grass/Grass005_1K-PNG_Color.png')
+    barkTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
     
     // Configure texture repeating for tiling
     grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
@@ -967,8 +967,8 @@ function FarmyardEnvironment() {
       } catch {}
       return tex as THREE.Texture
     }, [])
-    woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
-    roofTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+    woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
+    roofTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
     
     // Configure texture repeating
     woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping

@@ -148,7 +148,7 @@ function paletteByIndex(i: number) {
 }
 
 function PastureScene() {
-  const grassTexture = useLoader(TextureLoader, '/textures/grass/coast_sand_rocks_02_diff_4k.jpg')
+  const grassTexture = useLoader(TextureLoader, '/textures/grass/Grass005_1K-PNG_Color.png')
   const dirtTexture = useMemo(() => {
     const loader = new TextureLoader()
     let loaded: THREE.Texture | null = null
@@ -217,8 +217,8 @@ function PastureScene() {
 }
 
 function ForestScene() {
-  const grassTexture = useLoader(TextureLoader, '/textures/grass/coast_sand_rocks_02_diff_4k.jpg')
-  const barkTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+  const grassTexture = useLoader(TextureLoader, '/textures/grass/Grass005_1K-PNG_Color.png')
+  const barkTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
   grassTexture.colorSpace = THREE.SRGBColorSpace
   barkTexture.colorSpace = THREE.SRGBColorSpace
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
@@ -300,7 +300,7 @@ function FarmyardScene() {
     } catch {}
     return loaded as THREE.Texture
   }, [])
-  const woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
+  const woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
   woodTexture.colorSpace = THREE.SRGBColorSpace
   woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping
   woodTexture.generateMipmaps = true
@@ -313,37 +313,30 @@ function FarmyardScene() {
         <planeGeometry args={[55, 55]} />
         <meshStandardMaterial map={dirtTexture} color="#8B7355" roughness={0.95} />
       </mesh>
-      {/* Red barn with proper gable roof */}
-      <group position={[0, 0, -8]}>
-        {/* Main barn body - bright red */}
-        <mesh position={[0, 2.4, 0]} castShadow receiveShadow>
-          <boxGeometry args={[7.5, 4.8, 1.2]} />
-          <meshStandardMaterial map={woodTexture} color="#B22222" roughness={0.85} />
+      {/* Simple realistic barn */}
+      <group position={[0, 0, -10]}>
+        {/* Body */}
+        <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+          <boxGeometry args={[8, 5, 6]} />
+          <meshStandardMaterial map={woodTexture} color="#B22222" roughness={0.8} />
         </mesh>
-        
-        {/* Triangular gable ends - fills the gap under roof */}
-        <mesh position={[0, 5.3, 0]} rotation={[0, 0, 0]} castShadow>
-          <coneGeometry args={[4.2, 1.6, 4]} />
-          <meshStandardMaterial color="#B22222" roughness={0.85} />
+        {/* Gable roof */}
+        <mesh position={[0, 5.5, 0]} rotation={[0, 0, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0, 5.5, 6.4, 4]} />
+          <meshStandardMaterial color="#5b3a29" roughness={0.9} />
         </mesh>
-        
-        {/* Roof - left slope */}
-        <mesh position={[-2.2, 5.8, 0]} rotation={[0, 0, Math.PI / 5.5]} castShadow receiveShadow>
-          <boxGeometry args={[2.8, 0.15, 1.8]} />
-          <meshStandardMaterial color="#654321" roughness={0.9} />
+        {/* Front door */}
+        <mesh position={[0, 1.5, 3.05]} castShadow>
+          <boxGeometry args={[2.2, 3, 0.1]} />
+          <meshStandardMaterial color="#8B0000" roughness={0.85} />
         </mesh>
-        
-        {/* Roof - right slope */}
-        <mesh position={[2.2, 5.8, 0]} rotation={[0, 0, -Math.PI / 5.5]} castShadow receiveShadow>
-          <boxGeometry args={[2.8, 0.15, 1.8]} />
-          <meshStandardMaterial color="#654321" roughness={0.9} />
-        </mesh>
-        
-        {/* Roof peak beam */}
-        <mesh position={[0, 6.4, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.2, 1.8]} />
-          <meshStandardMaterial color="#4a3621" roughness={0.9} />
-        </mesh>
+        {/* Simple windows */}
+        {[-2.5, 2.5].map((x, i) => (
+          <mesh key={`w-${i}`} position={[x, 2.8, 3.06]}>
+            <boxGeometry args={[1.2, 0.9, 0.1]} />
+            <meshStandardMaterial color="#f0f8ff" roughness={0.2} />
+          </mesh>
+        ))}
       </group>
       {/* Fence line */}
       {[-5, -2, 1, 4].map((x, i) => (

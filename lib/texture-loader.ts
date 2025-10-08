@@ -271,9 +271,9 @@ export const TEXTURES = {
   // Example:
   // GRASS: '/textures/grass.jpg',
   // DIRT: '/textures/dirt.jpg',
-  ARENA_FLOOR: '/textures/grass/coast_sand_rocks_02_diff_4k.jpg',
+  ARENA_FLOOR: '/textures/grass/Grass005_1K-PNG_Color.png',
   DIRT: '/textures/dirt.jpg',
-  GRASS: '/textures/grass.jpg',
-  STONE: '/textures/stone/sandy_gravel_02_diff_4k.jpg',
-  WOOD: '/textures/wood/WoodFloor043_1K-JPG_Color.jpg',
+  GRASS: '/textures/grass/Grass005_1K-PNG_Color.png',
+  STONE: '/textures/ground/Ground036_1K-PNG_Color.png',
+  WOOD: '/textures/wood/WoodFloor044_1K-PNG_Color.png',
 }; 
