@@ -680,6 +680,29 @@ preparePromise.then(() => {
           });
           try { io.to(roomId).emit('play_sound', { key: 'victory' }); } catch {}
 
+          // Best-effort tutorial lobby cleanup so it doesn't appear full after match
+          try {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+            const all = res ? await res.json().catch(() => []) : [];
+            const tutorialLobbies = Array.isArray(all) ? all.filter(l => l && l.matchType === 'tutorial') : [];
+            for (const tl of tutorialLobbies) {
+              if (Array.isArray(tl.players) && tl.players.length > 0) {
+                for (const p of tl.players) {
+                  try {
+                    await fetch(`${baseUrl}/api/lobbies`, {
+                      method: 'DELETE',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ lobbyId: tl.id, playerId: p.playerId })
+                    });
+                  } catch {}
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Tutorial lobby cleanup failed (non-fatal):', e?.message || e);
+          }
+
           // Record match (best-effort) in Supabase for auditing/payout flows
           try {
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
