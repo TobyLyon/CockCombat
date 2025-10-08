@@ -115,9 +115,9 @@ function ArenaFloor() {
         <meshStandardMaterial map={floorTexture} roughness={0.9} />
       </Plane>
       {/* Dirt in-fighting ring (slightly smaller circle) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
         <circleGeometry args={[ARENA_CONFIG.ringRadius * 0.9, 64]} />
-        <meshStandardMaterial map={dirtTexture} roughness={0.95} />
+        <meshStandardMaterial map={dirtTexture} roughness={0.95} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
     </group>
   );

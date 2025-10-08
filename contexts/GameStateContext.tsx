@@ -228,7 +228,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const SOUND_VOLUMES = {
     punch: 1.8,
     hit: 1.8,
-    strong_punch: 0.35, // ~-9 dB relative trim for killshots
+    strong_punch: 0.7, // ~-3 dB relative trim for killshots
     die: 0.8,
     pickup: 0.7,
     jump: 0.5,
