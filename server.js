@@ -1143,6 +1143,91 @@ preparePromise.then(() => {
               console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} (not all ready anymore)`);
             }
           } catch {}
+          // Majority-ready grace logic
+          try {
+            const humans = lobbyPlayers.filter(p => !p.isAi);
+            const readyHumans = humans.filter(p => p.isReady);
+            const totalHumans = humans.length;
+            const majorityThreshold = Math.floor(totalHumans / 2) + 1;
+            const hasMajorityReady = totalHumans > 0 && readyHumans.length >= majorityThreshold && lobbyPlayers.length >= minPlayers;
+
+            if (!global.majorityGrace) global.majorityGrace = Object.create(null);
+
+            if (hasMajorityReady) {
+              if (!global.majorityGrace[lobbyId]) {
+                const endsAt = Date.now() + 15000;
+                console.log(`⏱️ Majority ready in ${lobbyId}. Starting 15s grace.`);
+                const intervalId = setInterval(async () => {
+                  const seconds = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+                  try { io.to(lobbyId).emit('majority_grace', { seconds }); } catch {}
+
+                  if (seconds <= 0) {
+                    clearInterval(intervalId);
+                    try { delete global.majorityGrace[lobbyId]; } catch {}
+
+                    // Rebuild current roster and filter to ready humans (and AIs for tutorial)
+                    try {
+                      const resNow = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+                      const allNow = resNow ? await resNow.json().catch(() => []) : [];
+                      const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
+                      if (!liveLobbyNow) return;
+                      // Merge with socket readiness
+                      const mergedPlayers = (liveLobbyNow.players || []).map(player => {
+                        let isReady = false;
+                        for (const [connectionId, connection] of activeConnections.entries()) {
+                          if (connection.currentLobby === lobbyId && connection.walletAddress === player.playerId) {
+                            isReady = connection.isReady || false;
+                            break;
+                          }
+                        }
+                        return { playerId: player.playerId, username: player.username, chickenName: player.chickenId, isAi: !!player.isAi, isReady };
+                      });
+                      const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
+                      const readyHumansNow = mergedPlayers.filter(p => !p.isAi && p.isReady);
+                      let majorityRoster = readyHumansNow;
+                      if (isTutorialNow) {
+                        const aiPlayers = mergedPlayers.filter(p => p.isAi);
+                        majorityRoster = [...readyHumansNow, ...aiPlayers];
+                      }
+                      if (majorityRoster.length === 0) return; // Nothing to start with
+
+                      // Start the standard 5s countdown and then queue phase with override roster
+                      try { if (!global.countdownActive) global.countdownActive = Object.create(null); } catch {}
+                      if (global.countdownActive && global.countdownActive[lobbyId]) return;
+                      global.countdownActive[lobbyId] = true;
+
+                      console.log(`🚀 Majority grace elapsed for ${lobbyId}, starting 5s countdown with ${majorityRoster.length} players.`);
+                      let countdown = 5;
+                      const countdownInterval = setInterval(() => {
+                        try { io.to(lobbyId).emit('match_starting', { countdown }); } catch {}
+                        countdown--;
+                        if (countdown < 0) {
+                          clearInterval(countdownInterval);
+                          try { io.to(lobbyId).emit('match_started'); } catch {}
+                          try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+                          const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
+                          try { startQueuePhase(lobbyId, io, overrideRoster).catch(() => {}); } catch {}
+                        }
+                      }, 1000);
+                    } catch (e) {
+                      console.warn('majority grace finalize failed:', e?.message || e);
+                    }
+                  }
+                }, 1000);
+
+                global.majorityGrace[lobbyId] = { endsAt, intervalId };
+              }
+            } else {
+              // Cancel grace when no longer majority
+              if (global.majorityGrace && global.majorityGrace[lobbyId]) {
+                try { clearInterval(global.majorityGrace[lobbyId].intervalId); } catch {}
+                delete global.majorityGrace[lobbyId];
+                console.log(`⏹️ Majority grace cancelled for ${lobbyId} (majority lost)`);
+              }
+            }
+          } catch (e) {
+            console.warn('majority grace error:', e?.message || e);
+          }
         }
 
         if (allReady) {
@@ -1238,23 +1323,28 @@ preparePromise.then(() => {
   }
 
   // Begin queue confirmation phase for a lobby
-  async function startQueuePhase(lobbyId, io) {
+  async function startQueuePhase(lobbyId, io, rosterOverride = null) {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-      const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-      const all = response ? await response.json().catch(() => []) : [];
-      const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-      if (!lobby) return;
-
-      // Build expected roster from API (tutorial may include AI; ranked is humans only)
-      let expectedRoster = (lobby.players || []).map(p => ({
-        wallet: p.playerId,
-        isAi: !!p.isAi,
-        username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
-        chickenName: p.chickenId || 'Default'
-      }));
-      const isTutorial = lobby.matchType === 'tutorial';
-      if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
+      let expectedRoster;
+      let isTutorial = false;
+      if (Array.isArray(rosterOverride) && rosterOverride.length > 0) {
+        expectedRoster = rosterOverride;
+      } else {
+        const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+        const all = response ? await response.json().catch(() => []) : [];
+        const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+        if (!lobby) return;
+        // Build expected roster from API (tutorial may include AI; ranked is humans only)
+        expectedRoster = (lobby.players || []).map(p => ({
+          wallet: p.playerId,
+          isAi: !!p.isAi,
+          username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
+          chickenName: p.chickenId || 'Default'
+        }));
+        isTutorial = lobby.matchType === 'tutorial';
+        if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
+      }
 
       const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
       const arenaSeed = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -1498,8 +1588,6 @@ preparePromise.then(() => {
       gameState.battleStatus = 'ended';
       opponent.status = 'defeated';
       currentPlayer.status = 'winner';
-      // Trigger victory sound on server
-      try { room && room.player1Id && room.player2Id && global.socketIo && global.socketIo.to(room.player1Id).emit('play_sound', { key: 'victory' }); } catch {}
     } else {
       // Switch turns
       gameState.turn = isPlayer1 ? room.player2Id : room.player1Id;

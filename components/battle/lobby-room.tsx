@@ -336,6 +336,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }, [countdown])
 
+  // Majority grace seconds left (server-driven)
+  const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!socket) return
+    const onGrace = (payload: { seconds: number }) => setMajoritySeconds(payload.seconds)
+    socket.on('majority_grace', onGrace)
+    return () => { socket.off('majority_grace', onGrace) }
+  }, [socket])
+
   const handleReadyToggle = async () => {
     if (!socket) return;
     const id = getCurrentPlayerId();
@@ -489,6 +499,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         )}
       </AnimatePresence>
 
+      {/* Majority-ready grace small notice (non-blocking) */}
+      {typeof majoritySeconds === 'number' && majoritySeconds > 0 && (
+        <div className="absolute top-2 right-2 z-40">
+          <div className="px-3 py-1 rounded-md bg-yellow-600/90 text-black text-xs font-bold shadow">
+            Majority ready — auto-start in {majoritySeconds}s
+          </div>
+        </div>
+      )}
+
       {/* Ready Status Banner - Show when all players are ready */}
       <AnimatePresence>
         {allPlayersReady && countdown === null && (
@@ -504,6 +523,28 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
                 <span className="text-base font-bold pixel-font">ALL PLAYERS READY!</span>
               </div>
               <p className="text-xs text-green-100 mt-1">Waiting for match to start...</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Majority Grace Notice */}
+      <AnimatePresence>
+        {majoritySeconds !== null && majoritySeconds > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="absolute top-0 left-0 right-0 bg-yellow-600/90 backdrop-blur-sm p-3 z-40"
+          >
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 text-white">
+                <Crown className="h-5 w-5" />
+                <span className="text-base font-bold pixel-font">MAJORITY READY!</span>
+              </div>
+              <p className="text-xs text-yellow-100 mt-1">
+                Majority players are ready. You have {majoritySeconds} seconds to ready up.
+              </p>
             </div>
           </motion.div>
         )}
