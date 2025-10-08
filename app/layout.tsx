@@ -7,7 +7,7 @@ import { GameStateProvider } from "@/contexts/GameStateContext"
 
 export const metadata = {
   title: "COCK COMBAT - 8-Bit Fighting Arena",
-  description: "The ultimate 8-bit chicken fighting arena on Solana.",
+  description: `The ultimate 8-bit chicken fighting arena on ${process.env.CHAIN === 'bsc' ? 'BNB Chain' : 'Solana'}.`,
   icons: {
     icon: "/images/logo%202.png",
     shortcut: "/images/logo%202.png",

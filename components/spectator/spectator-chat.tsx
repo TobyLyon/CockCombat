@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Send, Users } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import { useSocket } from "@/hooks/use-socket"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet } from "@/hooks/use-wallet"
 
 interface ChatMessage {
   id: string

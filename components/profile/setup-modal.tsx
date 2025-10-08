@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useState } from "react"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet } from "@/hooks/use-wallet"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 

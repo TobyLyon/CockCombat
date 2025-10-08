@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useSocket } from "@/hooks/use-socket"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet } from "@/hooks/use-wallet"
+import { isBsc } from "@/lib/chain"
 import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Lobby } from "@/lib/lobbies"
-import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
+// Solana tx helpers removed in EVM-only build
 import { toast } from "sonner"
 
 interface LobbyPlayer {
@@ -385,21 +386,20 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   }
 
   const handleWagerTransaction = async () => {
-    if (!sendTransaction || !publicKey) {
-      toast.error("Wallet does not support transactions");
+    if (!publicKey) {
+      toast.error("Connect your wallet first");
       return;
     }
 
     setIsProcessingWager(true);
 
     try {
-      // Create the wager transaction
       const wagerResponse = await fetch('/api/wager', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          playerPublicKey: publicKey.toBase58(),
+          playerPublicKey: publicKey.toString(),
         }),
       });
 
@@ -408,36 +408,52 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         throw new Error(errorData.error || 'Failed to create wager transaction');
       }
 
-      const { transaction: serializedTransaction } = await wagerResponse.json();
-      const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
-      
-      // Send and confirm the transaction using the configured network
-      const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
-      const connection = new Connection(rpcUrl);
-      const signature = await sendTransaction(transaction, connection);
-      await connection.confirmTransaction(signature, 'confirmed');
+      if (isBsc()) {
+        const data = await wagerResponse.json();
+        const to: string = data.to;
+        const value: string = data.value; // wei string
 
-      console.log('Wager transaction successful with signature:', signature);
-      toast.success("Wager submitted successfully!");
-      
-      // Confirm with server (verifies signature and marks ready)
-      const confirmRes = await fetch('/api/wager/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          lobbyId: lobby.id, 
-          signature,
-          playerPublicKey: publicKey.toBase58()
-        })
-      });
-      if (!confirmRes.ok) {
-        const err = await confirmRes.json();
-        throw new Error(err.error || 'Wager confirmation failed');
+        const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
+        if (!eth) throw new Error('No EVM provider');
+        const from = publicKey.toString();
+        const txHash: string = await eth.request({
+          method: 'eth_sendTransaction',
+          params: [{ from, to, value }],
+        });
+
+        const confirmRes = await fetch('/api/wager/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
+        });
+        if (!confirmRes.ok) {
+          const err = await confirmRes.json();
+          throw new Error(err.error || 'Wager confirmation failed');
+        }
+      } else {
+        if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');
+        const { transaction: serializedTransaction } = await wagerResponse.json();
+        const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
+        const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
+        const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
+        const connection = new Connection(rpcUrl);
+        const signature = await sendTransaction(transaction, connection);
+        await connection.confirmTransaction(signature, 'confirmed');
+
+        const confirmRes = await fetch('/api/wager/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lobbyId: lobby.id, signature, playerPublicKey: publicKey.toString() })
+        });
+        if (!confirmRes.ok) {
+          const err = await confirmRes.json();
+          throw new Error(err.error || 'Wager confirmation failed');
+        }
       }
+
+      toast.success("Wager submitted successfully!");
       setHasWagered(true);
       setIsReady(true);
-
     } catch (error: any) {
       console.error("❌ Failed to process wager:", error);
       toast.error(`Failed to submit wager: ${error.message}`);

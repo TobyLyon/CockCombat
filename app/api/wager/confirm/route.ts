@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { lobbies } from '@/lib/lobbies';
-import { getConnection } from '@/lib/solana-config';
 import { SystemProgram, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
@@ -35,13 +34,9 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby ID, signature, and player public key are required' }, { status: 400 });
     }
 
-    // Validate player public key format
-    let playerKey: PublicKey;
-    try {
-      playerKey = new PublicKey(playerPublicKey);
-    } catch (error) {
-      return NextResponse.json({ error: 'Invalid player public key' }, { status: 400 });
-    }
+    // Validate player public key format depending on chain
+    let playerKey: PublicKey | null = null;
+    // EVM-only build: Solana validation removed
 
     const lobby = lobbies.find(l => l.id === lobbyId);
     if (!lobby) {
@@ -99,42 +94,7 @@ async function handleWagerConfirmation(req: NextRequest) {
         return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
       }
     } else {
-      const connection = getConnection();
-      const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 });
-      if (!tx || !tx.transaction) {
-        return NextResponse.json({ error: 'Transaction not found' }, { status: 400 });
-      }
-      const expectedLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL);
-      if (!lobby.escrowWalletId) {
-        await auditLogger.logSuspiciousActivity('Wager confirmation attempted for lobby without assigned escrow wallet', playerPublicKey, req.headers.get('x-forwarded-for') || undefined, { lobbyId, signature });
-        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
-      }
-      const expectedEscrowAddress = process.env[`ESCROW_WALLET_${lobby.escrowWalletId}_PUBLIC_KEY`];
-      if (!expectedEscrowAddress) {
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-      const expectedEscrowKey = new PublicKey(expectedEscrowAddress);
-      const ixs = tx.transaction.message.compiledInstructions || [];
-      let valid = false;
-      for (const ix of ixs) {
-        const prog = tx.transaction.message.staticAccountKeys[ix.programIdIndex]?.toBase58?.();
-        if (prog !== SystemProgram.programId.toBase58()) continue;
-        if (!tx.meta) continue;
-        const accKeys = tx.transaction.message.staticAccountKeys;
-        const playerIdx = accKeys.findIndex(k => k.equals(playerKey));
-        if (playerIdx < 0) continue;
-        const pre = tx.meta.preBalances[playerIdx];
-        const post = tx.meta.postBalances[playerIdx];
-        if (pre - post < expectedLamports) continue;
-        const recipientIdx = tx.meta.postBalances.findIndex((b, i) => i !== playerIdx && (b - tx.meta!.preBalances[i]) >= expectedLamports);
-        if (recipientIdx >= 0) {
-          const recipientKey = accKeys[recipientIdx];
-          if (recipientKey.equals(expectedEscrowKey)) { valid = true; break; }
-        }
-      }
-      if (!valid) {
-        return NextResponse.json({ error: 'Wager transaction not verified' }, { status: 400 });
-      }
+      return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
     }
 
     // Mark signature as used (database-backed)

@@ -7,6 +7,8 @@
 
 import { PublicKey } from '@solana/web3.js';
 import { verify as ed25519Verify } from '@noble/ed25519';
+import { isBsc } from './chain';
+import { ethers } from 'ethers';
 import { createClient } from '@supabase/supabase-js';
 import bs58 from 'bs58';
 
@@ -80,19 +82,21 @@ class AuthService {
     const { walletAddress, signature, message } = params;
 
     try {
-      // Validate wallet address format
-      const publicKey = new PublicKey(walletAddress);
-      
-      // Decode the signature from base58
-      const signatureBytes = bs58.decode(signature);
-      
-      // Encode message as bytes
-      const messageBytes = new TextEncoder().encode(message);
-      
-      // Verify the signature using ed25519
-      const isValid = await ed25519Verify(signatureBytes, messageBytes, publicKey.toBytes());
-      
-      return isValid;
+      if (isBsc()) {
+        // EVM personal_sign hex signature
+        const recovered = ethers.verifyMessage(message, signature);
+        return recovered.toLowerCase() === walletAddress.toLowerCase();
+      } else {
+        // Validate wallet address format
+        const publicKey = new PublicKey(walletAddress);
+        // Decode the signature from base58
+        const signatureBytes = bs58.decode(signature);
+        // Encode message as bytes
+        const messageBytes = new TextEncoder().encode(message);
+        // Verify the signature using ed25519
+        const isValid = await ed25519Verify(signatureBytes, messageBytes, publicKey.toBytes());
+        return isValid;
+      }
     } catch (error) {
       console.error('Signature verification error:', error);
       return false;

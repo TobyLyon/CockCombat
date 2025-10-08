@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from "react"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet } from "@/hooks/use-wallet"
 import { UserProfile, Chicken, getProfile, getUserChickens } from "@/lib/supabase"
 import { ProfileSetupModal } from "@/components/profile/setup-modal"
 

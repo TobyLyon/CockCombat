@@ -10,8 +10,7 @@ import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
 import PixelChickenViewer from "@/components/3d/pixel-chicken-viewer"
 import { useRouter } from "next/navigation"
 import { useAudio } from "@/contexts/AudioContext"
-import { useWallet } from "@solana/wallet-adapter-react"
-import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { useWallet } from "@/hooks/use-wallet"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
@@ -261,7 +260,7 @@ export default function PixelGameInterface() {
           </span>
         </div>
         <p className="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
-          Battle Royale on Solana
+          Battle Royale on {process.env.CHAIN === 'bsc' ? 'BNB Chain' : 'Solana'}
         </p>
         </div>
 
@@ -315,7 +314,7 @@ export default function PixelGameInterface() {
 
       {/* Minimal UI - Bottom Center: two equal buttons side-by-side, no containers */}
       <div className="absolute bottom-48 left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-4">
-        {/* Real Solana wallet connect button */}
+        {/* Wallet connect button (chain aware) */}
         <WalletMultiButton />
         
         {/* Lobbies button */}

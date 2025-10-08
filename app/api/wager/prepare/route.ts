@@ -1,10 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { lobbies, type Lobby } from '@/lib/lobbies';
-import { getConnection } from '@/lib/solana-config';
-import { escrowService } from '@/lib/escrow-service';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -45,43 +42,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Get connection and escrow wallet
-    const connection = getConnection();
-    escrowService.setConnection(connection);
-    // All players in a lobby must use the same escrow wallet; if assigned, reuse it
-    let escrowWallet;
-    if (lobby.escrowWalletId) {
-      escrowWallet = escrowService.getWallet(lobby.escrowWalletId as any);
-      if (!escrowWallet) {
-        return NextResponse.json({ error: 'Escrow wallet not available', details: `Wallet ${lobby.escrowWalletId} not configured` }, { status: 500 });
-      }
-    } else {
-      escrowWallet = await escrowService.getNextWallet();
-      lobby.escrowWalletId = escrowWallet.id;
-    }
-
-    const playerPubkey = new PublicKey(session.user.id);
-
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: playerPubkey,
-        toPubkey: escrowWallet.publicKey,
-        lamports: lobby.amount * LAMPORTS_PER_SOL,
-      })
-    );
-
-    transaction.feePayer = playerPubkey;
-
-    const { blockhash } = await connection.getLatestBlockhash('finalized');
-    transaction.recentBlockhash = blockhash;
-
-    const serializedTransaction = transaction.serialize({
-      requireAllSignatures: false,
-    });
-
-    return NextResponse.json({
-      transaction: serializedTransaction.toString('base64'),
-    });
+    // EVM-only build: this route is deprecated
+    return NextResponse.json({ error: 'Not supported on EVM' }, { status: 410 });
 
   } catch (error) {
     console.error("Error preparing wager:", error);

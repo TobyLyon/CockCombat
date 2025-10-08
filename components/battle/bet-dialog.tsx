@@ -6,7 +6,7 @@ import { Coins, X, ChevronLeft, ChevronRight, AlertCircle, Check, Loader2 } from
 import { useToken } from "@/hooks/use-token"
 import Image from "next/image"
 import { useWallet } from "@/hooks/use-wallet"
-import { useConnection } from "@solana/wallet-adapter-react"
+// Solana connection removed in EVM-only build
 
 interface BetDialogProps {
   isOpen: boolean

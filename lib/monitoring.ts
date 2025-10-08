@@ -5,8 +5,7 @@
  */
 
 import { auditLogger } from './audit-logger';
-import { escrowService } from './escrow-service';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { evmEscrowService } from './evm-escrow-service';
 
 interface AlertThresholds {
   maxPayoutSol: number;
@@ -17,8 +16,8 @@ interface AlertThresholds {
 }
 
 const DEFAULT_THRESHOLDS: AlertThresholds = {
-  maxPayoutSol: 10, // Alert on payouts over 10 SOL
-  minEscrowBalanceSol: 1, // Alert when escrow below 1 SOL
+  maxPayoutBnb: 10, // Alert on payouts over 10 BNB
+  minEscrowBalanceBnb: 1, // Alert when escrow below 1 BNB
   maxFailedAuthAttempts: 10, // Alert after 10 failed auth attempts in 5 minutes
   alertEmail: process.env.ALERT_EMAIL,
   alertWebhook: process.env.ALERT_WEBHOOK,
@@ -50,14 +49,14 @@ class MonitoringService {
     matchId?: string,
     signature?: string
   ): Promise<void> {
-    console.log(`📊 Monitoring payout: ${amountSol} SOL to ${winnerWallet}`);
+    console.log(`📊 Monitoring payout: ${amountSol} BNB to ${winnerWallet}`);
 
     // Check if payout exceeds threshold
     if (amountSol > this.thresholds.maxPayoutSol) {
       await this.sendAlert({
         type: 'LARGE_PAYOUT',
         severity: 'high',
-        message: `Large payout detected: ${amountSol} SOL to ${winnerWallet}`,
+        message: `Large payout detected: ${amountSol} BNB to ${winnerWallet}`,
         metadata: {
           winnerWallet,
           amount: amountSol,
@@ -116,18 +115,20 @@ class MonitoringService {
    */
   public async checkEscrowBalances(): Promise<void> {
     try {
-      const balances = await escrowService.getAllBalances();
-
-      for (const [walletId, balanceLamports] of balances) {
-        const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
-
+      // EVM-only: approximate balance check by querying provider balances
+      const ids: Array<'A'|'B'|'C'> = ['A','B','C'];
+      for (const id of ids) {
+        const w = evmEscrowService.getWallet(id);
+        if (!w) continue;
+        const balWei = await w.wallet.provider!.getBalance(w.address);
+        const balanceSol = Number(balWei) / 1e18;
         if (balanceSol < this.thresholds.minEscrowBalanceSol) {
           await this.sendAlert({
             type: 'LOW_ESCROW_BALANCE',
             severity: 'critical',
-            message: `Escrow wallet ${walletId} balance low: ${balanceSol.toFixed(4)} SOL`,
+            message: `Escrow wallet ${walletId} balance low: ${balanceSol.toFixed(4)} BNB`,
             metadata: {
-              walletId,
+              walletId: id,
               balance: balanceSol,
               threshold: this.thresholds.minEscrowBalanceSol,
             },

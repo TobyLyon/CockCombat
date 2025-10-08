@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { useWallet } from "@solana/wallet-adapter-react"
-import { WalletMultiButton as SolanaWalletMultiButton } from "@solana/wallet-adapter-react-ui"
+import { useWallet } from "@/hooks/use-wallet"
+import { isBsc } from "@/lib/chain"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Copy, Check, LogOut, Wallet, User } from "lucide-react"
 import { toast } from "sonner"
@@ -18,9 +18,10 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
   const { 
     connected, 
     connecting, 
-    publicKey, 
-    disconnect, 
+    publicKey,
+    disconnect,
     wallet: selectedWallet,
+    select,
   } = useWallet()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
@@ -69,12 +70,16 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     )
   }
 
-  // If not connected, show the native Solana wallet button (client-only)
+  // If not connected, render appropriate connect button per chain
   if (!connected) {
     return (
-      <div onClick={onClickSound} className={`shrink-0 ${className}`}>
-        <SolanaWalletMultiButton className="!bg-[#fbbf24] !text-[#333333] !font-bold !py-2 !px-3 sm:!px-4 !rounded !border-b-4 !border-[#d97706] hover:!bg-[#f59e0b] hover:!border-[#b45309] !transition-all !flex !items-center !gap-2 !text-xs sm:!text-sm !whitespace-nowrap !leading-none !shrink-0 !min-w-fit !max-w-none" />
-      </div>
+      <button
+        onClick={async () => { if (onClickSound) onClickSound(); try { await select?.(); } catch {} }}
+        className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
+      >
+        <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+        <span>Connect Wallet</span>
+      </button>
     )
   }
 
@@ -88,9 +93,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
           whileTap={{ scale: 0.95 }}
         >
           <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-          <span className="truncate min-w-0 max-w-[70px] sm:max-w-[100px]">
-            {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
-          </span>
+          <span className="truncate min-w-0 max-w-[70px] sm:max-w-[100px]">{publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}</span>
         </motion.button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[200px]">

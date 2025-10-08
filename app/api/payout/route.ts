@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
-import { getConnection, getExplorerUrl } from '@/lib/solana-config';
-import { escrowService } from '@/lib/escrow-service';
+// Solana removed in EVM-only build
 import { auditLogger } from '@/lib/audit-logger';
 import { monitoringService } from '@/lib/monitoring';
 import { createClient } from '@supabase/supabase-js';
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
     // --- VALIDATION ---
     const BodySchema = z.object({
       winnerAddress: z.string().min(32),
-      prizePoolLamports: z.number().int().positive(),
+      prizePool: z.number().positive(), // in BNB
       matchId: z.string().optional(),
     });
 
@@ -36,20 +34,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { winnerAddress, prizePoolLamports, matchId } = parsed.data;
+    const { winnerAddress, prizePool, matchId } = parsed.data;
 
-    if (!winnerAddress || !prizePoolLamports) {
+    if (!winnerAddress || !prizePool) {
       return NextResponse.json({ error: "Winner address and prize pool are required" }, { status: 400 });
     }
 
-    // Validate winner address (base58 pubkey)
-    try {
-      // Throws if invalid
-      // eslint-disable-next-line no-new
-      new PublicKey(winnerAddress);
-    } catch {
-      return NextResponse.json({ error: 'Invalid winner address' }, { status: 400 });
-    }
+    // Validate winner address format depending on chain
+    // EVM-only build: no Solana address validation
 
     // --- SECURITY CHECKS ---
     const houseWalletAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET;
@@ -63,7 +55,7 @@ export async function POST(request: Request) {
 
     console.log(`💰 Processing payout for match ${matchId || 'unknown'}`);
     console.log(`   Winner: ${winnerAddress}`);
-    console.log(`   Prize Pool: ${prizePoolLamports / LAMPORTS_PER_SOL} SOL`);
+    console.log(`   Prize Pool: ${prizePool} BNB`);
 
     // --- IDEMPOTENCY + MATCH VALIDATION ---
     let matchAlreadyPaid = false;
@@ -81,7 +73,7 @@ export async function POST(request: Request) {
           .eq('id', matchId)
           .single();
 
-        if (matchResultRow) {
+      if (matchResultRow) {
           matchResult = matchResultRow;
           matchWinnerFromDb = matchResultRow.winner_wallet;
           matchAlreadyPaid = matchResultRow.payout_processed || false;
@@ -101,18 +93,18 @@ export async function POST(request: Request) {
           }
 
           // Verify prize pool matches
-          const expectedPrizePool = Math.round(matchResultRow.total_prize_pool * LAMPORTS_PER_SOL);
-          if (Math.abs(expectedPrizePool - prizePoolLamports) > 100) { // Allow 100 lamport tolerance for rounding
+          const expectedPrizePool = matchResultRow.total_prize_pool;
+          if (Math.abs(expectedPrizePool - prizePool) > 0.0001) {
             await auditLogger.logSuspiciousActivity(
               'Payout amount mismatch',
               winnerAddress,
               undefined,
-              { matchId, expected: expectedPrizePool, provided: prizePoolLamports }
+              { matchId, expected: expectedPrizePool, provided: prizePool }
             );
             return NextResponse.json({ 
               error: 'Prize pool amount mismatch',
-              expected: expectedPrizePool / LAMPORTS_PER_SOL,
-              provided: prizePoolLamports / LAMPORTS_PER_SOL
+              expected: expectedPrizePool,
+              provided: prizePool
             }, { status: 400 });
           }
         } else {
@@ -188,9 +180,9 @@ export async function POST(request: Request) {
     let winnerSignature = '';
     let houseSignature = '';
     if (isBsc()) {
-      const poolSol = prizePoolLamports / LAMPORTS_PER_SOL;
-      const houseCutWei = ethers.parseUnits((poolSol * houseCutPercentage).toString(), 18);
-      const winnerCutWei = ethers.parseUnits((poolSol - poolSol * houseCutPercentage).toString(), 18);
+      const poolBnb = prizePool;
+      const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
+      const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
       const walletId = matchResult?.escrow_wallet_id as any | undefined;
       const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
       // Fallback to next wallet if not found
@@ -199,27 +191,13 @@ export async function POST(request: Request) {
       houseSignature = await evmEscrowService.transferNative(houseWalletAddress, houseCutWei, from);
       console.log(`✅ EVM payout successful`, { winnerSignature, houseSignature });
     } else {
-      const connection = getConnection();
-      escrowService.setConnection(connection);
-      let escrowWallet;
-      if (matchResult && matchResult.escrow_wallet_id) {
-        escrowWallet = escrowService.getWallet(matchResult.escrow_wallet_id);
-        if (!escrowWallet) {
-          return NextResponse.json({ error: 'Escrow wallet not available', details: `Wallet ${matchResult.escrow_wallet_id} is not configured` }, { status: 500 });
-        }
-      } else {
-        escrowWallet = await escrowService.getWalletWithBalance(prizePoolLamports);
-      }
-      const houseCutLamports = Math.floor(prizePoolLamports * houseCutPercentage);
-      const winnerCutLamports = prizePoolLamports - houseCutLamports;
-      winnerSignature = await escrowService.transferSOL(winnerAddress, winnerCutLamports, escrowWallet);
-      houseSignature = await escrowService.transferSOL(houseWalletAddress, houseCutLamports, escrowWallet);
+      return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
     }
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
       winnerAddress,
-      winnerCutLamports / LAMPORTS_PER_SOL,
+      prizePool * (1 - houseCutPercentage),
       matchId,
       winnerSignature
     );
@@ -233,7 +211,7 @@ export async function POST(request: Request) {
         await supabase.from('transactions').insert({
           wallet_address: winnerAddress,
           transaction_type: 'win',
-          amount: winnerCutLamports / LAMPORTS_PER_SOL,
+          amount: prizePool * (1 - houseCutPercentage),
           related_entity_id: matchId || null,
           description: `Match winnings`,
         });
@@ -242,7 +220,7 @@ export async function POST(request: Request) {
         await supabase.from('transactions').insert({
           wallet_address: houseWalletAddress,
           transaction_type: 'house_cut',
-          amount: houseCutLamports / LAMPORTS_PER_SOL,
+          amount: prizePool * houseCutPercentage,
           related_entity_id: matchId || null,
           description: `House cut (${(houseCutPercentage * 100).toFixed(1)}%)`,
         });
@@ -268,8 +246,8 @@ export async function POST(request: Request) {
               metadata: {
                 payout_tx: winnerSignature,
                 house_cut_tx: houseSignature,
-                payout_amount: winnerCutLamports / LAMPORTS_PER_SOL,
-                house_cut_amount: houseCutLamports / LAMPORTS_PER_SOL,
+                payout_amount: prizePool * (1 - houseCutPercentage),
+                house_cut_amount: prizePool * houseCutPercentage,
               },
             })
             .eq('id', matchId);
@@ -287,11 +265,9 @@ export async function POST(request: Request) {
       message: "Payout successful!",
       winnerTransaction: winnerSignature,
       houseTransaction: houseSignature,
-      winnerAmount: winnerCutLamports / LAMPORTS_PER_SOL,
-      houseAmount: houseCutLamports / LAMPORTS_PER_SOL,
-      explorerUrls: isBsc()
-        ? { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) }
-        : { winner: getExplorerUrl(winnerSignature), house: getExplorerUrl(houseSignature) },
+      winnerAmount: prizePool * (1 - houseCutPercentage),
+      houseAmount: prizePool * houseCutPercentage,
+      explorerUrls: { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) },
     });
 
   } catch (error) {

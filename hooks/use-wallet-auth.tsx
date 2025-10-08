@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
+import { useWallet } from '@/hooks/use-wallet'
 import { toast } from 'sonner'
+import { isBsc } from '@/lib/chain'
 
 export function useWalletAuth() {
   const { connected, publicKey, signMessage } = useWallet()
@@ -30,7 +31,7 @@ export function useWalletAuth() {
     
     setLoading(true)
     try {
-      const walletAddress = publicKey.toBase58()
+      const walletAddress = publicKey.toString()
 
       // 1) Get nonce and human-readable message
       const nonceRes = await fetch('/api/auth/nonce', {
@@ -46,8 +47,15 @@ export function useWalletAuth() {
 
       // 2) Sign message with wallet
       const messageBytes = new TextEncoder().encode(message)
-      const signatureBytes = await signMessage(messageBytes)
-      const signature = (await import('bs58')).default.encode(signatureBytes)
+      let signature: string
+      if (isBsc()) {
+        // EVM returns a hex signature
+        signature = await (signMessage as any)(messageBytes)
+      } else {
+        // Solana returns bytes -> base58
+        const signatureBytes = await (signMessage as any)(messageBytes)
+        signature = (await import('bs58')).default.encode(signatureBytes)
+      }
 
       // 3) Verify on server and mint a session
       const verifyRes = await fetch('/api/auth/verify', {

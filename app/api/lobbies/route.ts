@@ -284,14 +284,13 @@ export async function POST(req: NextRequest) {
 
     // Assign escrow wallet when first player joins (for non-tutorial matches)
     if (!lobby.escrowWalletId && lobby.matchType !== 'tutorial' && lobby.amount > 0) {
-      const { escrowService } = await import('@/lib/escrow-service');
+      const { evmEscrowService } = await import('@/lib/evm-escrow-service');
       try {
-        const wallet = await escrowService.getNextWallet();
+        const wallet = evmEscrowService.getNextWallet();
         lobby.escrowWalletId = wallet.id;
-        console.log(`🔐 Assigned Escrow Wallet ${wallet.id} to lobby ${lobbyId}`);
+        console.log(`🔐 Assigned EVM Escrow Wallet ${wallet.id} to lobby ${lobbyId}`);
       } catch (error) {
-        console.error('Failed to assign escrow wallet:', error);
-        // Continue without assigning - will fail at wager time
+        console.error('Failed to assign EVM escrow wallet:', error);
       }
     }
 

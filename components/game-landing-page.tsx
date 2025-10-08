@@ -139,7 +139,7 @@ export default function GameLandingPage() {
                 COCK COMBAT
               </h1>
               <p className="text-xl md:text-2xl mb-8 max-w-2xl text-purple-100 drop-shadow-md">
-                The ultimate voxel chicken fighting arena on Solana. Battle for glory, bet on champions, and build your
+                The ultimate voxel chicken fighting arena on {process.env.CHAIN === 'bsc' ? 'BNB Chain' : 'Solana'}. Battle for glory, bet on champions, and build your
                 feathered empire.
               </p>
 

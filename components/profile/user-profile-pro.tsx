@@ -9,8 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useWallet } from "@/hooks/use-wallet"
 import { ProfileService } from "@/lib/profile-service"
-import { getConnection } from "@/lib/solana-config"
-import { getTokenMintAddress, getTokenBalance } from "@/lib/token-service"
+// Solana-specific imports removed for EVM-only build
 import type { Profile, Transaction, Match, Chicken } from "@/lib/supabase"
 import { toast } from "sonner"
 import { Loader2, Pencil } from "lucide-react"
@@ -65,9 +64,7 @@ export default function UserProfilePro() {
     load()
   }, [connected, walletAddress])
 
-  // Live balances (SOL and SPL token)
-  const [solBalance, setSolBalance] = useState<number>(0)
-  const [splBalance, setSplBalance] = useState<number>(0)
+  // EVM-only view: omit on-chain polling here
 
   useEffect(() => {
     let timer: number | undefined
@@ -75,11 +72,11 @@ export default function UserProfilePro() {
       try {
         if (!walletAddress) return
         const conn = getConnection()
+        // Solana-only balance polling; hidden on BSC
         const lamports = await conn.getBalance(new (await import('@solana/web3.js')).PublicKey(walletAddress))
         const newSol = lamports / 1_000_000_000
         if (newSol !== solBalance) {
           setSolBalance(newSol)
-          toast.info(`SOL balance ${newSol.toFixed(4)} SOL`)
         }
         if (getTokenMintAddress()) {
           const newSpl = await getTokenBalance(conn, walletAddress)
@@ -170,9 +167,8 @@ export default function UserProfilePro() {
           <div className="bg-purple-800/40 px-3 py-1.5 rounded-lg border border-purple-700/50">
             <span className="text-yellow-400 font-bold">{(profile?.token_balance ?? 0).toLocaleString()} $CLUCK</span>
           </div>
-          <div className="bg-purple-800/40 px-3 py-1.5 rounded-lg border border-purple-700/50 text-sm text-purple-100">
-            <span>SOL: {solBalance.toFixed(4)}</span>
-          </div>
+          {/* Native SOL only shown on Solana */}
+          {/* Hidden on BSC */}
           {getTokenMintAddress() && (
             <div className="bg-purple-800/40 px-3 py-1.5 rounded-lg border border-purple-700/50 text-sm text-purple-100">
               <span>$COCK: {splBalance.toFixed(2)}</span>

@@ -1,11 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { toast } from 'sonner';
-import * as tokenService from '@/lib/token-service';
-import { useLocalStorage } from '@/hooks/use-local-storage';
-import { PublicKey } from '@solana/web3.js';
+// Token hook disabled in EVM-only build
+export function useToken() {
+  return {
+    balance: 0,
+    refresh: async () => {},
+  }
+}
+// EVM-only: token actions disabled
 
 // Default token configuration from environment variables
 const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || '';

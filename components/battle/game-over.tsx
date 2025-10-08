@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button"
 import { useGameState } from '@/contexts/GameStateContext';
 import { motion } from 'framer-motion';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { useWallet } from '@/hooks/use-wallet';
+import { isBsc } from '@/lib/chain';
 import { Loader2 } from 'lucide-react';
 import { Player } from '@/hooks/use-battle-state';
 
@@ -43,7 +43,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   const humanCount = matchMeta?.humanCount || 0;
   const aiCount = Math.max(0, totalPlayers - humanCount);
   const entryPerPlayer = matchMeta?.amount || 0;
-  const currency = matchMeta?.currency || 'SOL';
+  const currency = matchMeta?.currency || (isBsc() ? 'BNB' : 'SOL');
   const isTutorial = (matchMeta?.matchType || 'tutorial') === 'tutorial' || entryPerPlayer === 0;
   const grossPool = isTutorial ? 0 : entryPerPlayer * Math.max(1, humanCount);
   const netWinner = isTutorial ? 0 : Number((grossPool * 0.96).toFixed(2));
@@ -61,8 +61,8 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              winnerAddress: publicKey.toBase58(),
-              prizePoolLamports: grossPool * LAMPORTS_PER_SOL,
+              winnerAddress: publicKey.toString(),
+              prizePool: grossPool,
             }),
           });
 
@@ -92,7 +92,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
       const typeText = `Mode: ${isTutorial ? 'Tutorial' : 'Ranked'}`;
       const rosterText = `Players: ${humanCount} human${humanCount===1?'':'s'}${aiCount>0?` + ${aiCount} AI`:''}`;
       const durText = durationSec !== null ? `Duration: ${durationSec}s` : '';
-      const text = encodeURIComponent([title, prizeText, typeText, rosterText, durText, '#CockCombat #Solana'].filter(Boolean).join(' | '));
+      const text = encodeURIComponent([title, prizeText, typeText, rosterText, durText, '#CockCombat #BNB'].filter(Boolean).join(' | '));
       const url = encodeURIComponent(origin);
       const intent = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
       window.open(intent, '_blank', 'noopener,noreferrer');

@@ -8,8 +8,9 @@ import React, {
   useRef,
   useEffect,
 } from "react"
-import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { useWallet } from "@solana/wallet-adapter-react"
+// Solana wallet modal removed; use EVM connect via hook
+import { useWallet } from "@/hooks/use-wallet"
+import { isBsc } from "@/lib/chain"
 import { useAuth } from "@/contexts/AuthContext"
 
 type ActionCallback = () => void;
@@ -25,8 +26,8 @@ const WalletPromptContext = createContext<WalletPromptContextType | undefined>(
 )
 
 export function WalletPromptProvider({ children }: { children: ReactNode }) {
-  const { setVisible } = useWalletModal()
-  const { connected } = useWallet()
+  const setVisible = (_v?: boolean) => {}
+  const { connected, select } = useWallet()
   const { signIn, authenticated } = useAuth()
   const onConnectAction = useRef<ActionCallback | null>(null);
 
@@ -37,7 +38,15 @@ export function WalletPromptProvider({ children }: { children: ReactNode }) {
       }
 
       if (!connected) {
-        setVisible(true);
+        if (isBsc()) {
+          await select?.();
+          if (onConnectAction.current) {
+            onConnectAction.current();
+            onConnectAction.current = null;
+          }
+        } else {
+          setVisible(true);
+        }
       } else if (!authenticated) {
         const success = await signIn();
         if (success && onConnectAction.current) {

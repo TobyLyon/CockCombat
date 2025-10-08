@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
-import { useWallet } from "@solana/wallet-adapter-react"
-import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { useWallet } from "@/hooks/use-wallet"
+// Solana modal removed in EVM-only build
+import { isBsc } from "@/lib/chain"
 import { Button } from "@/components/ui/button"
 import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye } from "lucide-react"
 import Link from "next/link"
@@ -27,7 +28,7 @@ import { useSocket } from "@/hooks/use-socket"
 export default function BattleArena() {
   const router = useRouter()
   const { publicKey } = useWallet()
-  const { setVisible } = useWalletModal()
+  const setVisible = () => {}
   const { audioEnabled, volume } = useAudio()
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
@@ -549,7 +550,7 @@ export default function BattleArena() {
                       // Capture match meta for post-game display
                       try {
                         const humans = (joinedLobby.players || []).filter(p => !p.isAi).length || 0;
-                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || 'SOL', matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
+                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || (isBsc() ? 'BNB' : 'SOL'), matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
                       } catch {}
                     }}
                   />
@@ -658,7 +659,7 @@ export default function BattleArena() {
 
       {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
         <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs flex-shrink-0">
-          <p> {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
+          <p> {new Date().getFullYear()} Cock Combat • Powered by {isBsc() ? 'BNB Chain' : 'Solana'}</p>
         </footer>
       )}
     </div>
