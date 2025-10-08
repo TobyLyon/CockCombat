@@ -425,7 +425,7 @@ preparePromise.then(() => {
     });
 
     // Handle player ready status
-    socket.on('player_ready', (data) => {
+    socket.on('player_ready', async (data) => {
       if (!checkRateLimit('player_ready', 5)) {
         console.warn(`⚠️ Rate limit exceeded for player_ready: ${socket.id}`);
         return;
@@ -443,23 +443,21 @@ preparePromise.then(() => {
           isReady
         });
         
-        // Check if all players are ready
-        checkLobbyReadyStatus(lobbyId, io);
-        
-        // Also emit a lobby_updated event to refresh the full lobby state
-        setTimeout(() => {
-          io.to(lobbyId).emit('refresh_lobby_state');
-        }, 100);
-
-        // Trigger HTTP ready handler to persist readiness and backfill AI for tutorial lobbies
+        // Persist readiness and trigger AI backfill for tutorial lobbies via HTTP PUT
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          fetch(`${baseUrl}/api/lobbies`, {
+          await fetch(`${baseUrl}/api/lobbies`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lobbyId, playerId, isReady })
           }).catch(() => {});
         } catch {}
+
+        // Re-evaluate ready status and then ask clients to refresh state after persistence
+        await checkLobbyReadyStatus(lobbyId, io);
+        setTimeout(() => {
+          io.to(lobbyId).emit('refresh_lobby_state');
+        }, 50);
       }
     });
 
