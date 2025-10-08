@@ -1,8 +1,8 @@
-"use client"
-import BattleArena from "../../components/battle/battle-arena"
+import dynamic from "next/dynamic"
 
-// Note: viewport must be exported from a Server Component. Since this page uses client features,
-// move viewport to app/layout.tsx (already present) and remove it here to satisfy Next.js.
+export const dynamic = 'force-dynamic'
+
+const BattleArena = dynamic(() => import("../../components/battle/battle-arena"), { ssr: false })
 
 export default function ArenaPage() {
   return <BattleArena />
