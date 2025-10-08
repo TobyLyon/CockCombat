@@ -265,7 +265,37 @@ preparePromise.then(() => {
               }
             } catch {}
             
-            // Broadcast updated lobby state to all players in the room
+            // Tutorial: ensure AI backfill here too so secondary confirmation doesn't drop roster
+            try {
+              const isTutorial = lobby.matchType === 'tutorial';
+              // Consider any ready human from sockets as readiness signal
+              let hasReadyHuman = false;
+              for (const [, conn] of activeConnections.entries()) {
+                if (conn.currentLobby === lobbyId && conn.isReady && conn.walletAddress) {
+                  // If this wallet exists in the lobby or we are in tutorial, count as human ready
+                  const exists = (lobby.players || []).some(p => p.playerId === conn.walletAddress);
+                  if (exists || isTutorial) { hasReadyHuman = true; break; }
+                }
+              }
+              if (isTutorial && hasReadyHuman) {
+                const missing = Math.max(0, lobby.capacity - lobbyPlayers.length);
+                if (missing > 0) {
+                  const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+                  for (let i = 0; i < missing; i++) {
+                    const name = aiNames[(Math.floor(Math.random() * aiNames.length))];
+                    lobbyPlayers.push({
+                      playerId: `ai-${Date.now()}-${i}`,
+                      username: name,
+                      chickenName: 'default-ai-chicken',
+                      isReady: true,
+                      isAi: true,
+                    });
+                  }
+                }
+              }
+            } catch {}
+
+            // Broadcast updated lobby state to all players in the room (after any backfill)
             io.to(lobbyId).emit('lobby_updated', {
               id: lobbyId,
               players: lobbyPlayers,

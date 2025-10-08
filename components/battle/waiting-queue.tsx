@@ -180,14 +180,18 @@ export default function WaitingQueue({
     const onLobbySync = (payload: any) => {
       console.log('[WaitingQueue] lobby_synced received:', payload)
       if (!payload || payload.id !== lobby.id) return
-      setCurrentLobby(prev => ({
-        ...prev,
-        players: Array.isArray(payload.players) ? payload.players : prev.players,
-        capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
-        amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
-        currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
-        matchType: (payload.matchType as any) || prev.matchType,
-      }))
+      setCurrentLobby(prev => {
+        const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players
+        const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers
+        return {
+          ...prev,
+          players: mergedPlayers,
+          capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
+          amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
+          currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
+          matchType: (payload.matchType as any) || prev.matchType,
+        } as Lobby
+      })
       console.log('[WaitingQueue] Synced currentLobby players:', payload.players?.length || 0)
     }
 
