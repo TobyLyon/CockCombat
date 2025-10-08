@@ -73,8 +73,8 @@ export default function WaitingQueue({
           // Sync authoritative roster to game state for spawn control
           try { syncLobbyPlayers((updatedLobby.players || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
           
-          // If the lobby is starting, trigger the battle
-          if (updatedLobby.status === 'starting') {
+          // If the lobby is starting or already started, trigger the battle (HTTP fallback)
+          if (updatedLobby.status === 'starting' || updatedLobby.status === 'started') {
             playSound('button'); // Or a more appropriate sound
             onStartBattle();
             clearInterval(interval); // Stop polling once the match starts
@@ -92,7 +92,7 @@ export default function WaitingQueue({
 
   // No countdown ticking on this screen
 
-  // Listen for queue phase events; advance on round_start or match_started (no local countdown display)
+  // Listen for queue phase events; advance on round_start (no local countdown display)
   useEffect(() => {
     if (!socket) return
     const onQueueBegin = (payload: any) => {
@@ -120,12 +120,10 @@ export default function WaitingQueue({
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
-    socket.on('match_started', onStarted)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
-      socket.off('match_started', onStarted)
     }
   }, [socket, isConnected, onStartBattle, playSound])
 
