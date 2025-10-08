@@ -1,12 +1,12 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
-import ArenaViewer from "@/components/3d/arena-viewer";
-import SpectatorView from "@/components/spectator/spectator-view";
-import { useSpectator } from "@/hooks/use-spectator";
+import ArenaViewer from "../../../components/3d/arena-viewer";
+import SpectatorView from "../../../components/spectator/spectator-view";
+import { useSpectator } from "../../../hooks/use-spectator";
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
 import { ArrowLeft, Clock, Users, Eye } from 'lucide-react';
 
 export default function SpectatePage() {
