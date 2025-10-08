@@ -90,6 +90,9 @@ const nextConfig = {
 if (userConfig) {
   // ESM imports will have a "default" property
   const config = userConfig.default || userConfig
+  // Capture base webpack to allow composition with user-provided webpack
+  const baseWebpack = typeof nextConfig.webpack === 'function' ? nextConfig.webpack : undefined
+  const userWebpack = typeof config.webpack === 'function' ? config.webpack : undefined
 
   for (const key in config) {
     if (
@@ -103,6 +106,16 @@ if (userConfig) {
     } else {
       nextConfig[key] = config[key]
     }
+  }
+
+  // If both define a webpack function, compose them so we don't lose aliases
+  if (baseWebpack && userWebpack) {
+    nextConfig.webpack = (cfg, opts) => {
+      const withBase = baseWebpack(cfg, opts)
+      return userWebpack(withBase, opts)
+    }
+  } else if (baseWebpack && !userWebpack) {
+    nextConfig.webpack = baseWebpack
   }
 }
 
