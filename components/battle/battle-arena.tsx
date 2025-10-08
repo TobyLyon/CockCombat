@@ -368,13 +368,13 @@ export default function BattleArena() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
-                            onClick={() => router.push('/spectate')}
                             variant="outline"
                             size="sm"
-                            className="border-yellow-600/30 text-yellow-400 hover:bg-yellow-600/10 hover:border-yellow-600/50 text-xs gap-1"
+                            disabled
+                            className="border-yellow-600/30 text-yellow-400 bg-black/60 text-opacity-80 cursor-not-allowed text-xs gap-1"
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            Spectate Live Matches
+                            Spectate (Coming Soon)
                           </Button>
                           <button
                             onClick={() => setFilter('all')}
@@ -475,7 +475,7 @@ export default function BattleArena() {
                           
                         {/* Actions: Join and Spectate */}
                         {!lobby.isComingSoon && (
-                          <div className="mt-auto grid grid-cols-2 gap-2">
+                          <div className="mt-auto grid grid-cols-1 gap-2">
                             <Button
                               className={`w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
                                 bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
@@ -487,14 +487,6 @@ export default function BattleArena() {
                                   : joinedLobby?.id === lobby.id
                                   ? '✓ JOINED'
                                   : (((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial') ? 'FULL' : <>JOIN <ChevronRight className="h-4 w-4"/></>)}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="w-full font-semibold py-1.5 px-2 lg:px-2.5 rounded-lg border text-[10px] md:text-xs flex items-center justify-center gap-1 bg-black/20 hover:bg-black/30 text-white border-white/20 leading-none"
-                              onClick={(e) => { e.stopPropagation(); router.push('/spectate'); }}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              Spectate
                             </Button>
                           </div>
                         )}
