@@ -184,7 +184,10 @@ function PastureScene() {
   }, [])
   grassTexture.colorSpace = THREE.SRGBColorSpace
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
-  grassTexture.repeat.set(16, 16)
+  grassTexture.generateMipmaps = true
+  grassTexture.minFilter = THREE.LinearMipmapLinearFilter
+  grassTexture.magFilter = THREE.LinearFilter
+  grassTexture.repeat.set(12, 12)
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -219,8 +222,14 @@ function ForestScene() {
   grassTexture.colorSpace = THREE.SRGBColorSpace
   barkTexture.colorSpace = THREE.SRGBColorSpace
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
-  grassTexture.repeat.set(15, 15)
+  grassTexture.generateMipmaps = true
+  grassTexture.minFilter = THREE.LinearMipmapLinearFilter
+  grassTexture.magFilter = THREE.LinearFilter
+  grassTexture.repeat.set(12, 12)
   barkTexture.wrapS = barkTexture.wrapT = THREE.RepeatWrapping
+  barkTexture.generateMipmaps = true
+  barkTexture.minFilter = THREE.LinearMipmapLinearFilter
+  barkTexture.magFilter = THREE.LinearFilter
   barkTexture.repeat.set(1, 3)
   return (
     <group>
@@ -294,6 +303,9 @@ function FarmyardScene() {
   const woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor043_1K-JPG_Color.jpg')
   woodTexture.colorSpace = THREE.SRGBColorSpace
   woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping
+  woodTexture.generateMipmaps = true
+  woodTexture.minFilter = THREE.LinearMipmapLinearFilter
+  woodTexture.magFilter = THREE.LinearFilter
   woodTexture.repeat.set(2, 4)
   return (
     <group>

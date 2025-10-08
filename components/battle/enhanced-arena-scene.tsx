@@ -89,8 +89,11 @@ function ArenaFloor() {
   useEffect(() => {
     if (floorTexture) {
       floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-      floorTexture.repeat.set(32, 32);
+      floorTexture.repeat.set(24, 24);
       floorTexture.anisotropy = 8;
+      floorTexture.generateMipmaps = true;
+      floorTexture.minFilter = THREE.LinearMipmapLinearFilter;
+      floorTexture.magFilter = THREE.LinearFilter;
       floorTexture.needsUpdate = true;
     }
   }, [floorTexture]);

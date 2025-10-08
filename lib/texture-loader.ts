@@ -43,7 +43,7 @@ export function loadTexture(
       path,
       (texture) => {
         // Optimize and configure texture
-        optimizeTexture(texture, options);
+        optimizeTexture(texture, { maxSize: options.maxSize ?? DEFAULT_TEXTURE_SIZE, ...options });
         
         // Store in cache
         textureCache.set(path, texture);
@@ -91,6 +91,10 @@ function optimizeTexture(texture: THREE.Texture, options: TextureOptions): void 
   }
   
   // Apply default optimizations
+  try { (texture as any).colorSpace = (THREE as any).SRGBColorSpace; } catch {}
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
 }
 
@@ -102,8 +106,8 @@ function applyTextureOptions(texture: THREE.Texture, options: TextureOptions): v
   texture.anisotropy = options.anisotropy || DEFAULT_ANISOTROPY;
   
   // Set texture wrapping
-  if (options.wrapS !== undefined) texture.wrapS = options.wrapS;
-  if (options.wrapT !== undefined) texture.wrapT = options.wrapT;
+  if (options.wrapS !== undefined) texture.wrapS = options.wrapS; else texture.wrapS = THREE.RepeatWrapping;
+  if (options.wrapT !== undefined) texture.wrapT = options.wrapT; else texture.wrapT = THREE.RepeatWrapping;
   
   // Set repeat and offset
   if (options.repeat) {
