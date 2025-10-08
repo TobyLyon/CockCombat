@@ -967,7 +967,7 @@ preparePromise.then(() => {
       
       if (lobby) {
         // Merge API lobby players with socket ready status
-        const lobbyPlayers = lobby.players.map(player => {
+        let lobbyPlayers = lobby.players.map(player => {
           // Check if this player has a socket connection with ready status
           let isReady = false;
           for (const [connectionId, connection] of activeConnections.entries()) {
@@ -987,6 +987,37 @@ preparePromise.then(() => {
             isAi: player.isAi || false
           };
         });
+
+        // Tutorial AI backfill in socket layer to avoid API/serverless split
+        try {
+          const isTutorial = lobby.matchType === 'tutorial';
+          const hasReadyHuman = lobbyPlayers.some(p => !p.isAi && p.isReady);
+          if (isTutorial && hasReadyHuman) {
+            const missing = Math.max(0, lobby.capacity - lobbyPlayers.length);
+            if (missing > 0) {
+              const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+              for (let i = 0; i < missing; i++) {
+                const name = aiNames[(Math.floor(Math.random() * aiNames.length))];
+                lobbyPlayers.push({
+                  playerId: `ai-${Date.now()}-${i}`,
+                  username: name,
+                  chickenName: 'default-ai-chicken',
+                  isReady: true,
+                  isAi: true,
+                });
+              }
+              // Notify clients of the AI-augmented roster immediately
+              io.to(lobbyId).emit('lobby_updated', {
+                id: lobbyId,
+                players: lobbyPlayers,
+                capacity: lobby.capacity,
+                amount: lobby.amount,
+                currency: lobby.currency,
+                matchType: lobby.matchType
+              });
+            }
+          }
+        } catch {}
         
         // Check if we have minimum players and all are ready
         const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
