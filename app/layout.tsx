@@ -15,6 +15,11 @@ export const metadata = {
   },
 }
 
+// Disable static prerender globally to avoid SSR of R3F/Canvas during build
+export const dynamic = 'force-dynamic'
+export const prerender = false
+export const revalidate = 0
+
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
