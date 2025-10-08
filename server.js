@@ -450,6 +450,16 @@ preparePromise.then(() => {
         setTimeout(() => {
           io.to(lobbyId).emit('refresh_lobby_state');
         }, 100);
+
+        // Trigger HTTP ready handler to persist readiness and backfill AI for tutorial lobbies
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          fetch(`${baseUrl}/api/lobbies`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lobbyId, playerId, isReady })
+          }).catch(() => {});
+        } catch {}
       }
     });
 
