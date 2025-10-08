@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Lazily create Supabase client only when env vars are present.
+// During static build on CI, env may be absent – avoid throwing at import time.
+export const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null as any
 
 // Define database types
 export type UserProfile = Profile // Add alias for compatibility
@@ -109,6 +112,7 @@ export type Achievement = {
 // Function to get a user profile
 export async function getProfile(walletAddress: string): Promise<Profile | null> {
   try {
+    if (!supabase) return null
     const { data: existingProfile, error: fetchError } = await supabase
       .from('profiles')
       .select('*')
@@ -133,6 +137,7 @@ export async function updateProfileStats(
   stats: Partial<Profile>
 ): Promise<Profile | null> {
   try {
+    if (!supabase) return null
     const { data, error } = await supabase
       .from('profiles')
       .update({
@@ -158,6 +163,7 @@ export async function updateProfileStats(
 // Function to get user's chickens
 export async function getUserChickens(walletAddress: string): Promise<Chicken[]> {
   try {
+    if (!supabase) return []
     const { data, error } = await supabase
       .from('chickens')
       .select('*')
