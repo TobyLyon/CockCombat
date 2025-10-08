@@ -188,7 +188,7 @@ function SceneContent({
     'ARENA_FLOOR',
     'STONE',
     'WOOD',
-    // Add other critical texture keys here if needed
+    'DIRT',
   ]);
 
   const playerRef = useRef<THREE.Group>(null);
@@ -676,14 +676,9 @@ function SceneContent({
   });
 
 
-  // ----- CONDITIONAL EARLY RETURNS (MUST BE AFTER ALL HOOKS) -----
-  if (texturesLoading) {
-    return <Html center>Loading textures...</Html>;
-  }
-
+  // Do not block rendering if textures fail; show overlay but continue
   if (textureError) {
-    console.error("Texture loading error:", textureError);
-    return <Html center>Error loading textures. Please try again.</Html>;
+    console.warn("Texture loading error (continuing with fallbacks):", textureError);
   }
 
   // ----- Non-hook constants that might depend on ARENA_CONFIG (safe after hooks) -----

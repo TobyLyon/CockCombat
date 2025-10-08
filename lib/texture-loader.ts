@@ -52,8 +52,16 @@ export function loadTexture(
       },
       undefined, // onProgress not implemented
       (error) => {
-        console.error(`Error loading texture ${path}:`, error);
-        reject(error);
+        console.warn(`Error loading texture ${path}, using fallback color:`, error);
+        try {
+          const fallback = createColorTexture('#7a6a50');
+          optimizeTexture(fallback, { maxSize: options.maxSize ?? DEFAULT_TEXTURE_SIZE, ...options });
+          // Cache fallback too so subsequent requests don't re-fail
+          textureCache.set(path, fallback);
+          resolve(fallback);
+        } catch (e) {
+          reject(error);
+        }
       }
     );
   });
