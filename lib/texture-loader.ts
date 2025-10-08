@@ -272,8 +272,8 @@ export const TEXTURES = {
   // GRASS: '/textures/grass.jpg',
   // DIRT: '/textures/dirt.jpg',
   ARENA_FLOOR: '/textures/grass/Grass005_1K-PNG_Color.png',
-  DIRT: '/textures/dirt.jpg',
+  DIRT: '/textures/ground/Ground085_1K-PNG_Color.png',
   GRASS: '/textures/grass/Grass005_1K-PNG_Color.png',
-  STONE: '/textures/ground/Ground036_1K-PNG_Color.png',
+  STONE: '/textures/ground/Ground085_1K-PNG_Color.png',
   WOOD: '/textures/wood/WoodFloor044_1K-PNG_Color.png',
 }; 

@@ -149,39 +149,13 @@ function paletteByIndex(i: number) {
 
 function PastureScene() {
   const grassTexture = useLoader(TextureLoader, '/textures/grass/Grass005_1K-PNG_Color.png')
-  const dirtTexture = useMemo(() => {
-    const loader = new TextureLoader()
-    let loaded: THREE.Texture | null = null
-    try {
-      loaded = loader.load(
-        '/textures/pixel-dirt.png',
-        (t) => {
-          t.colorSpace = THREE.SRGBColorSpace
-          t.wrapS = t.wrapT = THREE.RepeatWrapping
-          t.repeat.set(2, 2)
-        },
-        undefined,
-        () => {
-          // Fallback: mutate the same texture to a brown canvas so the material map remains valid
-          const canvas = document.createElement('canvas')
-          canvas.width = 4; canvas.height = 4
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.fillStyle = '#8B7355'
-            ctx.fillRect(0, 0, 4, 4)
-          }
-          if (loaded) {
-            ;(loaded as THREE.Texture).image = canvas
-            loaded.needsUpdate = true
-            loaded.colorSpace = THREE.SRGBColorSpace
-            loaded.wrapS = loaded.wrapT = THREE.RepeatWrapping
-            loaded.repeat.set(2, 2)
-          }
-        }
-      )
-    } catch {}
-    return loaded as THREE.Texture
-  }, [])
+  const dirtTexture = useLoader(TextureLoader, '/textures/ground/Ground085_1K-PNG_Color.png')
+  dirtTexture.colorSpace = THREE.SRGBColorSpace
+  dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping
+  dirtTexture.generateMipmaps = true
+  dirtTexture.minFilter = THREE.LinearMipmapLinearFilter
+  dirtTexture.magFilter = THREE.LinearFilter
+  dirtTexture.repeat.set(6, 6)
   grassTexture.colorSpace = THREE.SRGBColorSpace
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
   grassTexture.generateMipmaps = true
@@ -210,7 +184,7 @@ function PastureScene() {
       {/* Distant path circle */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, -3.0]} receiveShadow>
         <circleGeometry args={[3.5, 32]} />
-        <meshStandardMaterial map={dirtTexture} color="#D2B48C" roughness={0.95} />
+        <meshStandardMaterial map={dirtTexture} roughness={0.95} />
       </mesh>
     </group>
   )
@@ -267,39 +241,13 @@ function ForestScene() {
 }
 
 function FarmyardScene() {
-  const dirtTexture = useMemo(() => {
-    const loader = new TextureLoader()
-    let loaded: THREE.Texture | null = null
-    try {
-      loaded = loader.load(
-        '/textures/pixel-dirt.png',
-        (t) => {
-          t.colorSpace = THREE.SRGBColorSpace
-          t.wrapS = t.wrapT = THREE.RepeatWrapping
-          t.repeat.set(18, 18)
-        },
-        undefined,
-        () => {
-          // Fallback: mutate the same texture to a brown canvas
-          const canvas = document.createElement('canvas')
-          canvas.width = 4; canvas.height = 4
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.fillStyle = '#8B7355'
-            ctx.fillRect(0, 0, 4, 4)
-          }
-          if (loaded) {
-            ;(loaded as THREE.Texture).image = canvas
-            loaded.needsUpdate = true
-            loaded.colorSpace = THREE.SRGBColorSpace
-            loaded.wrapS = loaded.wrapT = THREE.RepeatWrapping
-            loaded.repeat.set(18, 18)
-          }
-        }
-      )
-    } catch {}
-    return loaded as THREE.Texture
-  }, [])
+  const dirtTexture2 = useLoader(TextureLoader, '/textures/ground/Ground085_1K-PNG_Color.png')
+  dirtTexture2.colorSpace = THREE.SRGBColorSpace
+  dirtTexture2.wrapS = dirtTexture2.wrapT = THREE.RepeatWrapping
+  dirtTexture2.generateMipmaps = true
+  dirtTexture2.minFilter = THREE.LinearMipmapLinearFilter
+  dirtTexture2.magFilter = THREE.LinearFilter
+  dirtTexture2.repeat.set(18, 18)
   const woodTexture = useLoader(TextureLoader, '/textures/wood/WoodFloor044_1K-PNG_Color.png')
   woodTexture.colorSpace = THREE.SRGBColorSpace
   woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping
@@ -311,7 +259,7 @@ function FarmyardScene() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[55, 55]} />
-        <meshStandardMaterial map={dirtTexture} color="#8B7355" roughness={0.95} />
+        <meshStandardMaterial map={dirtTexture2} roughness={0.95} />
       </mesh>
       {/* Simple realistic barn */}
       <group position={[0, 0, -10]}>

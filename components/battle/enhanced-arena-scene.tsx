@@ -84,6 +84,7 @@ enum GameState {
 // Replace the ArenaFloor component to use the optimized texture loading
 function ArenaFloor() {
   const floorTexture = useTexture("/textures/grass/Grass005_1K-PNG_Color.png");
+  const dirtTexture = useTexture("/textures/ground/Ground085_1K-PNG_Color.png");
 
   // Apply texture settings directly to the loaded texture
   useEffect(() => {
@@ -96,17 +97,29 @@ function ArenaFloor() {
       floorTexture.magFilter = THREE.LinearFilter;
       floorTexture.needsUpdate = true;
     }
-  }, [floorTexture]);
+    if (dirtTexture) {
+      dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
+      dirtTexture.repeat.set(18, 18);
+      dirtTexture.anisotropy = 8;
+      dirtTexture.generateMipmaps = true;
+      dirtTexture.minFilter = THREE.LinearMipmapLinearFilter;
+      dirtTexture.magFilter = THREE.LinearFilter;
+      dirtTexture.needsUpdate = true;
+    }
+  }, [floorTexture, dirtTexture]);
 
   return (
-    <Plane 
-      args={[2000, 2000]} // Make it larger to cover the whole scene
-      rotation={[-Math.PI / 2, 0, 0]} 
-      position={[0, 0, 0]} // Set position to Y=0
-      receiveShadow
-    >
-      <meshStandardMaterial map={floorTexture} roughness={0.9} />
-    </Plane>
+    <group>
+      {/* Grass annulus */}
+      <Plane args={[2000, 2000]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <meshStandardMaterial map={floorTexture} roughness={0.9} />
+      </Plane>
+      {/* Dirt in-fighting ring (slightly smaller circle) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]} receiveShadow>
+        <circleGeometry args={[ARENA_CONFIG.ringRadius * 0.9, 64]} />
+        <meshStandardMaterial map={dirtTexture} roughness={0.95} />
+      </mesh>
+    </group>
   );
 }
 
