@@ -34,7 +34,6 @@ export const lobbies: Lobby[] = [
   { id: 'lobby-1.0', amount: 1.0, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
   { id: 'lobby-2.5', amount: 2.5, currency: CURRENCY, players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
   { id: 'lobby-5.0', amount: 5.0, currency: CURRENCY, players: [], capacity: 4, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
-  { id: 'lobby-10.0', amount: 10.0, currency: CURRENCY, players: [], capacity: 2, highRoller: true, status: 'open', matchType: 'ranked', isComingSoon: true },
 ];
 
 // Lobby timers for AI backfill
