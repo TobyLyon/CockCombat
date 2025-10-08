@@ -1,11 +1,8 @@
 "use client"
 import BattleArena from "@/components/battle/battle-arena"
 
-export const viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  viewportFit: 'cover',
-}
+// Note: viewport must be exported from a Server Component. Since this page uses client features,
+// move viewport to app/layout.tsx (already present) and remove it here to satisfy Next.js.
 
 export default function ArenaPage() {
   return <BattleArena />
