@@ -5,7 +5,7 @@
 export type ChainType = 'solana' | 'bsc';
 
 export function getChain(): ChainType {
-  const raw = (process.env.CHAIN || 'solana').toLowerCase();
+  const raw = (process.env.CHAIN || 'bsc').toLowerCase();
   return raw === 'bsc' ? 'bsc' : 'solana';
 }
 

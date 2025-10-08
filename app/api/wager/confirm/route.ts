@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { lobbies } from '@/lib/lobbies';
-import { SystemProgram, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+// Solana imports removed in EVM-only build
 import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
@@ -34,9 +34,7 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby ID, signature, and player public key are required' }, { status: 400 });
     }
 
-    // Validate player public key format depending on chain
-    let playerKey: PublicKey | null = null;
-    // EVM-only build: Solana validation removed
+  // EVM-only build: validate EVM address format lightly if needed (skipped here)
 
     const lobby = lobbies.find(l => l.id === lobbyId);
     if (!lobby) {

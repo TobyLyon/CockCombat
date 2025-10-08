@@ -1,21 +1,50 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
 import { isBsc } from "@/lib/chain"
+import { evmConfig } from "@/lib/evm-config"
 
 type AnyFn = (...args: any[]) => any
 
 // Chain-aware wallet shim to keep the rest of the app stable during migration
 export function useWallet() {
-  // SOL path: passthrough
-  const sol = useSolanaWallet()
 
   const [evmAddress, setEvmAddress] = useState<string | null>(null)
   const [evmConnecting, setEvmConnecting] = useState(false)
 
+  // Ensure we are on BSC (switch or add chain)
+  const ensureBscChain = useCallback(async () => {
+    if (typeof window === 'undefined') return null
+    const eth = (window as any).ethereum
+    if (!eth) return null
+    const { chainId, rpcUrl } = evmConfig.getConfig()
+    const hexChainId = '0x' + chainId.toString(16)
+    try {
+      await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexChainId }] })
+    } catch (switchError: any) {
+      if (switchError?.code === 4902 || String(switchError?.message || '').includes('Unrecognized chain ID')) {
+        try {
+          await eth.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: hexChainId,
+              chainName: chainId === 56 ? 'BNB Smart Chain' : 'BNB Smart Chain Testnet',
+              nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+              rpcUrls: [rpcUrl],
+              blockExplorerUrls: [chainId === 56 ? 'https://bscscan.com' : 'https://testnet.bscscan.com'],
+            }]
+          })
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return true
+  }, [])
+
   // EVM connect helper
   const evmConnect = useCallback(async () => {
+    await ensureBscChain()
     if (typeof window === 'undefined') return null
     const eth = (window as any).ethereum
     if (!eth) return null
@@ -28,7 +57,7 @@ export function useWallet() {
     } finally {
       setEvmConnecting(false)
     }
-  }, [])
+  }, [ensureBscChain])
 
   // EVM disconnect helper (local only)
   const evmDisconnect = useCallback(async () => {
@@ -77,7 +106,7 @@ export function useWallet() {
       connected: Boolean(evmAddress),
       connecting: evmConnecting,
       disconnect: evmDisconnect as AnyFn,
-      wallet: evmAddress ? { adapter: { name: 'EVM (Injected)' } } : null,
+      wallet: evmAddress ? { adapter: { name: 'BSC (Injected)' } } : null,
       wallets: [],
       select: evmConnect as AnyFn,
       sendTransaction: null,
@@ -87,6 +116,18 @@ export function useWallet() {
     }
   }
 
-  // Solana passthrough
-  return sol as any
+  // Non-BSC path disabled in EVM-only build
+  return {
+    publicKey: null,
+    connected: false,
+    connecting: false,
+    disconnect: async () => {},
+    wallet: null,
+    wallets: [],
+    select: async () => null,
+    sendTransaction: null,
+    signTransaction: null,
+    signMessage: null,
+    signAllTransactions: null,
+  } as any
 }

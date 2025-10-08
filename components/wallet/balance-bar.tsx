@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useWallet } from "@/hooks/use-wallet"
-import { useConnection } from "@solana/wallet-adapter-react"
 import { isBsc } from "@/lib/chain"
-import { PublicKey } from "@solana/web3.js"
 import { toast } from "sonner"
 import Image from "next/image"
 // Token service removed for EVM-only build
@@ -19,7 +17,7 @@ interface BalanceBarProps {
 
 export default function BalanceBar({ className = "", compact = false, pollIntervalMs = 15000 }: BalanceBarProps) {
   const { publicKey, connected } = useWallet()
-  const { connection } = useConnection()
+  const connection: any = null
   const [mounted, setMounted] = useState(false)
 
   const [sol, setSol] = useState<number>(0)
@@ -37,15 +35,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
 
     const fetchBalances = async () => {
       try {
-        const pk = publicKey as PublicKey
-        if (!isBsc()) {
-          const lamports = await connection.getBalance(pk)
-          const solNew = lamports / 1_000_000_000
-          if (solNew !== sol) {
-            setSol(solNew)
-            if (initialized) toast.info(`SOL: ${solNew.toFixed(4)}`)
-          }
-        } else {
+        if (isBsc()) {
           const addr = (publicKey as any)?.toString?.() || ''
           if (addr) {
             const provider = getEvmProvider()
@@ -53,6 +43,8 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
             const val = parseFloat(ethers.formatEther(bal))
             if (val !== bnb) setBnb(val)
           }
+        } else {
+          // Solana path removed in EVM-only build
         }
         if (tokenMint) {
           // no-op
@@ -66,7 +58,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
     fetchBalances()
     timer = window.setInterval(fetchBalances, pollIntervalMs)
     return () => { if (timer) window.clearInterval(timer) }
-  }, [mounted, connected, publicKey, connection, tokenMint, pollIntervalMs, sol, spl, initialized])
+  }, [mounted, connected, publicKey, tokenMint, pollIntervalMs, sol, spl, initialized, bnb])
 
   if (!mounted) {
     return (

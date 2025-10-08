@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet } from "@/hooks/use-wallet"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Avatar } from "@/components/ui/avatar"

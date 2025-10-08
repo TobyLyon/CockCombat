@@ -6,7 +6,7 @@ export function useToken() {
   return {
     balance: 0,
     refresh: async () => {},
-  }
+  } as any
 }
 // EVM-only: token actions disabled
 
@@ -34,7 +34,8 @@ export interface TokenHookResult {
 }
 
 export function useToken(): TokenHookResult {
-  const { connection } = useConnection();
+  // EVM-only build: no Solana connection
+  const connection: any = null;
   const { publicKey, connected, signTransaction } = useWallet();
   
   // State for token data

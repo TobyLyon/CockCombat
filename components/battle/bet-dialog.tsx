@@ -32,7 +32,6 @@ export default function BetDialog({
 }: BetDialogProps) {
   const { balance, placeBet, isLoading, tokenMint, escrowWallet, refreshBalance } = useToken()
   const { connected, publicKey } = useWallet()
-  const { connection } = useConnection()
   
   const [betAmount, setBetAmount] = useState(defaultBet)
   const [error, setError] = useState<string | null>(null)

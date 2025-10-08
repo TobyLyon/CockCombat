@@ -35,8 +35,13 @@ const nextConfig = {
         '@react-three/drei': '@react-three/drei',
       })
     }
-    // Disable cache to prevent hangs
-    config.cache = false
+    // Enable filesystem cache to speed up rebuilds
+    config.cache = {
+      type: 'filesystem',
+      buildDependencies: {
+        config: [__filename],
+      },
+    }
     return config
   },
   // Add security headers

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useWallet } from "@/hooks/use-wallet"
 import { ProfileService } from "@/lib/profile-service"
-// Solana-specific imports removed for EVM-only build
+// Solana-specific polling removed for EVM-only build
 import type { Profile, Transaction, Match, Chicken } from "@/lib/supabase"
 import { toast } from "sonner"
 import { Loader2, Pencil } from "lucide-react"
@@ -66,31 +66,7 @@ export default function UserProfilePro() {
 
   // EVM-only view: omit on-chain polling here
 
-  useEffect(() => {
-    let timer: number | undefined
-    const poll = async () => {
-      try {
-        if (!walletAddress) return
-        const conn = getConnection()
-        // Solana-only balance polling; hidden on BSC
-        const lamports = await conn.getBalance(new (await import('@solana/web3.js')).PublicKey(walletAddress))
-        const newSol = lamports / 1_000_000_000
-        if (newSol !== solBalance) {
-          setSolBalance(newSol)
-        }
-        if (getTokenMintAddress()) {
-          const newSpl = await getTokenBalance(conn, walletAddress)
-          if (newSpl !== splBalance) {
-            setSplBalance(newSpl)
-            toast.info(`$COCK balance ${newSpl.toFixed(2)}`)
-          }
-        }
-      } catch {}
-    }
-    poll()
-    timer = window.setInterval(poll, 15000)
-    return () => { if (timer) window.clearInterval(timer) }
-  }, [walletAddress, solBalance, splBalance])
+  // EVM-only: disable Solana balance polling UI
 
   const computed = useMemo(() => {
     const totalWagered = profile?.total_wagered ?? txs.filter(t => t.transaction_type === 'wager').reduce((s,t)=> s + Math.abs(t.amount), 0)

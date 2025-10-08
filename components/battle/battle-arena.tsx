@@ -19,7 +19,7 @@ import GameOver from './game-over';
 import WinnerCelebration from './winner-celebration';
 import { useGameState, GameState } from "@/contexts/GameStateContext"
 import { Lobby } from "@/lib/lobbies";
-import { Transaction, Connection, clusterApiUrl } from "@solana/web3.js"
+// Solana web3 removed in EVM-only build
 import { motion } from "framer-motion"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
@@ -659,7 +659,7 @@ export default function BattleArena() {
 
       {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
         <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs flex-shrink-0">
-          <p> {new Date().getFullYear()} Cock Combat • Powered by {isBsc() ? 'BNB Chain' : 'Solana'}</p>
+          <p> {new Date().getFullYear()} Cock Combat • Powered by BNB Chain</p>
         </footer>
       )}
     </div>

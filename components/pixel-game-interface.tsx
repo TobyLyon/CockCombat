@@ -14,7 +14,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-// Removed WalletMultiButton in favor of a minimal connect button for consistent styling
+// Removed WalletModal usage in EVM-only build
 
 // Animated chicken in background
 interface AnimatedChicken {
@@ -33,7 +33,6 @@ export default function PixelGameInterface() {
   const router = useRouter()
   const { audioEnabled, volume, playSound } = useAudio()
   const { connected, publicKey } = useWallet()
-  const { setVisible } = useWalletModal()
   const { profile, needsSetup, setNeedsSetup, refreshProfile } = useProfile()
   const [isNavigating, setIsNavigating] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
@@ -260,7 +259,7 @@ export default function PixelGameInterface() {
           </span>
         </div>
         <p className="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
-          Battle Royale on {process.env.CHAIN === 'bsc' ? 'BNB Chain' : 'Solana'}
+          Battle Royale on BNB Chain
         </p>
         </div>
 
