@@ -1160,8 +1160,8 @@ preparePromise.then(() => {
                 // Do not reset readiness here; keep it through transition
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
-                // Begin server-side queue confirmation phase
-                try { await startQueuePhase(lobbyId, io); } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
+                // Begin server-side queue confirmation phase (fire-and-forget)
+                try { startQueuePhase(lobbyId, io).catch(() => {}); } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
               }
             }, 1000);
 
