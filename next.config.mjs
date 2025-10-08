@@ -1,4 +1,5 @@
 import path from 'path'
+import { fileURLToPath } from 'url'
 let userConfig = undefined
 try {
   // try to import ESM first
@@ -46,7 +47,7 @@ const nextConfig = {
     config.cache = {
       type: 'filesystem',
       buildDependencies: {
-        config: [__filename],
+        config: [fileURLToPath(import.meta.url)],
       },
     }
     return config
