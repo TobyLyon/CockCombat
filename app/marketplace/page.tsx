@@ -1,5 +1,5 @@
-import Marketplace from "@/components/marketplace/marketplace"
+import { redirect } from "next/navigation"
 
 export default function MarketplacePage() {
-  return <Marketplace />
+  redirect("/arena")
 }

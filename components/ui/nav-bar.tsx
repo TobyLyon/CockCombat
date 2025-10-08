@@ -35,7 +35,7 @@ export default function NavBar() {
     if (!pathname) return "COCK COMBAT"
     if (pathname === "/") return "COCK COMBAT"
     if (pathname.startsWith("/arena")) return "ARENA"
-    if (pathname.startsWith("/marketplace")) return "MARKETPLACE"
+    // marketplace removed
     if (pathname.startsWith("/profile")) return "PROFILE"
     if (pathname.startsWith("/spectate")) return "SPECTATE"
     if (pathname.startsWith("/lobbies")) return "LOBBIES"

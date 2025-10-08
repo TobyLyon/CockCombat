@@ -21,9 +21,7 @@ export default function GameNavigation({ onButtonClick }) {
       case "spectator":
         router.push("/arena?spectate=true")
         break
-      case "marketplace":
-        router.push("/marketplace")
-        break
+      // marketplace removed
       case "profile":
         router.push("/profile")
         break
