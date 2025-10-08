@@ -1247,7 +1247,12 @@ preparePromise.then(() => {
       if (!lobby) return;
 
       // Build expected roster from API (tutorial may include AI; ranked is humans only)
-      let expectedRoster = (lobby.players || []).map(p => ({ wallet: p.playerId, isAi: !!p.isAi }));
+      let expectedRoster = (lobby.players || []).map(p => ({
+        wallet: p.playerId,
+        isAi: !!p.isAi,
+        username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
+        chickenName: p.chickenId || 'Default'
+      }));
       const isTutorial = lobby.matchType === 'tutorial';
       if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
 

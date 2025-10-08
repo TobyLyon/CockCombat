@@ -535,7 +535,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const colors = prevEntry?.colors || generateChickenColors();
         return {
           id,
-          name: p.username,
+          name: p.username || prevEntry?.name || (p.isAi ? 'AI' : id.slice(0, 8) + '...'),
           isPlayer: false,
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
           rotation: new THREE.Euler(0, 0, 0),
