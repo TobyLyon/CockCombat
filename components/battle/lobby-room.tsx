@@ -253,6 +253,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     socket.on('player_ready_status', handlePlayerReady);
     socket.on('match_starting', handleMatchStarting);
     socket.on('match_started', handleMatchStarted);
+    socket.on('round_start', handleMatchStarted);
     socket.on('refresh_lobby_state', handleRefreshLobbyState);
 
     return () => {
@@ -262,6 +263,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('player_ready_status', handlePlayerReady);
       socket.off('match_starting', handleMatchStarting);
       socket.off('match_started', handleMatchStarted);
+      socket.off('round_start', handleMatchStarted);
       socket.off('refresh_lobby_state', handleRefreshLobbyState);
     };
   }, [socket, onStartMatch]);
