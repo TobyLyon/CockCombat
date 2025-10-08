@@ -10,9 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useWallet } from "@/hooks/use-wallet"
 import { ProfileService } from "@/lib/profile-service"
 // Solana-specific polling removed for EVM-only build
-import type { Profile, Transaction, Match, Chicken } from "@/lib/supabase"
+import type { Profile, Transaction, Match } from "@/lib/supabase"
 import { toast } from "sonner"
 import { Loader2, Pencil } from "lucide-react"
+import { getEvmExplorerUrl } from "@/lib/evm-config"
 
 export default function UserProfilePro() {
   const { connected, publicKey } = useWallet()
@@ -24,7 +25,6 @@ export default function UserProfilePro() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [chickens, setChickens] = useState<Chicken[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [txs, setTxs] = useState<Transaction[]>([])
 
@@ -47,12 +47,10 @@ export default function UserProfilePro() {
         setEditName(p?.username || "")
         setEditPfp(p?.profile_picture || "")
         setEditBio(p?.bio || "")
-        const [cs, mh, th] = await Promise.all([
-          ProfileService.getChickens(walletAddress),
+        const [mh, th] = await Promise.all([
           ProfileService.getMatchHistory(walletAddress, 25),
           ProfileService.getTransactionHistory(walletAddress, 50),
         ])
-        setChickens(cs)
         setMatches(mh)
         setTxs(th)
       } catch (e:any) {
@@ -155,31 +153,40 @@ export default function UserProfilePro() {
         <StatCard title="Net" value={`${computed.net}`} highlight={computed.net >= 0 ? 'positive' : 'negative'} />
       </div>
 
-      <Tabs defaultValue="collection" className="mb-2">
+      <Tabs defaultValue="overview" className="mb-2">
         <TabsList className="bg-purple-800/40 border border-purple-700/50">
-          <TabsTrigger value="collection" className="data-[state=active]:bg-purple-700">My Chickens</TabsTrigger>
+          <TabsTrigger value="overview" className="data-[state=active]:bg-purple-700">Overview</TabsTrigger>
           <TabsTrigger value="history" className="data-[state=active]:bg-purple-700">Match History</TabsTrigger>
           <TabsTrigger value="transactions" className="data-[state=active]:bg-purple-700">Transactions</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="collection" className="pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {chickens.map((c) => (
-              <Card key={c.id} className="bg-purple-800/40 border-purple-700/50">
-                <CardContent className="p-4">
-                  <div className="rounded-lg bg-purple-900/40 h-40 mb-3 flex items-center justify-center text-purple-300">
-                    {c.name}
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-purple-200">
-                    <span>Lvl {c.level}</span>
-                    <span>{c.wins}W / {c.losses}L</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {chickens.length === 0 && (
-              <div className="text-sm text-purple-300">No chickens yet.</div>
-            )}
+        <TabsContent value="overview" className="pt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="bg-purple-800/40 border-purple-700/50">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-purple-200 mb-3">Recent Matches</h3>
+                <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+                  {matches.slice(0,5).map((m) => (
+                    <HistoryItem key={m.id} result={m.winner_wallet === walletAddress ? 'win':'loss'} fighter={''} opponent={''} reward={0} date={new Date(m.match_timestamp).toLocaleString()} />
+                  ))}
+                  {matches.length === 0 && <div className="p-3 text-sm text-purple-300">No matches yet.</div>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-purple-800/40 border-purple-700/50">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-purple-200 mb-3">Recent Transactions</h3>
+                <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+                  {txs.slice(0,5).map(t => (
+                    <div key={t.id} className="p-3 flex items-center justify-between text-sm">
+                      <div className="text-purple-200">{t.description || t.transaction_type}</div>
+                      <div className={t.amount >= 0 ? 'text-green-400' : 'text-red-400'}>{t.amount >= 0 ? '+' : ''}{t.amount}</div>
+                    </div>
+                  ))}
+                  {txs.length === 0 && <div className="p-3 text-sm text-purple-300">No transactions yet.</div>}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -193,14 +200,40 @@ export default function UserProfilePro() {
         </TabsContent>
 
         <TabsContent value="transactions" className="pt-4">
-          <div className="bg-purple-800/30 rounded-lg divide-y divide-purple-700/40">
-            {txs.slice(0,12).map(t => (
-              <div key={t.id} className="p-3 flex items-center justify-between text-sm">
-                <div className="text-purple-200">{t.description || t.transaction_type}</div>
-                <div className={t.amount >= 0 ? 'text-green-400' : 'text-red-400'}>{t.amount >= 0 ? '+' : ''}{t.amount}</div>
-              </div>
-            ))}
-            {txs.length === 0 && <div className="p-3 text-sm text-purple-300">No transactions yet.</div>}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="bg-purple-800/40 border-purple-700/50">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-purple-200 mb-3">Wagers & Results</h3>
+                <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+                  {txs.map(t => (
+                    <div key={t.id} className="p-3 flex items-center justify-between text-sm">
+                      <div className="text-purple-200">{t.description || t.transaction_type}</div>
+                      <div className={t.amount >= 0 ? 'text-green-400' : 'text-red-400'}>{t.amount >= 0 ? '+' : ''}{t.amount}</div>
+                    </div>
+                  ))}
+                  {txs.length === 0 && <div className="p-3 text-sm text-purple-300">No transactions yet.</div>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-purple-800/40 border-purple-700/50">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-purple-200 mb-3">On-chain Payouts (BSC)</h3>
+                <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+                  {matches.filter(m => m.winner_wallet === walletAddress && (m as any)?.metadata?.payout_tx).map((m) => {
+                    const hash = (m as any).metadata.payout_tx as string
+                    return (
+                      <div key={m.id} className="p-3 flex items-center justify-between text-sm">
+                        <div className="text-purple-200">Match {m.id?.toString().slice(0,8)}…</div>
+                        <a href={getEvmExplorerUrl(hash)} target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline">View Tx</a>
+                      </div>
+                    )
+                  })}
+                  {matches.filter(m => m.winner_wallet === walletAddress && (m as any)?.metadata?.payout_tx).length === 0 && (
+                    <div className="p-3 text-sm text-purple-300">No on-chain payouts recorded yet.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
