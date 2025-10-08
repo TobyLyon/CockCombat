@@ -120,10 +120,12 @@ export default function WaitingQueue({
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
+    socket.on('match_started', onStarted)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
+      socket.off('match_started', onStarted)
     }
   }, [socket, isConnected, onStartBattle, playSound])
 
