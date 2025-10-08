@@ -96,12 +96,12 @@ export default function WaitingQueue({
   useEffect(() => {
     if (!socket) return
     const onQueueBegin = (payload: any) => {
-      // Optionally display who is expected and a short info
-      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.wallet.slice(0,8)+"...", isAi: p.isAi }))) } catch {}
+      // Use provided usernames for AI and humans when available
+      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.username || (p.wallet ? String(p.wallet).slice(0,8)+"..." : ''), isAi: p.isAi }))) } catch {}
     }
     const onArenaLock = (payload: any) => {
-      // Replace roster with locked list
-      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.wallet.slice(0,8)+"...", isAi: p.isAi }))) } catch {}
+      // Replace roster with locked list and keep provided names
+      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.username || (p.wallet ? String(p.wallet).slice(0,8)+"..." : ''), isAi: p.isAi }))) } catch {}
     }
     const onStarted = () => {
       try { playSound('button') } catch {}

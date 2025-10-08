@@ -187,7 +187,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         // Map to display format (no client placeholders)
         const mapped: LobbyPlayer[] = updatedLobby.players.map((p: any) => ({
           playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
+          username: p.isAi ? (p.username || 'AI') : (p.playerId.slice(0, 8) + '...'),
           chickenName: p.chickenId || 'Default',
           isReady: p.isAi ? true : Boolean(p.isReady),
           isAi: !!p.isAi,
