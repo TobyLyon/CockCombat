@@ -536,9 +536,10 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || generateChickenColors();
+        const isGuest = id.startsWith('guest_')
         return {
           id,
-          name: (p.username && p.username !== 'cluck norris') ? p.username : (p.isAi ? (p.username || 'AI') : (prevEntry?.name && prevEntry.name !== 'cluck norris' ? prevEntry.name : id.slice(0, 8) + '...')),
+          name: p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? id : id.slice(0, 8) + '...')),
           isPlayer: false,
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
           rotation: new THREE.Euler(0, 0, 0),

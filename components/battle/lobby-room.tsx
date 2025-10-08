@@ -185,13 +185,20 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       if (updatedLobby.players) {
         console.log('Setting players:', updatedLobby.players);
         // Map to display format (no client placeholders)
-        const mapped: LobbyPlayer[] = updatedLobby.players.map((p: any) => ({
-          playerId: p.playerId,
-          username: p.isAi ? (p.username || 'AI') : (p.playerId.slice(0, 8) + '...'),
-          chickenName: p.chickenId || 'Default',
-          isReady: p.isAi ? true : Boolean(p.isReady),
-          isAi: !!p.isAi,
-        }))
+        const mapped: LobbyPlayer[] = updatedLobby.players.map((p: any) => {
+          const idStr = String(p.playerId || '')
+          const isGuest = idStr.startsWith('guest_')
+          const displayName = p.isAi
+            ? (p.username || 'AI')
+            : (p.username || (isGuest ? idStr : idStr.slice(0, 8) + '...'))
+          return {
+            playerId: p.playerId,
+            username: displayName,
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : Boolean(p.isReady),
+            isAi: !!p.isAi,
+          }
+        })
         setPlayers(mapped);
       }
     };

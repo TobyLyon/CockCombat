@@ -96,12 +96,22 @@ export default function WaitingQueue({
   useEffect(() => {
     if (!socket) return
     const onQueueBegin = (payload: any) => {
-      // Use provided usernames for AI and humans when available
-      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.username || (p.wallet ? String(p.wallet).slice(0,8)+"..." : ''), isAi: p.isAi }))) } catch {}
+      // Use provided usernames; guest_* stays literal, wallets are shortened
+      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => {
+        const idStr = String(p.wallet || '')
+        const isGuest = idStr.startsWith('guest_')
+        const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
+        return { playerId: p.wallet, username, isAi: p.isAi }
+      })) } catch {}
     }
     const onArenaLock = (payload: any) => {
-      // Replace roster with locked list and keep provided names
-      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => ({ playerId: p.wallet, username: p.username || (p.wallet ? String(p.wallet).slice(0,8)+"..." : ''), isAi: p.isAi }))) } catch {}
+      // Replace roster with locked list and keep provided names with guest rule
+      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => {
+        const idStr = String(p.wallet || '')
+        const isGuest = idStr.startsWith('guest_')
+        const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
+        return { playerId: p.wallet, username, isAi: p.isAi }
+      })) } catch {}
     }
     const onStarted = () => {
       try { playSound('button') } catch {}
