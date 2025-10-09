@@ -103,7 +103,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     return undefined
   }
 
-  // Join lobby room on mount
+  // Join lobby room on mount, leave on unmount/navigation/refresh
   useEffect(() => {
     const id = getCurrentPlayerId()
     if (socket && isConnected && id) {
@@ -138,7 +138,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       // Also set a periodic refresh every 5 seconds to keep lobby in sync
       const refreshInterval = setInterval(requestLobbyState, 5000);
 
-      return () => {
+      const cleanup = () => {
         clearTimeout(stateTimer);
         clearTimeout(stateTimer2);
         clearInterval(refreshInterval);
@@ -149,6 +149,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         } else {
           console.log(`⏸️ Preserving lobby room membership during queue transition: ${lobby.id}`);
         }
+      };
+      window.addEventListener('beforeunload', cleanup)
+      document.addEventListener('visibilitychange', () => { if (document.hidden) cleanup() })
+      return () => {
+        window.removeEventListener('beforeunload', cleanup)
+        document.removeEventListener('visibilitychange', () => { if (document.hidden) cleanup() })
+        cleanup()
       };
     }
   }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);

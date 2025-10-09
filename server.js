@@ -1233,7 +1233,7 @@ preparePromise.then(() => {
             }
 
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-            fetch(`${baseUrl}/api/lobbies`, {
+            await fetch(`${baseUrl}/api/lobbies`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lobbyId: lobbyAtDisconnect, playerId: walletAtDisconnect })
@@ -1290,7 +1290,7 @@ preparePromise.then(() => {
         };
 
         // Small grace period to allow immediate reconnection/handoff
-        setTimeout(tryRemoveAfterGrace, 1500);
+        setTimeout(tryRemoveAfterGrace, 800);
       } catch {}
 
       // Remove this socket from active connections immediately; but if this wallet still has another live socket, keep the connection as a handoff
