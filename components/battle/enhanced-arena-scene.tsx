@@ -591,6 +591,15 @@ function SceneContent({
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
     socket.on('round_start', onRoundStartJoin)
+    // Fallback: if we only get match_started (no epoch), synthesize a 3s countdown
+    const onMatchStarted = () => {
+      if (!roundStartAtMsRef.current || roundStartAtMsRef.current <= Date.now()) {
+        roundStartAtMsRef.current = Date.now() + 3000
+        freezeUntilRef.current = roundStartAtMsRef.current
+        invulnerableUntilRef.current = roundStartAtMsRef.current + 1000
+      }
+    }
+    socket.on('match_started', onMatchStarted)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
     socket.on('debug_trace', onDebug)
     return () => {
@@ -598,6 +607,7 @@ function SceneContent({
       socket.off('player_damage', onRemotePlayerDamage)
       socket.off('arena_lock_roster', onArenaLockJoin)
       socket.off('round_start', onRoundStartJoin)
+      socket.off('match_started', onMatchStarted)
       socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])
@@ -673,7 +683,7 @@ function SceneContent({
           if (!opponent.position || !opponent.isAlive) continue;
           // Prefer latest networked transform if available
           const net = remoteHumansRef.current[opponent.id]
-          const opponentPos = net && net.pos
+        const opponentPos = net && net.pos
             ? net.pos.clone()
             : (opponent.position instanceof THREE.Vector3
                 ? opponent.position.clone()

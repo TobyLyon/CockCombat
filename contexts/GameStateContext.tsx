@@ -547,6 +547,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         maxHp: 3,
         isAlive: true,
         visible: true,
+        // Carry over any flag fields used by HUD/animations if present on roster entry
+        ...(entry as any).isHitFlashing ? { isHitFlashing: (entry as any).isHitFlashing } : {},
       };
     });
     
