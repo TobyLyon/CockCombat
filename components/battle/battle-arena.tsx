@@ -451,11 +451,11 @@ export default function BattleArena() {
                         
                         <div className="relative z-10">
                           {/* Entry Amount */}
-                          <div className="mb-2 lg:mb-3">
-                            <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
+                          <div className="mb-2 lg:mb-2">
+                            <div className={`text-lg lg:text-xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
                               {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
                             </div>
-                            <div className="text-[10px] lg:text-xs text-white/70 uppercase tracking-wide">
+                            <div className="text-[9px] lg:text-[11px] text-white/70 uppercase tracking-wide">
                               {lobby.amount === 0 ? 'Tutorial Match' : 'Entry Fee'}
                             </div>
                           </div>
