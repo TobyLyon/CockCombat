@@ -36,8 +36,13 @@ export function ProfileSetupModal({
       return
     }
 
-    if (username.length < 3) {
+    const trimmed = username.trim()
+    if (trimmed.length < 3) {
       toast.error("Username must be at least 3 characters long.")
+      return
+    }
+    if (trimmed.length > 20) {
+      toast.error("Username must be 20 characters or fewer.")
       return
     }
 
@@ -49,7 +54,7 @@ export function ProfileSetupModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: username.trim(),
+          username: trimmed,
           walletAddress: publicKey.toBase58(),
         }),
       })

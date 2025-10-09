@@ -82,8 +82,19 @@ export default function UserProfilePro() {
     if (!walletAddress) return
     setSaving(true)
     try {
+      const name = (editName || '').trim()
+      if (name.length > 20) {
+        toast.error('Username must be 20 characters or fewer')
+        setSaving(false)
+        return
+      }
+      if (name && name.length < 3) {
+        toast.error('Username must be at least 3 characters long')
+        setSaving(false)
+        return
+      }
       const updated = await ProfileService.updateProfile(walletAddress, {
-        username: editName.trim() || profile?.username,
+        username: name || profile?.username,
         profile_picture: editPfp.trim() || null,
         bio: editBio.trim() || null,
       })
