@@ -1275,6 +1275,29 @@ preparePromise.then(() => {
           };
         });
 
+        // Tutorial: if API roster is empty/stale, rebuild humans from live socket presence (no AI)
+        try {
+          if (lobby.matchType === 'tutorial') {
+            const seen = new Set(lobbyPlayers.map(p => p.playerId));
+            const presenceHumans = [];
+            for (const [, connection] of activeConnections.entries()) {
+              if (connection.currentLobby === lobbyId && connection.walletAddress) {
+                presenceHumans.push({
+                  playerId: connection.walletAddress,
+                  username: connection.walletAddress.slice(0, 8) + '...',
+                  chickenName: 'Default',
+                  isReady: !!connection.isReady,
+                  isAi: false,
+                });
+              }
+            }
+            // Prefer presence-only list to avoid mismatches with API during tutorial tests
+            if (presenceHumans.length > 0) {
+              lobbyPlayers = presenceHumans;
+            }
+          }
+        } catch {}
+
         // Disabled tutorial AI backfill for now
         try { /* no-op */ } catch {}
         
@@ -1443,7 +1466,19 @@ preparePromise.then(() => {
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
-                try { startQueuePhase(lobbyId, io).catch(() => {}); } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
+                try {
+                  // For tutorial, pass a presence-derived override roster to avoid API dependency
+                  let override = null;
+                  if (lobby.matchType === 'tutorial') {
+                    override = lobbyPlayers.filter(p => !p.isAi).map(p => ({
+                      wallet: p.playerId,
+                      isAi: false,
+                      username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
+                      chickenName: p.chickenName || 'Default',
+                    }));
+                  }
+                  startQueuePhase(lobbyId, io, override || undefined).catch(() => {});
+                } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
               }
             }, 1000);
 
