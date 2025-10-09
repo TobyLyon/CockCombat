@@ -115,7 +115,7 @@ export default function WaitingQueue({
       matchSessionIdRef.current = payload?.matchSessionId || null
       // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
-        const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+        const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
         const msid = matchSessionIdRef.current
         if (id && msid) {
           socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
@@ -279,7 +279,7 @@ export default function WaitingQueue({
     if (!socket || !isConnected) return
     // register wallet/guest id
     try {
-      const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
       if (id) socket.emit('register_wallet', id)
     } catch {}
     socket.emit('join_lobby_room', lobby.id)

@@ -499,7 +499,8 @@ preparePromise.then(() => {
         console.warn(`⚠️ Rate limit exceeded for player_ready: ${socket.id}`);
         return;
       }
-      const { lobbyId, playerId, isReady } = data;
+      const { lobbyId, playerId, isReady } = data || {};
+      if (!lobbyId || !playerId) return;
       console.log(`🎯 Player ${playerId} ready status: ${isReady} in lobby ${lobbyId}`);
       
       const connection = activeConnections.get(socket.id);
@@ -540,6 +541,17 @@ preparePromise.then(() => {
         setTimeout(() => {
           io.to(lobbyId).emit('refresh_lobby_state');
         }, 50);
+        // If a queue session exists, nudge finalize so clients that acks are counted
+        try {
+          const msid = global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId);
+          if (msid) {
+            const session = global.queueSessions && global.queueSessions.get(msid);
+            if (session && typeof session.presenceAcks?.set === 'function' && typeof session.assetsAcks?.set === 'function') {
+              session.presenceAcks.set(String(playerId), Date.now());
+              session.assetsAcks.set(String(playerId), Date.now());
+            }
+          }
+        } catch {}
       }
     });
 
