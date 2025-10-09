@@ -632,7 +632,13 @@ function SceneContent({
         playerRef.current.getWorldPosition(playerPos);
         for (const opponent of opponents) {
           if (!opponent.position || !opponent.isAlive) continue;
-          const opponentPos = opponent.position instanceof THREE.Vector3 ? opponent.position.clone() : new THREE.Vector3().fromArray(opponent.position as number[]);
+          // Prefer latest networked transform if available
+          const net = remoteHumansRef.current[opponent.id]
+          const opponentPos = net && net.pos
+            ? net.pos.clone()
+            : (opponent.position instanceof THREE.Vector3
+                ? opponent.position.clone()
+                : new THREE.Vector3().fromArray(opponent.position as number[]))
 
           // Compute horizontal distance only to avoid Y glitches during jumps
           const dx = playerPos.x - opponentPos.x;
@@ -909,6 +915,7 @@ function SceneContent({
           playerRef={playerRef}
           freezeUntilMs={freezeUntilRef.current}
           invulnerableUntilMs={invulnerableUntilRef.current}
+          remoteHumans={remoteHumansRef.current}
           onAiDamagePlayer={() => { if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1) }}
         />
       )}
@@ -923,7 +930,7 @@ function SceneContent({
             position={[0, 0, 0]} // Relative to the group
             colors={playerChicken?.colors}
             isPecking={selfIsPecking}
-            isWalking={isWalking}
+            isWalking={isWalking || Math.hypot(selfVelocity.current.x, selfVelocity.current.z) > 0.05}
             isJumping={selfIsJumping}
             disableBobbing={true} // Player chicken should NOT bob
             isPlayer={true}
@@ -1026,6 +1033,7 @@ function ChickenInstances({
     playerRef,
     freezeUntilMs,
     invulnerableUntilMs,
+    remoteHumans,
     onAiDamagePlayer
   }: {
     chickens: PlayerStatus[],
@@ -1033,6 +1041,7 @@ function ChickenInstances({
     playerRef?: React.RefObject<THREE.Group>,
     freezeUntilMs?: number,
     invulnerableUntilMs?: number,
+    remoteHumans?: Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>,
     onAiDamagePlayer?: () => void
   }) {
     const groupsRef = useRef<Record<string, THREE.Group | null>>({})
@@ -1058,13 +1067,35 @@ function ChickenInstances({
         const g = groupsRef.current[chicken.id]
         if (!g) continue
 
-        const pos = g.position.clone()
-        pos.y = 0.85
+        // For network humans, pull last known transform and smooth
+        const net = remoteHumans && chicken.id ? remoteHumans[chicken.id] : undefined
+        const pos = (net && net.pos ? net.pos.clone() : g.position.clone())
+        // Keep network-reported Y to show jumps; clamp only if absurd
+        if (!isFinite(pos.y) || pos.y < -5 || pos.y > 50) pos.y = 0.85
         // Human opponents are network-driven: do not apply local AI movement
         const isAI = Boolean((chicken as any).isAi)
         if (!isAI) {
-          // Clear AI velocity indicators for proper idle animations
-          try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
+          // Apply smoothing toward remote transform and set anim hints
+          const prev = g.position.clone()
+          // Smooth position and rotation
+          g.position.lerp(pos, 0.35)
+          if (net) {
+            const targetY = net.rotY
+            const lerpAngle = (a: number, b: number, t: number) => {
+              let diff = (b - a + Math.PI) % (Math.PI * 2)
+              if (diff < 0) diff += Math.PI * 2
+              diff -= Math.PI
+              return a + diff * t
+            }
+            g.rotation.y = lerpAngle(g.rotation.y, targetY, 0.35)
+            // Drive walk/peck anims from deltas and net flags
+            const dx = g.position.x - prev.x
+            const dz = g.position.z - prev.z
+            try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
+            try { if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now() } catch {}
+          } else {
+            try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
+          }
           continue
         }
 
