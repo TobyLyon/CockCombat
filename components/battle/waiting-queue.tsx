@@ -266,7 +266,10 @@ export default function WaitingQueue({
       }
       // After two stable ticks (~two consecutive updates), trigger a final state fetch then start
       if (stableTicksRef.current >= 2) {
-        try { socket?.emit?.('get_lobby_state', lobby.id) } catch {}
+        try {
+          socket?.emit?.('get_lobby_state', lobby.id)
+          socket?.emit?.('ensure_queue_progress', lobby.id)
+        } catch {}
         setTimeout(() => {
           if (!launchedRef.current) {
             launchedRef.current = true

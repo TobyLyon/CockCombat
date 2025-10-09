@@ -637,6 +637,26 @@ preparePromise.then(() => {
       }
     });
 
+    // Client nudge: ensure queue moves forward by finalizing or starting queue phase
+    socket.on('ensure_queue_progress', async (lobbyId) => {
+      if (!checkRateLimit('ensure_queue_progress', 5)) {
+        console.warn(`⚠️ Rate limit exceeded for ensure_queue_progress: ${socket.id}`);
+        return;
+      }
+      try {
+        const msId = (global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId)) || null;
+        if (msId) {
+          console.log(`🧭 ensure_queue_progress: finalizing active queue session ${msId} for ${lobbyId}`)
+          await finalizeQueueSession(msId, io);
+        } else {
+          console.log(`🧭 ensure_queue_progress: starting queue phase for ${lobbyId}`)
+          await startQueuePhase(lobbyId, io);
+        }
+      } catch (e) {
+        console.warn('ensure_queue_progress failed:', e?.message || e);
+      }
+    });
+
     // Handle battle actions
     socket.on('battle_action', async (actionData) => {
       if (!checkRateLimit('battle_action', 30)) {
