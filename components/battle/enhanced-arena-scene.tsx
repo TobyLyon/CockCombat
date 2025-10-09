@@ -86,7 +86,7 @@ enum GameState {
 // Arena configuration constants are now imported from mocks/game-data.ts
 
 // Replace the ArenaFloor component to use the optimized texture loading
-function ArenaFloor() {
+function ArenaFloor({ lowPerf = false }: { lowPerf?: boolean }) {
   const floorTexture = useTexture("/textures/grass/Grass005_1K-PNG_Color.png");
   const dirtTexture = useTexture("/textures/ground/Ground085_1K-PNG_Color.png");
 
@@ -97,7 +97,7 @@ function ArenaFloor() {
       try { (floorTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
       floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
       floorTexture.repeat.set(12, 12);
-      floorTexture.anisotropy = 4;
+      floorTexture.anisotropy = lowPerf ? 2 : 4;
       floorTexture.generateMipmaps = true;
       floorTexture.minFilter = THREE.LinearMipmapLinearFilter;
       floorTexture.magFilter = THREE.LinearFilter;
@@ -108,13 +108,13 @@ function ArenaFloor() {
       try { (dirtTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
       dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
       dirtTexture.repeat.set(10, 10);
-      dirtTexture.anisotropy = 4;
+      dirtTexture.anisotropy = lowPerf ? 2 : 4;
       dirtTexture.generateMipmaps = true;
       dirtTexture.minFilter = THREE.LinearMipmapLinearFilter;
       dirtTexture.magFilter = THREE.LinearFilter;
       dirtTexture.needsUpdate = true;
     }
-  }, [floorTexture, dirtTexture]);
+  }, [floorTexture, dirtTexture, lowPerf]);
 
   return (
     <group>
@@ -775,7 +775,7 @@ function SceneContent({
         while (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2
         while (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2
         // Apply turn
-        const nextAngle = selfRotation.y + (ROTATION_SPEED * deltaTime) * turn
+        const nextAngle = selfRotation.y + (ROTATION_SPEED * deltaTime) * turn * (selfIsJumping ? 0.85 : 1.0)
         // Wrap to avoid jumps across the branch cut
         selfRotation.y = ((nextAngle + Math.PI) % (Math.PI * 2)) - Math.PI
       }
@@ -1000,7 +1000,7 @@ function SceneContent({
       <MemeSky />
 
       {/* Arena and surrounding area */}
-      <ArenaFloor />
+      <ArenaFloor lowPerf={true} />
       <BarbedWireFence />
       {staticDecorations}
 
@@ -1197,7 +1197,7 @@ function ChickenInstances({
           const prevX2 = g.position.x
           const prevZ2 = g.position.z
           // Adapt smoothing based on local performance: if delta is large (low FPS), ease more aggressively
-          const ease = Math.max(0.25, Math.min(0.45, delta * 10))
+    const ease = Math.max(0.15, Math.min(0.4, delta * 12))
           g.position.x += (pos.x - g.position.x) * ease
           g.position.z += (pos.z - g.position.z) * ease
           try {
@@ -1419,7 +1419,7 @@ export default React.memo(function EnhancedArenaScene({
               // Ensure consistent color management and shadow quality
               try { (gl as any).outputColorSpace = THREE.SRGBColorSpace } catch {}
               try { (gl as any).toneMapping = THREE.ACESFilmicToneMapping } catch {}
-              try { (gl as any).toneMappingExposure = 1.0 } catch {}
+              try { (gl as any).toneMappingExposure = 0.9 } catch {}
               try { gl.shadowMap.enabled = true; (gl.shadowMap as any).type = THREE.PCFSoftShadowMap } catch {}
             } catch {}
           }}
