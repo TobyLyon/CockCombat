@@ -616,6 +616,11 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
           return p
         }))
         setLobbyPlayers(updated)
+        // Also propagate hydrated names to active battle roster
+        setPlayers(prev => prev.map(pl => {
+          const match = updated.find(u => u.id === pl.id)
+          return match && match.name && match.name !== pl.name ? { ...pl, name: match.name } : pl
+        }))
       } catch {}
     }
     if (gameState === 'battle' && lobbyPlayers.length > 0) fetchUsernames()
