@@ -700,6 +700,34 @@ preparePromise.then(() => {
       }
     });
 
+    // Debug: dump queue state for a lobby to the requesting client
+    socket.on('debug_queue_state', (lobbyId) => {
+      if (!checkRateLimit('debug_queue_state', 10)) {
+        console.warn(`⚠️ Rate limit exceeded for debug_queue_state: ${socket.id}`);
+        return;
+      }
+      try {
+        const msId = (global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId)) || null;
+        const session = msId && global.queueSessions ? global.queueSessions.get(msId) : null;
+        const snapshot = session ? {
+          matchSessionId: session.id,
+          lobbyId: session.lobbyId,
+          expectedRosterCount: Array.isArray(session.expectedRoster) ? session.expectedRoster.length : 0,
+          expectedRoster: Array.isArray(session.expectedRoster) ? session.expectedRoster.map(p => ({ wallet: p.wallet, isAi: !!p.isAi })) : [],
+          presenceAckCount: session.presenceAcks ? session.presenceAcks.size : 0,
+          presenceAcks: session.presenceAcks ? Array.from(session.presenceAcks.keys()) : [],
+          assetsAckCount: session.assetsAcks ? session.assetsAcks.size : 0,
+          assetsAcks: session.assetsAcks ? Array.from(session.assetsAcks.keys()) : [],
+          createdAt: session.createdAt,
+          ackDeadlineMs: session.ackDeadlineMs,
+          now: Date.now(),
+        } : { matchSessionId: null, lobbyId, note: 'no active session' };
+        socket.emit('queue_state_dump', snapshot);
+      } catch (e) {
+        socket.emit('queue_state_dump', { lobbyId, error: e?.message || String(e) });
+      }
+    });
+
     // Handle battle actions
     socket.on('battle_action', async (actionData) => {
       if (!checkRateLimit('battle_action', 30)) {
@@ -1422,25 +1450,34 @@ preparePromise.then(() => {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
       let expectedRoster;
       let isTutorial = false;
-      if (Array.isArray(rosterOverride) && rosterOverride.length > 0) {
-        expectedRoster = rosterOverride;
-      } else {
+      let escrowIdVal = null;
+
+      // Always fetch lobby metadata once for tutorial/escrow determination
+      let lobbyMeta = null;
+      try {
         const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
         const all = response ? await response.json().catch(() => []) : [];
-        const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-        if (!lobby) return;
+        lobbyMeta = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+      } catch {}
+
+      if (Array.isArray(rosterOverride) && rosterOverride.length > 0) {
+        expectedRoster = rosterOverride;
+        isTutorial = lobbyMeta ? lobbyMeta.matchType === 'tutorial' : false;
+        escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
+      } else {
+        if (!lobbyMeta) return;
         // Build expected roster from API (tutorial may include AI; ranked is humans only)
-        expectedRoster = (lobby.players || []).map(p => ({
+        expectedRoster = (lobbyMeta.players || []).map(p => ({
           wallet: p.playerId,
           isAi: !!p.isAi,
           username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
           chickenName: p.chickenId || 'Default'
         }));
-        isTutorial = lobby.matchType === 'tutorial';
+        isTutorial = lobbyMeta.matchType === 'tutorial';
         if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
         // Ensure tutorial expected roster includes AI backfill to capacity
         if (isTutorial) {
-          const missing = Math.max(0, (lobby.capacity || 8) - expectedRoster.length);
+          const missing = Math.max(0, (lobbyMeta.capacity || 8) - expectedRoster.length);
           if (missing > 0) {
             const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
             for (let i = 0; i < missing; i++) {
@@ -1449,7 +1486,17 @@ preparePromise.then(() => {
             }
           }
         }
+        escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
       }
+
+      // Guard against duplicate sessions for the same lobby
+      try {
+        const existingMs = global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId);
+        if (existingMs) {
+          console.log(`[queue] startQueuePhase: existing session ${existingMs} for ${lobbyId}, skipping new session`);
+          return;
+        }
+      } catch {}
 
       const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
       const arenaSeed = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -1476,7 +1523,7 @@ preparePromise.then(() => {
         serverNow: Date.now(),
         ackDeadlineMs,
         minHumans: isTutorial ? 1 : 4,
-        escrowId: lobby.escrowWalletId || null,
+        escrowId: escrowIdVal,
       });
 
       // Deadline to finalize the roster

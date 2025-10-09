@@ -45,6 +45,7 @@ export default function WaitingQueue({
   const scheduledStartRef = useRef<number | null>(null)
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const assetsReadyRef = useRef<boolean>(false)
+  const lastAssetsAckMsIdRef = useRef<string | null>(null)
   const finalizeFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
@@ -112,18 +113,24 @@ export default function WaitingQueue({
         return { playerId: p.wallet, username, isAi: p.isAi }
       })) } catch {}
       // Track session id for subsequent acks/timing
+      const prevMsid = matchSessionIdRef.current
       matchSessionIdRef.current = payload?.matchSessionId || null
+      if (matchSessionIdRef.current && matchSessionIdRef.current !== prevMsid) {
+        // Reset asset readiness when a new session begins
+        assetsReadyRef.current = false
+      }
       // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
         const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
         const msid = matchSessionIdRef.current
         if (id && msid) {
           socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
-          // Prefetch minimal arena assets, then send assets_loaded
+          // Prefetch minimal arena assets, then send assets_loaded (guarded by current msid)
           const prefetch = async () => {
             const img = (src: string) => new Promise<void>((resolve) => { const i = new Image(); i.onload = () => resolve(); i.onerror = () => resolve(); i.src = src })
             const aud = (src: string) => new Promise<void>((resolve) => { try { const a = new Audio(); a.preload = 'auto'; a.src = src; a.oncanplaythrough = () => resolve(); a.onerror = () => resolve(); } catch { resolve() } })
             const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+            const localMsid = msid
             try {
               await Promise.race([
                 Promise.all([
@@ -140,8 +147,13 @@ export default function WaitingQueue({
                 wait(4000)
               ])
             } catch {}
+            // Only ack for the active session
+            if (matchSessionIdRef.current !== localMsid) return
             assetsReadyRef.current = true
-            try { socket.emit('assets_loaded', { matchSessionId: msid, wallet: id }) } catch {}
+            if (lastAssetsAckMsIdRef.current !== localMsid) {
+              lastAssetsAckMsIdRef.current = localMsid
+              try { socket.emit('assets_loaded', { matchSessionId: localMsid, wallet: id }) } catch {}
+            }
           }
           prefetch()
         }
