@@ -24,7 +24,7 @@ import {
 } from "@react-three/drei"
 import { PixelChicken } from "../3d/pixel-chicken-viewer"
 import { ArrowLeft } from "lucide-react";
-import { useGameState, PlayerStatus } from "@/contexts/GameStateContext"
+import { PlayerStatus } from "@/contexts/GameStateContext"
 import { ARENA_CONFIG } from "@/mocks/game-data"
 import PoofEffect from '../effects/poof-effect'; // Import the poof effect
 import { useTexturePreloader } from '@/hooks/use-texture-preloader';
@@ -239,9 +239,7 @@ function SceneContent({
 
   const lastUpdateTime = useRef(Date.now());
 
-  // Access game state context for additional functionality if needed
-  const gameStateContext = useGameState(); // Custom Hook
-  const { lastDefeatedChickenId } = gameStateContext;
+  // Note: Do not access app contexts inside R3F Canvas; it runs on a separate React root.
 
   // Game state (consider if these should come from context or props if they are managed elsewhere)
   const [playerHealth, setPlayerHealth] = useState(3);
