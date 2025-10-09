@@ -82,9 +82,11 @@ export default function BattleArena() {
   // Robust queue->battle transition: listen at top-level too in case the waiting view misses the event
   useEffect(() => {
     if (!socket) return
+    // Only handle these while on the secondary confirmation (queue) screen
+    if (gameState !== 'queue') return
     let startTimer: ReturnType<typeof setTimeout> | null = null
     const ensureStart = () => {
-      if (gameState !== 'battle') {
+      if (gameState === 'queue') {
         try { startBattle() } catch {}
       }
     }
