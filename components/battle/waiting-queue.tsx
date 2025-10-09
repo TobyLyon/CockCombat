@@ -253,7 +253,6 @@ export default function WaitingQueue({
   const launchedRef = useRef<boolean>(false)
   useEffect(() => {
     if (!Array.isArray(players)) return
-    if (!matchSessionIdRef.current) return
     if (launchedRef.current) return
     const count = players.length
     const expected = Math.min(expectedCountRef.current || count, currentLobby.capacity || count)
