@@ -191,8 +191,11 @@ export async function POST(req: NextRequest) {
 
     if (lobby.players.length >= lobby.capacity) {
       if (lobby.matchType === 'tutorial') {
-        // Free a slot by removing one AI to prioritize real player
-        removeOneAiPlayer(lobby)
+        // Free a slot by removing one AI to prioritize real player (repeat until space)
+        while (lobby.players.length >= lobby.capacity) {
+          removeOneAiPlayer(lobby)
+          if (!lobby.players.some(p => p.isAi)) break
+        }
       } else {
         return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
       }
@@ -271,7 +274,14 @@ export async function POST(req: NextRequest) {
       chickenId: actualChickenId, 
       username: username 
     };
+    // Ensure humans are prioritized: insert the human, then trim excess AI if over capacity (tutorial only)
     lobby.players.push(player);
+    if (lobby.matchType === 'tutorial' && lobby.players.length > lobby.capacity) {
+      while (lobby.players.length > lobby.capacity) {
+        removeOneAiPlayer(lobby)
+        if (!lobby.players.some(p => p.isAi)) break
+      }
+    }
 
     // Track presence immediately
     try {

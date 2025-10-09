@@ -561,6 +561,25 @@ preparePromise.then(() => {
         } catch {}
 
         // Re-evaluate ready status and then ask clients to refresh state after persistence
+        // Before checking ready, ensure tutorial doesn't overfill with AI when humans present
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const all = res ? await res.json().catch(() => []) : [];
+          const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+          if (liveLobby && liveLobby.matchType === 'tutorial') {
+            const humans = (liveLobby.players || []).filter(p => !p.isAi);
+            if (humans.length > 0 && (liveLobby.players || []).length > liveLobby.capacity) {
+              // Trim extra AI by asking API to re-join this human (API will remove AI beyond capacity)
+              await fetch(`${baseUrl}/api/lobbies`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lobbyId, playerId, chickenId: 'default-chicken' })
+              }).catch(() => {});
+            }
+          }
+        } catch {}
+
         await checkLobbyReadyStatus(lobbyId, io);
         setTimeout(() => {
           io.to(lobbyId).emit('refresh_lobby_state');
