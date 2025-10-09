@@ -40,6 +40,10 @@ export default function WaitingQueue({
   // Track stable full-roster to auto-advance without asking users to ready again
   const lastCountRef = useRef<number>(0)
   const stableTicksRef = useRef<number>(0)
+  // Track match session and a scheduled start to avoid missing socket events during view transition
+  const matchSessionIdRef = useRef<string | null>(null)
+  const scheduledStartRef = useRef<number | null>(null)
+  const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
   // For ranked: expect at least min humans or the current lobby size at entry.
@@ -105,13 +109,16 @@ export default function WaitingQueue({
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
         return { playerId: p.wallet, username, isAi: p.isAi }
       })) } catch {}
+      // Track session id for subsequent acks/timing
+      matchSessionIdRef.current = payload?.matchSessionId || null
       // Immediately ack presence for this client to allow session progression
       try {
         const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
-        if (id && payload?.matchSessionId) {
-          socket.emit('queue_presence', { matchSessionId: payload.matchSessionId, wallet: id, latencyMs: 0 })
+        const msid = matchSessionIdRef.current
+        if (id && msid) {
+          socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
           // Best-effort assets ack once roster shown; waiting room has no heavy assets, so ack now
-          socket.emit('assets_loaded', { matchSessionId: payload.matchSessionId, wallet: id })
+          socket.emit('assets_loaded', { matchSessionId: msid, wallet: id })
         }
       } catch {}
     }
@@ -123,9 +130,24 @@ export default function WaitingQueue({
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
         return { playerId: p.wallet, username, isAi: p.isAi }
       })) } catch {}
+      // Schedule a local start aligned to the server-provided epoch to avoid missing 'match_started' during screen transition
+      try {
+        if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
+        const startAt = Number(payload?.roundStartAtEpochMs) || 0
+        if (startAt > 0) {
+          const delay = Math.max(0, startAt - Date.now() + 100)
+          scheduledStartRef.current = Date.now() + delay
+          startTimerRef.current = setTimeout(() => {
+            try { playSound('button') } catch {}
+            onStartBattle()
+          }, delay)
+        }
+      } catch {}
     }
     const onStarted = () => {
       try { playSound('button') } catch {}
+      // Cancel any scheduled start if server event arrives
+      if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       onStartBattle()
     }
     socket.on('queue_begin', onQueueBegin)
@@ -137,6 +159,7 @@ export default function WaitingQueue({
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
+      if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
     }
   }, [socket, isConnected, onStartBattle, playSound])
 

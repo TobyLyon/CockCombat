@@ -1387,6 +1387,13 @@ preparePromise.then(() => {
 
       // Deadline to finalize the roster
       session.deadlineTimer = setTimeout(() => finalizeQueueSession(matchSessionId, io), ackDeadlineMs);
+      // Safety: also finalize a bit later if 'match_started' was emitted but finalize didn't run due to timing
+      setTimeout(() => {
+        try {
+          const s = global.queueSessions && global.queueSessions.get(matchSessionId);
+          if (s) finalizeQueueSession(matchSessionId, io);
+        } catch {}
+      }, ackDeadlineMs + 1500);
     } catch (e) {
       console.warn('startQueuePhase error:', e?.message || e);
     }
