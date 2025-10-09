@@ -16,7 +16,7 @@ interface GameOverProps {
 }
 
 const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
-  const { playSound, players, prizeAmount, matchMeta, battleStartAt, battleEndAt } = useGameState();
+  const { playSound, players, prizeAmount, matchMeta, battleStartAt, battleEndAt, lastKillerId } = useGameState();
   const { publicKey } = useWallet();
   const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [autoExitTimer, setAutoExitTimer] = useState(10); // 10 second auto-exit
@@ -126,9 +126,23 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
         </motion.h2>
 
         {/* Message */}
-        <p className="text-white text-base lg:text-xl mb-6">
+        <p className="text-white text-base lg:text-xl mb-2">
           {isHumanWinner ? '🐓 You are the last chicken standing!' : '💀 Better luck next time, warrior!'}
         </p>
+        {!isHumanWinner && (
+          <p className="text-white/80 text-sm lg:text-base mb-6">
+            {(() => {
+              try {
+                const killer = lastKillerId ? players.find(p => p.id === lastKillerId) : null
+                if (killer) {
+                  const name = killer.name || (killer.id ? killer.id.slice(0,8)+'...' : 'Unknown')
+                  return `Eliminated by ${name}`
+                }
+              } catch {}
+              return 'Eliminated'
+            })()}
+          </p>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-6 bg-black/40 p-4 rounded-lg">

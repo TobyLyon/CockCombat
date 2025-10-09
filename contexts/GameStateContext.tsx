@@ -41,7 +41,7 @@ interface GameStateContextType {
   playerChicken: any; // Define more specifically later
   players: PlayerStatus[];
   playSound: (sound: string) => void;
-  handlePlayerDamage: (targetPlayerId: string, damageAmount?: number) => void;
+  handlePlayerDamage: (targetPlayerId: string, damageAmount?: number, attackerId?: string) => void;
   chickensLeft: number;
   inQueue: boolean;
   joinQueue: () => void;
@@ -53,6 +53,7 @@ interface GameStateContextType {
   lobbyPlayers: PlayerStatus[];
   positionLobbyPlayers: () => void;
   lastDefeatedChickenId: string | null;
+  lastKillerId: string | null;
   hasInteracted: boolean;
   setHasInteracted: (value: boolean) => void;
   prizeAmount: number; // Track the prize amount for the winner
@@ -239,6 +240,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const [lobbyPlayers, setLobbyPlayers] = useState<PlayerStatus[]>([]);
   const [chickensLeft, setChickensLeft] = useState(7); // Start with 7 chickens (including player)
   const [lastDefeatedChickenId, setLastDefeatedChickenId] = useState<string | null>(null);
+  const [lastKillerId, setLastKillerId] = useState<string | null>(null);
   const [prizeAmount, setPrizeAmount] = useState(0); // Track prize amount for winner
   const [matchMeta, setMatchMeta] = useState<{ amount: number; currency: string; matchType: string; humanCount: number } | null>(null);
   const [battleStartAt, setBattleStartAt] = useState<number | null>(null);
@@ -384,7 +386,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Use a different approach for player death that doesn't modify scene graph excessively
-  const handlePlayerDamage = (targetPlayerId: string, damageAmount = 1) => {
+  const handlePlayerDamage = (targetPlayerId: string, damageAmount = 1, attackerId?: string) => {
     let targetPlayer: PlayerStatus | undefined;
     let newHp = 0;
     
@@ -405,6 +407,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       if (newHp <= 0) {
         // Player is defeated
         setLastDefeatedChickenId(targetPlayerId);
+        if (attackerId) setLastKillerId(String(attackerId));
         
         const updatedPlayers = currentPlayers.map(p =>
           p.id === targetPlayerId ? { ...p, hp: 0, isAlive: false, visible: false } : p
@@ -752,6 +755,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     lobbyPlayers,
     positionLobbyPlayers: () => {}, // Provide empty function
     lastDefeatedChickenId,
+    lastKillerId,
     hasInteracted,
     setHasInteracted: () => {}, // Provide empty function
     prizeAmount,

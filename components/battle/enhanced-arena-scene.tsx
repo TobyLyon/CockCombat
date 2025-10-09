@@ -547,7 +547,8 @@ function SceneContent({
         const targetId = String(payload?.targetId || '')
         const amount = Math.max(1, Math.min(3, Number(payload?.amount)||1))
         if (!targetId || !onPlayerDamage) return
-        onPlayerDamage(targetId, amount)
+        const byId = typeof payload?.by === 'string' ? payload.by : undefined
+        onPlayerDamage(targetId, amount, byId)
       } catch {}
     }
     socket.on('player_state', onPlayerState)
