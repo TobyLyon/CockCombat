@@ -869,20 +869,8 @@ function SceneContent({
         <FinalArenaCountdownWithPings playPing={playSound} />
       </Html>
       {/* Lights */}
-      <ambientLight intensity={0.35} />
-      <directionalLight 
-        position={[10, 20, 5]} 
-        intensity={1.1} 
-        castShadow 
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-near={0.5}
-        shadow-camera-far={50}
-        shadow-camera-left={-25}
-        shadow-camera-right={25}
-        shadow-camera-top={25}
-        shadow-camera-bottom={-25}
-      />
+      <ambientLight intensity={0.3} />
+      <directionalLight position={[10, 20, 5]} intensity={0.9} />
 
       <MemeSky />
 
@@ -1077,7 +1065,8 @@ function ChickenInstances({
         const isAI = Boolean((chicken as any).isAi)
         if (!isAI) {
           // Apply smoothing toward remote transform and set anim hints
-          const prev = g.position.clone()
+          const prevX = g.position.x
+          const prevZ = g.position.z
           // Smooth position and rotation
           g.position.lerp(pos, 0.35)
           if (net) {
@@ -1090,8 +1079,8 @@ function ChickenInstances({
             }
             g.rotation.y = lerpAngle(g.rotation.y, targetY, 0.35)
             // Drive walk/peck anims from deltas and net flags
-            const dx = g.position.x - prev.x
-            const dz = g.position.z - prev.z
+            const dx = g.position.x - prevX
+            const dz = g.position.z - prevZ
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try { if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now() } catch {}
           } else {
@@ -1253,7 +1242,7 @@ export default React.memo(function EnhancedArenaScene({
   return (
     <div className="w-full h-full overflow-hidden">
       <KeyboardControls map={controlsMap}>
-        <Canvas 
+      <Canvas 
           style={{ width: '100%', height: '100%', display: 'block' }}
           shadows={false}
           camera={{ 
@@ -1269,6 +1258,7 @@ export default React.memo(function EnhancedArenaScene({
             powerPreference: "high-performance",
             stencil: false
           }}
+          frameloop="demand"
           dpr={[1, 1.5]}
           onCreated={({ gl }) => {
             try {

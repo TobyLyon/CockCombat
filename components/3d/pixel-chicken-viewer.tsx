@@ -166,26 +166,29 @@ export function PixelChicken({
   const [deathAnimProgress, setDeathAnimProgress] = useState(0); // 0 to 1 for death animation
   const deathAnimDuration = 0.5; // seconds
 
-  // Apply hit flash effect
+  // Apply hit flash effect (robust repaint)
   useEffect(() => {
     if (!materialsRef.current) return;
-    
-    // Apply red flash to all materials when hit
-    materialsRef.current.forEach(material => {
-      if (isHitFlashing) {
-        material.color.set('#FF0000'); // Bright red for hit flash
-        material.emissive.set('#FF3333'); // Add emissive glow for more impact
-        material.emissiveIntensity = 0.5;
-      } else {
-        // Restore original colors
-        const partName = material.userData.partName;
-        if (partName && originalColorsRef.current[partName]) {
-          material.color.set(originalColorsRef.current[partName]);
-          material.emissive.set('#000000');
-          material.emissiveIntensity = 0;
+    let raf: number | null = null
+    const apply = () => {
+      materialsRef.current.forEach(material => {
+        if (isHitFlashing) {
+          material.color.set('#FF0000');
+          material.emissive.set('#FF3333');
+          material.emissiveIntensity = 0.5;
+        } else {
+          const partName = material.userData.partName;
+          if (partName && originalColorsRef.current[partName]) {
+            material.color.set(originalColorsRef.current[partName]);
+            material.emissive.set('#000000');
+            material.emissiveIntensity = 0;
+          }
         }
-      }
-    });
+      });
+      raf = requestAnimationFrame(apply)
+    }
+    raf = requestAnimationFrame(apply)
+    return () => { if (raf) cancelAnimationFrame(raf) }
   }, [isHitFlashing]);
 
   // Reset death animation state and model scale when isDying changes
