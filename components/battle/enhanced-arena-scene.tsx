@@ -243,6 +243,45 @@ function SceneContent({
   const invulnerableUntilRef = useRef<number>(0)
   const hasArmedCountdownRef = useRef<boolean>(false)
 
+  // Arm freeze/invulnerability immediately on entering battle
+  useEffect(() => {
+    if (gameState === 'battle' && !hasArmedCountdownRef.current) {
+      const now = Date.now()
+      freezeUntilRef.current = now + 3000
+      invulnerableUntilRef.current = now + 4000
+      hasArmedCountdownRef.current = true
+    }
+  }, [gameState])
+
+  // Snap player to assigned spawn when battle starts or spawn data changes
+  useEffect(() => {
+    if (gameState !== 'battle') return
+    const toVec3 = (p: any): THREE.Vector3 | null => {
+      if (!p) return null
+      if (p instanceof THREE.Vector3) return p.clone()
+      if (Array.isArray(p) && p.length >= 3) return new THREE.Vector3(p[0], p[1], p[2])
+      if (typeof p === 'object' && 'x' in p && 'y' in p && 'z' in p) return new THREE.Vector3(p.x, p.y, p.z)
+      return null
+    }
+    const toEuler = (r: any): THREE.Euler | null => {
+      if (!r) return null
+      if (r instanceof THREE.Euler) return new THREE.Euler(r.x, r.y, r.z)
+      if (Array.isArray(r) && r.length >= 3) return new THREE.Euler(r[0], r[1], r[2])
+      if (typeof r === 'object' && 'x' in r && 'y' in r && 'z' in r) return new THREE.Euler(r.x, r.y, r.z)
+      return null
+    }
+    const spawnPos = toVec3(playerChicken?.position)
+    const spawnRot = toEuler(playerChicken?.rotation)
+    if (spawnPos) {
+      setSelfPosition(spawnPos.clone())
+      if (playerRef.current) playerRef.current.position.copy(spawnPos)
+    }
+    if (spawnRot) {
+      setSelfRotation(new THREE.Euler(spawnRot.x, spawnRot.y, spawnRot.z))
+      if (playerRef.current) playerRef.current.rotation.set(spawnRot.x, spawnRot.y, spawnRot.z)
+    }
+  }, [gameState, playerChicken?.position, playerChicken?.rotation])
+
   // Note: Do not access app contexts inside R3F Canvas; it runs on a separate React root.
 
   // Game state (consider if these should come from context or props if they are managed elsewhere)
@@ -760,6 +799,8 @@ function SceneContent({
           chickens={players.filter(p => p.isAlive && !p.isPlayer)}
           playerChickenId={playerChicken?.id || ''}
           playerRef={playerRef}
+          freezeUntilMs={freezeUntilRef.current}
+          invulnerableUntilMs={invulnerableUntilRef.current}
           onAiDamagePlayer={() => { if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1) }}
         />
       )}
@@ -875,11 +916,15 @@ function ChickenInstances({
     chickens,
     playerChickenId,
     playerRef,
+    freezeUntilMs,
+    invulnerableUntilMs,
     onAiDamagePlayer
   }: {
     chickens: PlayerStatus[],
     playerChickenId: string,
     playerRef?: React.RefObject<THREE.Group>,
+    freezeUntilMs?: number,
+    invulnerableUntilMs?: number,
     onAiDamagePlayer?: () => void
   }) {
     const groupsRef = useRef<Record<string, THREE.Group | null>>({})
@@ -896,7 +941,7 @@ function ChickenInstances({
         return new THREE.Vector3(0, 0.85, 0)
       })()
 
-      const now = performance.now()
+      const now = Date.now()
       const ringRadius = ARENA_CONFIG.ringRadius
       const maxBounds = ringRadius - 2
 
@@ -923,7 +968,12 @@ function ChickenInstances({
         let speed = 2.2 // easy chase speed
         let moveVec = new THREE.Vector3(0, 0, 0)
 
-        if (dist > 6) {
+        const isFrozen = typeof freezeUntilMs === 'number' && now < freezeUntilMs
+        const isInvulnerable = typeof invulnerableUntilMs === 'number' && now < invulnerableUntilMs
+
+        if (isFrozen) {
+          moveVec.set(0, 0, 0)
+        } else if (dist > 6) {
           // Wander when far: pick a temporary target and stroll
           if (!wanderTargetRef.current[chicken.id] || (wanderUntilRef.current[chicken.id] || 0) < now) {
             const angle = Math.random() * Math.PI * 2
@@ -945,15 +995,17 @@ function ChickenInstances({
         } else {
           // In range: try to peck with cooldown
           const last = lastPeckRef.current[chicken.id] || 0
-          if (now - last > 1200) {
+          if (!isFrozen && !isInvulnerable && now - last > 1200) {
             lastPeckRef.current[chicken.id] = now
             try { onAiDamagePlayer && onAiDamagePlayer() } catch {}
           }
         }
 
         // Apply movement
-        pos.x += moveVec.x * delta
-        pos.z += moveVec.z * delta
+        if (!isFrozen) {
+          pos.x += moveVec.x * delta
+          pos.z += moveVec.z * delta
+        }
 
         // Keep inside ring
         const d = Math.hypot(pos.x, pos.z)

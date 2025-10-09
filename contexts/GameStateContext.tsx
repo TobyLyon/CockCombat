@@ -531,13 +531,18 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       ...lobbyPlayers.filter(lp => !(myId && lp.id === myId))
     ];
     
-    // Position ALL chickens (including player) around the ring
+    // Position ALL chickens (including player) around the ring using stable order:
+    // 1) Player first, then humans, then AIs, to reserve unique spawn slots for humans
     const ringRadius = 10; // Reduced from 20 to 10 for smaller arena
-    const totalChickens = battlePlayers.length;
-    const positions = generateOpponentPositions(totalChickens, ringRadius);
-    
-    // Update positions for all chickens
-    const positionedPlayers = battlePlayers.map((player, index) => ({
+    const playerSelf = battlePlayers.find(p => p.isPlayer)
+    const otherHumans = battlePlayers.filter(p => !p.isPlayer && !(p as any).isAi)
+    const aiChickens = battlePlayers.filter(p => (p as any).isAi)
+    const ordered = [playerSelf, ...otherHumans, ...aiChickens].filter(Boolean) as typeof battlePlayers
+    const totalChickens = ordered.length
+    const positions = generateOpponentPositions(totalChickens, ringRadius)
+
+    // Update positions for all chickens in the new stable order
+    const positionedPlayers = ordered.map((player, index) => ({
       ...player,
       position: positions[index].position,
       rotation: positions[index].rotation
