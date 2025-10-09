@@ -610,8 +610,8 @@ function SceneContent({
 
     // Handle rotation with deltaTime scaling and clamping (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-      if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
-      if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
+    if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
+    if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
     }
     if (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2;
     if (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2;
@@ -640,8 +640,8 @@ function SceneContent({
 
     // Apply movement (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-      selfPosition.x += selfVelocity.current.x * deltaTime;
-      selfPosition.z += selfVelocity.current.z * deltaTime;
+    selfPosition.x += selfVelocity.current.x * deltaTime;
+    selfPosition.z += selfVelocity.current.z * deltaTime;
     }
 
     // Arena bounds
@@ -913,7 +913,7 @@ BarbedWireFence.displayName = 'BarbedWireFence';
 
 // ChickenInstances component (Modified)
 function ChickenInstances({
-    chickens,
+    chickens, 
     playerChickenId,
     playerRef,
     freezeUntilMs,
@@ -1005,6 +1005,10 @@ function ChickenInstances({
         if (!isFrozen) {
           pos.x += moveVec.x * delta
           pos.z += moveVec.z * delta
+          // record magnitude to drive animation
+          try { if (g) g.userData.vx = moveVec.x; if (g) g.userData.vz = moveVec.z } catch {}
+        } else {
+          try { if (g) g.userData.vx = 0; if (g) g.userData.vz = 0 } catch {}
         }
 
         // Keep inside ring
@@ -1043,13 +1047,13 @@ function ChickenInstances({
               rotation={chickenRot}
             >
               <PixelChicken
-                position={[0,0,0]}
+                position={[0,0,0]} 
                 colors={chicken.colors}
-                isWalking={false}
-                isPecking={false}
+                isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
+                isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
                 isJumping={false}
                 isHitFlashing={chicken.isHitFlashing || false}
-                isDying={!chicken.isAlive}
+                isDying={!chicken.isAlive} 
                 health={chicken.hp}
                 maxHealth={chicken.maxHp}
                 disableBobbing={true}

@@ -565,10 +565,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     // Replace roster while preserving existing per-chicken colors; assign realistic colors for new entries
     setLobbyPlayers(prev => {
       const byId = new Map(prev.map(p => [p.id, p]));
-      const myId = (() => { try { return publicKey?.toBase58?.() || publicKey?.toString?.() || null } catch { return null } })();
       const source = Array.isArray(list) ? list : []
-      const filtered = myId ? source.filter((p: any) => String(p.playerId) !== myId) : source
-      const next: PlayerStatus[] = filtered.map((p) => {
+      const next: PlayerStatus[] = source.map((p) => {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || generateChickenColors();
