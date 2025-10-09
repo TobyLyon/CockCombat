@@ -569,7 +569,7 @@ function SceneContent({
     socket.on('debug_trace', onDebug)
     return () => {
       socket.off('player_state', onPlayerState)
-      socket.off('player_damage', onPlayerDamage)
+      socket.off('player_damage', onRemotePlayerDamage)
       socket.off('arena_lock_roster', onArenaLockJoin)
       socket.off('round_start', onRoundStartJoin)
       socket.off('debug_trace', onDebug)
@@ -864,10 +864,11 @@ function SceneContent({
   // ----- JSX to render the scene -----
   return (
     <>
-      {/* In-arena 3-second final countdown overlay */}
-      <Html center style={{ pointerEvents: 'none' }}>
-        <FinalArenaCountdownWithPings playPing={playSound} />
-      </Html>
+      {gameState === 'battle' && (
+        <Html center style={{ pointerEvents: 'none' }}>
+          <FinalArenaCountdownWithPings playPing={playSound} />
+        </Html>
+      )}
       {/* Lights */}
       <ambientLight intensity={0.3} />
       <directionalLight position={[10, 20, 5]} intensity={0.9} />

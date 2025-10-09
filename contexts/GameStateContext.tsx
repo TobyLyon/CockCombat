@@ -565,7 +565,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       const next: PlayerStatus[] = source.map((p) => {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
-        const colors = prevEntry?.colors || generateChickenColors();
+        const colors = prevEntry?.colors || getDeterministicColorsForId(id);
         const isGuest = id.startsWith('guest_')
         return {
           id,
