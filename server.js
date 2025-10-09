@@ -559,11 +559,27 @@ preparePromise.then(() => {
           }
         } catch {}
         
-        // Broadcast ready status to all players in the lobby
+        // Broadcast ready status and also send a lobby_synced snapshot for late joiners
         io.to(lobbyId).emit('player_ready_status', {
           playerId,
           isReady
         });
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const resSnap = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const allSnap = resSnap ? await resSnap.json().catch(() => []) : [];
+          const lobbySnap = Array.isArray(allSnap) ? allSnap.find(l => l && l.id === lobbyId) : null;
+          if (lobbySnap) {
+            const players = (lobbySnap.players || []).map(p => ({
+              playerId: p.playerId,
+              username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
+              chickenName: p.chickenId || 'Default',
+              isReady: p.isAi ? true : Boolean(p.isReady),
+              isAi: !!p.isAi
+            }));
+            io.to(lobbyId).emit('lobby_synced', { id: lobbyId, players, capacity: lobbySnap.capacity, amount: lobbySnap.amount, currency: lobbySnap.currency, matchType: lobbySnap.matchType });
+          }
+        } catch {}
         
         // Persist readiness and trigger AI backfill for tutorial lobbies via HTTP PUT
         try {

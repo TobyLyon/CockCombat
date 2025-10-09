@@ -67,8 +67,8 @@ const controlsMap: ControlMapItem[] = [
   { name: Controls.peck, keys: ["ShiftLeft", "ShiftRight", "Mouse0"] } // Shift or left mouse click for pecking
 ];
 
-// Reduced rotation sensitivity (radians per second)
-const ROTATION_SPEED = 0.9;
+// Rotation sensitivity (radians per second)
+const ROTATION_SPEED = 1.2;
 
 interface SceneContentAndLogicProps extends EnhancedArenaSceneProps {
   onPlayerDamage?: (targetPlayerId: string, damageAmount?: number) => void;
@@ -753,8 +753,10 @@ function SceneContent({
 
     // Handle rotation with deltaTime scaling and clamping (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-    if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
-    if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
+      const turn = (right ? -1 : 0) + (left ? 1 : 0)
+      if (turn !== 0) {
+        selfRotation.y += (ROTATION_SPEED * deltaTime) * turn
+      }
     }
     if (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2;
     if (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2;
