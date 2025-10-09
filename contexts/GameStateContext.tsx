@@ -448,6 +448,11 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     // Check global audio enabled state & interaction
     if (!audioEnabled || !hasInteracted) return; 
 
+    // Avoid duplicating arena BGM by blocking battle_start as an effect
+    if (sound === 'battle_start') {
+      return;
+    }
+
     const soundPath = soundMap[sound];
     if (!soundPath) {
         console.warn(`Sound key not found in soundMap: ${sound}`);
