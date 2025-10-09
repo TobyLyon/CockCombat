@@ -44,6 +44,7 @@ export default function WaitingQueue({
   const matchSessionIdRef = useRef<string | null>(null)
   const scheduledStartRef = useRef<number | null>(null)
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const assetsReadyRef = useRef<boolean>(false)
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
   // For ranked: expect at least min humans or the current lobby size at entry.
@@ -111,14 +112,37 @@ export default function WaitingQueue({
       })) } catch {}
       // Track session id for subsequent acks/timing
       matchSessionIdRef.current = payload?.matchSessionId || null
-      // Immediately ack presence for this client to allow session progression
+      // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
         const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
         const msid = matchSessionIdRef.current
         if (id && msid) {
           socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
-          // Best-effort assets ack once roster shown; waiting room has no heavy assets, so ack now
-          socket.emit('assets_loaded', { matchSessionId: msid, wallet: id })
+          // Prefetch minimal arena assets, then send assets_loaded
+          const prefetch = async () => {
+            const img = (src: string) => new Promise<void>((resolve) => { const i = new Image(); i.onload = () => resolve(); i.onerror = () => resolve(); i.src = src })
+            const aud = (src: string) => new Promise<void>((resolve) => { try { const a = new Audio(); a.preload = 'auto'; a.src = src; a.oncanplaythrough = () => resolve(); a.onerror = () => resolve(); } catch { resolve() } })
+            const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+            try {
+              await Promise.race([
+                Promise.all([
+                  img('/images/cock-token.png'),
+                  img('/textures/grass/Grass005_1K-PNG_Color.png'),
+                  img('/textures/ground/Ground085_1K-PNG_Color.png'),
+                ]).then(() => Promise.all([
+                  aud('/sounds/arena.mp3'),
+                  aud('/sounds/punch.mp3'),
+                  aud('/sounds/strong_punch.mp3'),
+                  aud('/sounds/jump.mp3'),
+                  aud('/sounds/click.mp3'),
+                ])),
+                wait(4000)
+              ])
+            } catch {}
+            assetsReadyRef.current = true
+            try { socket.emit('assets_loaded', { matchSessionId: msid, wallet: id }) } catch {}
+          }
+          prefetch()
         }
       } catch {}
     }
@@ -251,28 +275,7 @@ export default function WaitingQueue({
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
   
-  // Second-check auto start: if roster is full/stable and we are in a queue session, start battle
-  const launchedRef = useRef<boolean>(false)
-  useEffect(() => {
-    console.log('[WaitingQueue] second-check evaluate', { count: Array.isArray(players) ? players.length : -1, expected: expectedCountRef.current, hasSession: !!matchSessionIdRef.current })
-    if (!Array.isArray(players)) return
-    if (launchedRef.current) return
-    const count = players.length
-    const expected = Math.min(expectedCountRef.current || count, currentLobby.capacity || count)
-    const hasHuman = players.some((p: any) => !p.isAi)
-    if (count >= expected && hasHuman) {
-      // Fire immediately to avoid race with server events; also request server progress
-      try {
-        socket?.emit?.('get_lobby_state', lobby.id)
-        socket?.emit?.('ensure_queue_progress', lobby.id)
-      } catch {}
-      launchedRef.current = true
-      setTimeout(() => {
-        try { playSound('button') } catch {}
-        onStartBattle()
-      }, 200)
-    }
-  }, [players, socket, lobby.id, currentLobby.capacity, onStartBattle, playSound])
+  // Remove immediate local start; rely on arena_lock_roster schedule or server round_start
   
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-4 lg:p-6 max-w-6xl w-full mx-auto max-h-full overflow-hidden relative">
