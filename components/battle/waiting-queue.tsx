@@ -249,6 +249,39 @@ export default function WaitingQueue({
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
   
+  // Second-check auto start: if roster is full/stable and we are in a queue session, start battle
+  const launchedRef = useRef<boolean>(false)
+  useEffect(() => {
+    if (!Array.isArray(players)) return
+    if (!matchSessionIdRef.current) return
+    if (launchedRef.current) return
+    const count = players.length
+    const expected = Math.min(expectedCountRef.current || count, currentLobby.capacity || count)
+    const hasHuman = players.some((p: any) => !p.isAi)
+    if (count >= expected && hasHuman) {
+      if (lastCountRef.current === count) {
+        stableTicksRef.current = (stableTicksRef.current || 0) + 1
+      } else {
+        lastCountRef.current = count
+        stableTicksRef.current = 1
+      }
+      // After two stable ticks (~two consecutive updates), trigger a final state fetch then start
+      if (stableTicksRef.current >= 2) {
+        try { socket?.emit?.('get_lobby_state', lobby.id) } catch {}
+        setTimeout(() => {
+          if (!launchedRef.current) {
+            launchedRef.current = true
+            try { playSound('button') } catch {}
+            onStartBattle()
+          }
+        }, 400)
+      }
+    } else {
+      lastCountRef.current = count
+      stableTicksRef.current = 0
+    }
+  }, [players, socket, lobby.id, currentLobby.capacity, onStartBattle, playSound])
+  
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-4 lg:p-6 max-w-6xl w-full mx-auto max-h-full overflow-hidden relative">
       
