@@ -86,7 +86,7 @@ const generateOpponentPositions = (count: number, radius: number) => {
   return positions;
 };
 
-// Function to generate random chicken colors
+// Function to generate random chicken colors (used for AIs/tests)
 const generateChickenColors = () => {
   // Create different color themes
   const colorThemes = [
@@ -178,6 +178,27 @@ const generateChickenColors = () => {
   
   return selectedTheme;
 };
+
+// Deterministic color assignment per player id to keep visuals in sync across clients
+const getDeterministicColorsForId = (id: string) => {
+  const colorThemes = [
+    { body: '#A52A2A', comb: '#FF0000', beak: '#FFA500', legs: '#FFA500', tail: '#A52A2A', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#F5F5DC', comb: '#FF0000', beak: '#FFA500', legs: '#FFA500', tail: '#F5F5DC', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#8B4513', comb: '#FF0000', beak: '#FFA500', legs: '#FFA500', tail: '#8B4513', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#4B0082', comb: '#FF00FF', beak: '#FFFF00', legs: '#FFFF00', tail: '#4B0082', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#008000', comb: '#FF0000', beak: '#FFFF00', legs: '#FFFF00', tail: '#008000', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#0000FF', comb: '#FF0000', beak: '#FFA500', legs: '#FFA500', tail: '#0000FF', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#800080', comb: '#FF00FF', beak: '#FFFF00', legs: '#FFFF00', tail: '#800080', eyes: '#FFFFFF', pupils: '#000000' },
+    { body: '#FF1493', comb: '#FF00FF', beak: '#FFFF00', legs: '#FFFF00', tail: '#FF1493', eyes: '#FFFFFF', pupils: '#000000' },
+  ];
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % colorThemes.length;
+  return colorThemes[idx];
+}
 
 // Generate additional mock opponents for testing
 const generateMockOpponents = (count: number) => {
@@ -523,22 +544,45 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   const startBattle = useCallback(() => {
     console.log('Starting battle with players:', players);
     
-    // Use the exact chickens from the lobby for the battle
-    const myId = (() => { try { return publicKey?.toBase58?.() || publicKey?.toString?.() || null } catch { return null } })();
-    const battlePlayers = [
-      // Include the player (ensure named with profile username if available)
-      ...players.filter(p => p.isPlayer).map(p => ({ ...p, name: profile?.username || p.name || 'You' })),
-      // Include all the lobby chickens with their exact names and appearance
-      ...lobbyPlayers.filter(lp => !(myId && lp.id === myId))
-    ];
+    // Use deterministic self + exact lobby roster by ID
+    const myId = (() => {
+      try {
+        const fromWallet = publicKey?.toBase58?.() || publicKey?.toString?.();
+        if (fromWallet) return String(fromWallet);
+      } catch {}
+      try { if (typeof window !== 'undefined') { const g = localStorage.getItem('guest_id'); if (g) return g } } catch {}
+      return 'guest_local';
+    })();
+
+    // Build self entry with deterministic colors
+    const selfColors = getDeterministicColorsForId(myId);
+    const selfPlayer: PlayerStatus = {
+      id: myId,
+      name: profile?.username || 'You',
+      isPlayer: true,
+      position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
+      rotation: new THREE.Euler(0, 0, 0),
+      colors: selfColors,
+      hp: 3,
+      maxHp: 3,
+      isAlive: true,
+      visible: true,
+    };
+
+    // Other humans come directly from lobbyPlayers (these are synced from sockets) with stable sort by id
+    const otherHumans = lobbyPlayers
+      .filter(lp => String(lp.id) !== myId && !(lp as any).isAi)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const aiChickens = lobbyPlayers.filter(lp => (lp as any).isAi);
+    const battlePlayers = [selfPlayer, ...otherHumans, ...aiChickens];
     
     // Position ALL chickens (including player) around the ring using stable order:
     // 1) Player first, then humans, then AIs, to reserve unique spawn slots for humans
     const ringRadius = 10; // Reduced from 20 to 10 for smaller arena
     const playerSelf = battlePlayers.find(p => p.isPlayer)
-    const otherHumans = battlePlayers.filter(p => !p.isPlayer && !(p as any).isAi)
-    const aiChickens = battlePlayers.filter(p => (p as any).isAi)
-    const ordered = [playerSelf, ...otherHumans, ...aiChickens].filter(Boolean) as typeof battlePlayers
+    const otherHumansOrdered = battlePlayers.filter(p => !p.isPlayer && !(p as any).isAi)
+    const aiChickensOrdered = battlePlayers.filter(p => (p as any).isAi)
+    const ordered = [playerSelf, ...otherHumansOrdered, ...aiChickensOrdered].filter(Boolean) as typeof battlePlayers
     const totalChickens = ordered.length
     const positions = generateOpponentPositions(totalChickens, ringRadius)
 
