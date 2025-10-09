@@ -532,9 +532,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       const id = String(entry.id);
       const isSelf = id === myId;
       const colors = entry.colors || getDeterministicColorsForId(id);
+      const displayName = isSelf
+        ? (profile?.username || 'You')
+        : ((entry as any).name || (entry as any).username || (id.startsWith('guest_') ? id : id.slice(0, 8) + '...'));
       return {
         id,
-        name: isSelf ? (profile?.username || 'You') : (entry.name || entry.id.slice(0, 8) + '...'),
+        name: displayName,
         isPlayer: isSelf,
         isAi: Boolean((entry as any).isAi),
         position: positions[index].position,
@@ -570,9 +573,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || getDeterministicColorsForId(id);
         const isGuest = id.startsWith('guest_')
+        const displayName = p.isAi
+          ? (p.username || 'AI')
+          : (p.username || (isGuest ? id : id.slice(0, 8) + '...'))
         return {
           id,
-          name: p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? id : id.slice(0, 8) + '...')),
+          name: displayName,
           isPlayer: false,
           isAi: Boolean(p.isAi),
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
