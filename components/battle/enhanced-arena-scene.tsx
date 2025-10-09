@@ -540,9 +540,12 @@ function SceneContent({
     }
     socket.on('player_state', onPlayerState)
     socket.on('player_damage', onPlayerDamage)
+    const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
+    socket.on('debug_trace', onDebug)
     return () => {
       socket.off('player_state', onPlayerState)
       socket.off('player_damage', onPlayerDamage)
+      socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])
 

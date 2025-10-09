@@ -217,12 +217,15 @@ export default function WaitingQueue({
       } catch {}
     }
     socket.on('queue_begin', onQueueBeginJoin)
+    const onDebug = (p: any) => console.log('[MATCH][DEBUG]', p)
+    socket.on('debug_trace', onDebug)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('queue_begin', onQueueBeginJoin)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
+      socket.off('debug_trace', onDebug)
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
     }

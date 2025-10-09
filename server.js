@@ -1659,7 +1659,7 @@ preparePromise.then(() => {
       try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
 
       // Notify clients to begin queue confirmation
-      io.to(lobbyId).emit('queue_begin', {
+      const qbPayload = {
         matchSessionId,
         expectedRoster,
         arenaSeed,
@@ -1667,7 +1667,14 @@ preparePromise.then(() => {
         ackDeadlineMs,
         minHumans: isTutorial ? 2 : 4,
         escrowId: escrowIdVal,
-      });
+      };
+      io.to(lobbyId).emit('queue_begin', qbPayload);
+      try {
+        io.to(lobbyId).emit('debug_trace', {
+          type: 'queue_begin', lobbyId, matchSessionId,
+          expectedRosterWallets: (expectedRoster || []).map(r => r.wallet),
+        });
+      } catch {}
 
       // Deadline to finalize the roster
       session.deadlineTimer = setTimeout(() => finalizeQueueSession(matchSessionId, io), ackDeadlineMs);
@@ -1740,12 +1747,9 @@ preparePromise.then(() => {
       // Lock roster and schedule a synchronized round start
       const roundStartAtEpochMs = Date.now() + 3000;
       try {
-        io.to(lobbyId).emit('arena_lock_roster', {
-          matchSessionId,
-          finalRoster,
-          arenaSeed: session.arenaSeed,
-          roundStartAtEpochMs,
-        });
+        const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
+        io.to(lobbyId).emit('arena_lock_roster', payload);
+        try { io.to(lobbyId).emit('debug_trace', { type: 'arena_lock_roster', lobbyId, matchSessionId, finalRosterWallets: finalRoster.map(r => r.wallet) }); } catch {}
       } catch {}
 
       // Emit 3..0 countdown aligned to round start
@@ -1756,6 +1760,7 @@ preparePromise.then(() => {
         if (c < 0) {
           clearInterval(interval);
           try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
+          try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
         }
