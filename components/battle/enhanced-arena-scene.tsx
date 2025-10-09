@@ -537,6 +537,30 @@ function SceneContent({
   // Maintain a brief decay window for remote jump flags to avoid flicker
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
 
+  // Discrete input request flags to guarantee 1 key press => 1 action locally
+  const jumpRequestRef = useRef<boolean>(false)
+  const peckRequestRef = useRef<boolean>(false)
+  const lastJumpAtRef = useRef<number>(0)
+  const lastPeckAtRef = useRef<number>(0)
+
+  // Capture rising-edge inputs at the DOM level for responsiveness
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      if (e.code === 'Space') jumpRequestRef.current = true
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') peckRequestRef.current = true
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) peckRequestRef.current = true
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('mousedown', onMouseDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('mousedown', onMouseDown)
+    }
+  }, [])
+
   // Socket hookup for consuming remote transforms and applying remote hits
   const { socket } = useSocket() as any
   useEffect(() => {
@@ -676,8 +700,8 @@ function SceneContent({
     // Skip if player is not alive
     if (playerChicken && !playerChicken.isAlive) return;
 
-    const jumpPressed = Date.now() < freezeUntilRef.current ? false : jumpKey;
-    const peckPressed = Date.now() < freezeUntilRef.current ? false : peckKey;
+    const jumpPressed = Date.now() < freezeUntilRef.current ? false : (jumpKey || jumpRequestRef.current);
+    const peckPressed = Date.now() < freezeUntilRef.current ? false : (peckKey || peckRequestRef.current);
     const isPeckingNow = selfIsPecking;
 
     if (isPeckingNow && peckPressed) {
@@ -689,11 +713,13 @@ function SceneContent({
     // Maximum movement speed
     const maxSpeed = jumpPressed ? 12.0 : 8.0; // Sprint with jump key
 
-    // Handle jumping physics
-    if (jumpPressed && selfPosition.y <= 0.85 + 0.05) { // Tighter threshold for responsiveness
-      selfVelocity.current.y = 12.0; // Increased jump force
+    // Handle jumping physics (consume discrete request once)
+    if (jumpRequestRef.current && selfPosition.y <= 0.85 + 0.05) {
+      lastJumpAtRef.current = Date.now()
+      selfVelocity.current.y = 12.0;
       setSelfIsJumping(true);
       if (playSound) playSound("jump");
+      jumpRequestRef.current = false
     } else if (selfPosition.y <= 0.85) {
       setSelfIsJumping(false);
     }
@@ -741,7 +767,9 @@ function SceneContent({
           }
         }
       }
-      setTimeout(() => setSelfIsPecking(false), 250); // Peck duration
+      lastPeckAtRef.current = Date.now()
+      peckRequestRef.current = false
+      setTimeout(() => setSelfIsPecking(false), 250);
     }
 
     if (!peckPressed && wasPecking.current) {
