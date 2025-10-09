@@ -123,6 +123,7 @@ export default function WaitingQueue({
       } catch {}
     }
     const onArenaLock = (payload: any) => {
+      console.log('[WaitingQueue] arena_lock_roster', payload)
       // Replace roster with locked list and keep provided names with guest rule
       try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => {
         const idStr = String(p.wallet || '')
@@ -145,6 +146,7 @@ export default function WaitingQueue({
       } catch {}
     }
     const onStarted = () => {
+      console.log('[WaitingQueue] round_start/match_started received')
       try { playSound('button') } catch {}
       // Cancel any scheduled start if server event arrives
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
@@ -252,6 +254,7 @@ export default function WaitingQueue({
   // Second-check auto start: if roster is full/stable and we are in a queue session, start battle
   const launchedRef = useRef<boolean>(false)
   useEffect(() => {
+    console.log('[WaitingQueue] second-check evaluate', { count: Array.isArray(players) ? players.length : -1, expected: expectedCountRef.current, hasSession: !!matchSessionIdRef.current })
     if (!Array.isArray(players)) return
     if (launchedRef.current) return
     const count = players.length
