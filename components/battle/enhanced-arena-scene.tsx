@@ -209,6 +209,7 @@ function SceneContent({
   const prevPosition = useRef(new THREE.Vector3());
   const prevRotationY = useRef<number>(0);
   const lastEmitAtRef = useRef<number>(0);
+  const lastSentRef = useRef({ x: 0, y: 0.85, z: 0, ry: 0, pk: false, jp: false });
   const remoteHumansRef = useRef<Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>>({})
 
   // Get keyboard controls state directly (Drei hook)
@@ -221,6 +222,8 @@ function SceneContent({
 
   // Store previous state for peck animation
   const wasPecking = useRef(false);
+  const lastWalkingRef = useRef<boolean>(false);
+  const lastWalkingSetAtRef = useRef<number>(0);
 
   // Self-contained movement state
   const [selfPosition, setSelfPosition] = useState(() => {
@@ -708,9 +711,19 @@ function SceneContent({
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
-      setIsWalking(true);
+      const nowMs = Date.now();
+      if (!lastWalkingRef.current || nowMs - lastWalkingSetAtRef.current > 120) {
+        setIsWalking(true);
+        lastWalkingRef.current = true;
+        lastWalkingSetAtRef.current = nowMs;
+      }
     } else {
-      setIsWalking(false);
+      const nowMs = Date.now();
+      if (lastWalkingRef.current && nowMs - lastWalkingSetAtRef.current > 120) {
+        setIsWalking(false);
+        lastWalkingRef.current = false;
+        lastWalkingSetAtRef.current = nowMs;
+      }
     }
 
     // Calculate movement direction based on rotation
@@ -783,18 +796,16 @@ function SceneContent({
       }
     }
     
-    // Update React state only if position/rotation changed significantly
-    const posChanged = !prevPosition.current.equals(selfPosition) && (
+    // Update refs only (avoid per-frame setState thrash)
+    const posChanged = (
       Math.abs(prevPosition.current.x - selfPosition.x) > 0.01 ||
       Math.abs(prevPosition.current.y - selfPosition.y) > 0.01 ||
       Math.abs(prevPosition.current.z - selfPosition.z) > 0.01
     )
     const rotChanged = Math.abs(prevRotationY.current - selfRotation.y) > 0.01
     if (posChanged || rotChanged) {
-      prevPosition.current.copy(selfPosition)
+      prevPosition.current.set(selfPosition.x, selfPosition.y, selfPosition.z)
       prevRotationY.current = selfRotation.y
-      setSelfPosition(new THREE.Vector3(selfPosition.x, selfPosition.y, selfPosition.z))
-      setSelfRotation(new THREE.Euler(selfRotation.x, selfRotation.y, selfRotation.z))
     }
 
     // Update Three.js object directly
@@ -829,19 +840,29 @@ function SceneContent({
       // If you have drumsticks in the scene to collect, you'd check their positions against playerPosition here.
     }
 
-    // Emit local player transform at ~20 Hz
+    // Emit local player transform at ~20 Hz (only on meaningful deltas)
     try {
       const nowMs = Date.now()
       if (socket && nowMs - lastEmitAtRef.current > 50) {
-        lastEmitAtRef.current = nowMs
         const msid = (window as any)?.__last_match_session_id
-        socket.emit('player_state', {
-          matchSessionId: msid,
-          position: [selfPosition.x, selfPosition.y, selfPosition.z],
-          rotationY: selfRotation.y,
-          isPecking: selfIsPecking,
-          isJumping: selfIsJumping,
-        })
+        const sent = lastSentRef.current
+        const posDelta = Math.hypot(selfPosition.x - sent.x, selfPosition.z - sent.z)
+        const rotDelta = Math.abs(selfRotation.y - sent.ry)
+        const stateChanged = (selfIsPecking !== sent.pk) || (selfIsJumping !== sent.jp)
+        if (posDelta > 0.02 || rotDelta > 0.02 || stateChanged) {
+          lastEmitAtRef.current = nowMs
+          // Quantize to 2 decimals to reduce bandwidth while keeping smoothness
+          const q = (n: number) => Math.round(n * 100) / 100
+          sent.x = selfPosition.x; sent.y = selfPosition.y; sent.z = selfPosition.z
+          sent.ry = selfRotation.y; sent.pk = selfIsPecking; sent.jp = selfIsJumping
+          socket.emit('player_state', {
+            matchSessionId: msid,
+            position: [q(selfPosition.x), q(selfPosition.y), q(selfPosition.z)],
+            rotationY: q(selfRotation.y),
+            isPecking: selfIsPecking,
+            isJumping: selfIsJumping,
+          })
+        }
       }
     } catch {}
   });
