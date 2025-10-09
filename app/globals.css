@@ -74,8 +74,10 @@
 /* Pixel font styling - for titles and aesthetic text only */
 .pixel-font {
   font-family: "Press Start 2P", "VT323", monospace;
-  letter-spacing: 1px;
-  line-height: 1.2;
+  letter-spacing: 0.6px;
+  line-height: 1.1;
+  /* Slight downscale globally to prevent overlap while keeping legibility */
+  font-size: 0.92em;
   text-rendering: pixelated;
 }
 
@@ -222,9 +224,16 @@ body {
 }
 
 /* Responsive pixel sizes */
+@media (max-width: 1024px) {
+  .pixel-font {
+    font-size: 0.9em;
+  }
+}
+
 @media (max-width: 768px) {
   .pixel-font {
-    letter-spacing: 0.5px;
+    letter-spacing: 0.45px;
+    font-size: 0.88em;
   }
 }
 
