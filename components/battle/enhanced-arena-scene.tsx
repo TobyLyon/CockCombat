@@ -536,6 +536,7 @@ function SceneContent({
 
   // Maintain a brief decay window for remote jump flags to avoid flicker
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
+  const remotePeckVisualUntilRef = useRef<Record<string, number>>({})
 
   // Socket hookup for consuming remote transforms and applying remote hits
   const { socket } = useSocket() as any
@@ -579,9 +580,12 @@ function SceneContent({
         try {
           if (byId) {
             const rec = remoteHumansRef.current[byId]
-            if (rec) {
+            const now = Date.now()
+            const until = remotePeckVisualUntilRef.current[byId] || 0
+            if (rec && now > until) {
               ;(rec as any).isPecking = true
-              setTimeout(() => { try { (rec as any).isPecking = false } catch {} }, 250)
+              remotePeckVisualUntilRef.current[byId] = now + 220
+              setTimeout(() => { try { (rec as any).isPecking = false } catch {} }, 220)
             }
           }
         } catch {}
@@ -692,8 +696,8 @@ function SceneContent({
     const maxSpeed = jumpPressed ? 12.0 : 8.0; // Sprint with jump key
 
     // Handle jumping physics
-    if (jumpPressed && selfPosition.y <= 0.85 + 0.1) { // Add small threshold
-      selfVelocity.current.y = 12.0; // Increased jump force
+    if (jumpPressed && selfPosition.y <= 0.85 + 0.08) { // tighter threshold to increase responsiveness
+      selfVelocity.current.y = 12.0; // Jump force
       setSelfIsJumping(true);
       if (playSound) playSound("jump");
     } else if (selfPosition.y <= 0.85) {
@@ -743,7 +747,7 @@ function SceneContent({
           }
         }
       }
-      setTimeout(() => setSelfIsPecking(false), 250); // Peck duration
+      setTimeout(() => setSelfIsPecking(false), 180); // Shorter to reduce overlap on remote
     }
 
     if (!peckPressed && wasPecking.current) {
@@ -1192,12 +1196,15 @@ function ChickenInstances({
           // Apply smoothing toward remote transform and set anim hints
           const prevX = g.position.x
           const prevZ = g.position.z
-          // Smooth X/Z toward remote, snap Y for crisp jump arc
+          // Smooth X/Z toward remote, snap Y for crisp jump arc and client-side tweening
           const prevX2 = g.position.x
           const prevZ2 = g.position.z
           g.position.x += (pos.x - g.position.x) * 0.35
           g.position.z += (pos.z - g.position.z) * 0.35
-          g.position.y = pos.y
+          // Lightweight client-side Y tween for frames between packets
+          const dy = pos.y - g.position.y
+          const yStep = Math.sign(dy) * Math.min(Math.abs(dy), 0.5 * Math.max(0.016, delta) * 30)
+          g.position.y += yStep
           if (net) {
             const targetY = net.rotY
             const lerpAngle = (a: number, b: number, t: number) => {
