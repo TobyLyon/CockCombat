@@ -375,7 +375,7 @@ preparePromise.then(() => {
     });
 
     // Handle lobby room leaving
-    socket.on('leave_lobby_room', (lobbyId) => {
+    socket.on('leave_lobby_room', async (lobbyId) => {
       if (!checkRateLimit('leave_lobby_room', 20)) {
         console.warn(`⚠️ Rate limit exceeded for leave_lobby_room: ${socket.id}`);
         return;
@@ -418,6 +418,37 @@ preparePromise.then(() => {
           playerId: socket.id,
           timestamp: Date.now()
         });
+
+        // Emit an updated lobby roster immediately
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const all = res ? await res.json().catch(() => []) : [];
+          const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+          if (lobby) {
+            let lobbyPlayers = lobby.players.map(player => {
+              let isReady = false;
+              for (const [, c] of activeConnections.entries()) {
+                if (c.currentLobby === lobbyId && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
+              }
+              return {
+                playerId: player.playerId,
+                username: player.username || player.playerId.slice(0, 8) + '...',
+                chickenName: player.chickenId || 'Default',
+                isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
+                isAi: player.isAi || false
+              };
+            });
+            io.to(lobbyId).emit('lobby_updated', {
+              id: lobbyId,
+              players: lobbyPlayers,
+              capacity: lobby.capacity,
+              amount: lobby.amount,
+              currency: lobby.currency,
+              matchType: lobby.matchType
+            });
+          }
+        } catch {}
 
         // If someone leaves before countdown starts, cancel any pre-countdown delay
         try {
@@ -1014,6 +1045,37 @@ preparePromise.then(() => {
                 playerId: walletAtDisconnect,
                 timestamp: Date.now(),
               });
+            } catch {}
+
+            // Broadcast updated lobby roster immediately
+            try {
+              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+              const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+              const all = res ? await res.json().catch(() => []) : [];
+              const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyAtDisconnect) : null;
+              if (lobby) {
+                let lobbyPlayers = lobby.players.map(player => {
+                  let isReady = false;
+                  for (const [, c] of activeConnections.entries()) {
+                    if (c.currentLobby === lobbyAtDisconnect && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
+                  }
+                  return {
+                    playerId: player.playerId,
+                    username: player.username || player.playerId.slice(0, 8) + '...',
+                    chickenName: player.chickenId || 'Default',
+                    isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
+                    isAi: player.isAi || false
+                  };
+                });
+                io.to(lobbyAtDisconnect).emit('lobby_updated', {
+                  id: lobbyAtDisconnect,
+                  players: lobbyPlayers,
+                  capacity: lobby.capacity,
+                  amount: lobby.amount,
+                  currency: lobby.currency,
+                  matchType: lobby.matchType
+                });
+              }
             } catch {}
           } catch {}
         };
