@@ -228,6 +228,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   // Audio state - Get interaction state from useAudio
   const { hasInteracted } = useAudio(); 
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
+  // Secondary music layer for lobby/queue (main song)
+  const songMusicRef = useRef<HTMLAudioElement | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({}); // Keep for sound effects
   const [volume, setVolume] = useState(0.1); // Changed from 0.5 to 0.1 (10%)
   const [audioEnabled, setAudioEnabled] = useState(true); // Keep local enabled control for now
@@ -598,11 +600,19 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
           // When re-enabling, apply the correct volume based on track
           const clampedVolume = Math.max(0, Math.min(1, volume));
           backgroundMusicRef.current.volume = currentMusicTrack === 'background'
-            ? Math.min(1.0, clampedVolume * 1.5)
+            ? Math.min(1.0, clampedVolume * 2.0)
             : clampedVolume;
           backgroundMusicRef.current.play().catch(console.error);
         } else {
           backgroundMusicRef.current.pause();
+        }
+      }
+      // Apply to secondary song layer as well
+      if (songMusicRef.current) {
+        if (newState) {
+          try { songMusicRef.current.play().catch(() => {}); } catch {}
+        } else {
+          try { songMusicRef.current.pause(); } catch {}
         }
       }
       console.log('Toggling audio enabled to:', newState);
@@ -619,8 +629,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       if (backgroundMusicRef.current && currentMusicTrack) {
         // Adjust volume based on track type without changing the source
         backgroundMusicRef.current.volume = currentMusicTrack === 'background'
-          ? Math.min(1.0, clampedVolume * 1.5)
+          ? Math.min(1.0, clampedVolume * 2.0)
           : clampedVolume;
+      }
+      // Update volume of secondary song layer if present
+      if (songMusicRef.current) {
+        songMusicRef.current.volume = Math.min(1.0, clampedVolume * 1.0);
       }
     }, [currentMusicTrack]);
   
@@ -655,34 +669,57 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   
   // --- New useEffect for Background Music Management ---
   useEffect(() => {
-    if (!hasInteracted || !audioEnabled) return;
+    if (!hasInteracted) return;
 
-    // Determine target music based on game state
-    // Play soundscape on lobby/queue; play arena track during battle
-    let targetTrack: 'background' | 'arena' | null = null;
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+
     if (gameState === 'lobby' || gameState === 'queue') {
-      targetTrack = 'background' as const;
+      // Primary: chicken soundscape
+      playBackgroundMusic('background');
+      if (backgroundMusicRef.current) {
+        // Slightly louder for chicken ambience per request
+        backgroundMusicRef.current.volume = Math.min(1.0, clampedVolume * 2.0);
+      }
+      // Secondary: main background song layered in lobby/queue
+      if (!songMusicRef.current) {
+        songMusicRef.current = new Audio('/sounds/background.mp3');
+        songMusicRef.current.loop = true;
+      }
+      songMusicRef.current.volume = Math.min(1.0, clampedVolume * 1.0);
+      if (audioEnabled) {
+        try { songMusicRef.current.play().catch(() => {}); } catch {}
+      } else {
+        try { songMusicRef.current.pause(); } catch {}
+      }
     } else if (gameState === 'battle') {
-      targetTrack = 'arena' as const;
-    }
-
-    // If we have a target track, play it
-    if (targetTrack) {
-      playBackgroundMusic(targetTrack);
-    } else if (backgroundMusicRef.current) {
-      // No target track, stop any playing music
-      backgroundMusicRef.current.pause();
-      backgroundMusicRef.current.currentTime = 0;
-    }
-
-    // Cleanup function
-    return () => {
+      // Battle: arena music only; stop the secondary song
+      playBackgroundMusic('arena');
+      if (songMusicRef.current) {
+        try { songMusicRef.current.pause(); } catch {}
+        try { songMusicRef.current.currentTime = 0; } catch {}
+      }
+    } else {
+      // Other states: stop both
       if (backgroundMusicRef.current) {
         backgroundMusicRef.current.pause();
         backgroundMusicRef.current.currentTime = 0;
       }
+      if (songMusicRef.current) {
+        try { songMusicRef.current.pause(); } catch {}
+        try { songMusicRef.current.currentTime = 0; } catch {}
+      }
+    }
+
+    // Cleanup keeps players paused when dependencies change
+    return () => {
+      // do not fully reset refs to preserve buffering; just ensure paused on exit
+      if (gameState !== 'lobby' && gameState !== 'queue') {
+        if (songMusicRef.current) {
+          try { songMusicRef.current.pause(); } catch {}
+        }
+      }
     };
-  }, [gameState, audioEnabled, hasInteracted, playBackgroundMusic]);
+  }, [gameState, audioEnabled, hasInteracted, playBackgroundMusic, volume]);
   // --- End Background Music useEffect ---
   
   // The value provided to the context consumers
