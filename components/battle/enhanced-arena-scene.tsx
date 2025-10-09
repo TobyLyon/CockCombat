@@ -115,13 +115,13 @@ function ArenaFloor() {
   return (
     <group>
       {/* Grass annulus (reduced extent) */}
-      <Plane args={[600, 600]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <meshStandardMaterial map={floorTexture} roughness={0.9} />
+      <Plane args={[600, 600]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow castShadow>
+        <meshStandardMaterial map={floorTexture} roughness={0.95} metalness={0.05} />
       </Plane>
       {/* Dirt in-fighting ring (slightly smaller circle) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow castShadow>
         <circleGeometry args={[ARENA_CONFIG.ringRadius * 0.9, 64]} />
-        <meshStandardMaterial map={dirtTexture} roughness={0.95} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        <meshStandardMaterial map={dirtTexture} roughness={0.98} metalness={0.02} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
     </group>
   );
