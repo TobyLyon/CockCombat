@@ -535,7 +535,7 @@ function SceneContent({
         rec.ts = Number(payload.ts)||Date.now()
       } catch {}
     }
-    const onPlayerDamage = (payload: any) => {
+    const onRemotePlayerDamage = (payload: any) => {
       try {
         const targetId = String(payload?.targetId || '')
         const amount = Math.max(0, Math.min(3, Number(payload?.amount)||1))
@@ -544,7 +544,7 @@ function SceneContent({
       } catch {}
     }
     socket.on('player_state', onPlayerState)
-    socket.on('player_damage', onPlayerDamage)
+    socket.on('player_damage', onRemotePlayerDamage)
     const onArenaLockJoin = (payload: any) => {
       try {
         const msid = payload?.matchSessionId
@@ -647,7 +647,10 @@ function SceneContent({
             if (isInvulnerable) break
             // Emit damage for humans via network; still apply local for AI
             if (!opponent.isAi && socket) {
-              try { socket.emit('player_damage', { targetId: opponent.id, amount: 1 }) } catch {}
+              try {
+                const msid = (window as any)?.__last_match_session_id
+                socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
+              } catch {}
             } else if (onPlayerDamage) {
               onPlayerDamage(opponent.id, 1)
             }

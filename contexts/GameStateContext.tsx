@@ -503,41 +503,6 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setInQueue(true);
     setGameState('queue');
     playSound('button');
-    
-    // Generate lobby players if none exist yet
-    if (lobbyPlayers.length === 0) {
-      const ringRadius = 15; // Match the arena radius
-      const positions = generateOpponentPositions(7, ringRadius); // Changed to 7 opponents
-      
-      // Generate random opponents for the lobby with more descriptive names
-      const chickenNames = [
-        "Colonel Cluck", "Feather Fury", "Beak Breaker", 
-        "Wing Commander", "Rooster Rumble", "Hen Havoc",
-        "Talon Terror"
-      ];
-      
-      const opponents = Array.from({ length: 7 }).map((_, index) => { // Changed to 7 opponents
-        // Generate a random color scheme
-        const colors = generateChickenColors();
-        
-        return {
-          id: `opponent-${index + 1}`,
-          name: chickenNames[index], // Add name to the opponent
-          isPlayer: false,
-          position: positions[index].position,
-          rotation: positions[index].rotation,
-          colors,
-          hp: 3,
-          maxHp: 3,
-          isAlive: true,
-          visible: true,
-          isHitFlashing: false,
-          lastHitTime: 0
-        };
-      });
-      
-      setLobbyPlayers(opponents);
-    }
   }, [playSound, lobbyPlayers.length]);
   
   // Start battle
