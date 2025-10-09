@@ -560,7 +560,7 @@ function SceneContent({
         // Prepare short tween for Y to smooth between packets (~20Hz)
         try {
           const now = Date.now()
-          ;(rec as any).yAnim = { start: rec.pos?.y ?? nextY, end: nextY, startAt: now, endAt: now + 60 }
+          ;(rec as any).yAnim = { start: rec.pos?.y ?? nextY, end: nextY, startAt: now, endAt: now + 100 }
         } catch {}
         rec.pos.set(nextX, nextY, nextZ)
         rec.rotY = Number(payload.rotationY)||0
@@ -748,8 +748,8 @@ function SceneContent({
       wasPecking.current = false;
     }
 
-    // Apply gravity
-    selfVelocity.current.y -= 15.0 * deltaTime; // Gravity strength
+    // Apply gravity (slightly lower for smoother arc at low frame rates)
+    selfVelocity.current.y -= 13.5 * deltaTime; // Gravity strength
     selfPosition.y += selfVelocity.current.y * deltaTime;
 
     // Ground collision
@@ -919,11 +919,12 @@ function SceneContent({
         const msid = (window as any)?.__last_match_session_id
         const sent = lastSentRef.current
         const posDelta = Math.hypot(selfPosition.x - sent.x, selfPosition.z - sent.z)
+        const yDelta = Math.abs(selfPosition.y - sent.y)
         const rotDelta = Math.abs(selfRotation.y - sent.ry)
         // Only send peck when it flips from false->true to avoid multi-peck
         const peckEdge = (!sent.pk && selfIsPecking)
         const stateChanged = peckEdge || (selfIsJumping !== sent.jp)
-        if (posDelta > 0.02 || rotDelta > 0.02 || stateChanged) {
+        if (posDelta > 0.02 || yDelta > 0.015 || rotDelta > 0.02 || stateChanged) {
           lastEmitAtRef.current = nowMs
           // Quantize to 2 decimals to reduce bandwidth while keeping smoothness
           const q = (n: number) => Math.round(n * 100) / 100
@@ -1195,8 +1196,10 @@ function ChickenInstances({
           // Smooth X/Z; ease Y via short tween captured on packet for fluid jump
           const prevX2 = g.position.x
           const prevZ2 = g.position.z
-          g.position.x += (pos.x - g.position.x) * 0.35
-          g.position.z += (pos.z - g.position.z) * 0.35
+          // Adapt smoothing based on local performance: if delta is large (low FPS), ease more aggressively
+          const ease = Math.max(0.25, Math.min(0.45, delta * 10))
+          g.position.x += (pos.x - g.position.x) * ease
+          g.position.z += (pos.z - g.position.z) * ease
           try {
             const ya = (net as any)?.yAnim
             if (ya && typeof ya.start === 'number' && typeof ya.end === 'number' && typeof ya.startAt === 'number' && typeof ya.endAt === 'number') {
