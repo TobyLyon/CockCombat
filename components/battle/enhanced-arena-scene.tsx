@@ -932,6 +932,7 @@ function SceneContent({
             isPecking={selfIsPecking}
             isWalking={isWalking || Math.hypot(selfVelocity.current.x, selfVelocity.current.z) > 0.05}
             isJumping={selfIsJumping}
+            isHitFlashing={Boolean((playerChicken as any)?.isHitFlashing)}
             disableBobbing={true} // Player chicken should NOT bob
             isPlayer={true}
             health={playerChicken.hp} // Assuming hp is part of playerChicken

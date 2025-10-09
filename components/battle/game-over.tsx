@@ -100,12 +100,12 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
+    <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm p-3">
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 50 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.5, type: "spring" }}
-        className={`bg-gradient-to-br ${isHumanWinner ? 'from-yellow-900/95 to-orange-900/95' : 'from-red-900/95 to-gray-900/95'} p-8 lg:p-12 rounded-2xl border-4 ${isHumanWinner ? 'border-yellow-400' : 'border-red-500'} text-center max-w-2xl w-full mx-4 shadow-2xl`}
+        className={`bg-gradient-to-br ${isHumanWinner ? 'from-yellow-900/95 to-orange-900/95' : 'from-red-900/95 to-gray-900/95'} p-6 lg:p-8 rounded-2xl border-4 ${isHumanWinner ? 'border-yellow-400' : 'border-red-500'} text-center max-w-xl w-full mx-auto shadow-2xl`}
       >
         {/* Emoji/Icon */}
         <motion.div
@@ -120,18 +120,18 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
         <motion.h2
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 0.6 }}
-          className={`text-5xl lg:text-7xl font-black ${isHumanWinner ? 'text-yellow-400' : 'text-red-500'} mb-4 pixel-font drop-shadow-2xl`}
+          className={`text-4xl lg:text-5xl font-black ${isHumanWinner ? 'text-yellow-400' : 'text-red-500'} mb-3 pixel-font drop-shadow-2xl`}
         >
           {isHumanWinner ? 'VICTORY!' : 'DEFEATED!'}
         </motion.h2>
 
         {/* Message */}
-        <p className="text-white text-xl lg:text-2xl mb-8">
+        <p className="text-white text-base lg:text-xl mb-6">
           {isHumanWinner ? '🐓 You are the last chicken standing!' : '💀 Better luck next time, warrior!'}
         </p>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8 bg-black/40 p-6 rounded-lg">
+        <div className="grid grid-cols-2 gap-3 mb-6 bg-black/40 p-4 rounded-lg">
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-1">PLAYERS</p>
             <p className="text-3xl font-bold text-white">{totalPlayers}</p>
@@ -158,7 +158,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
         </div>
 
         {/* Match Summary */}
-        <div className="grid grid-cols-2 gap-4 mb-4 bg-black/30 p-4 rounded-lg text-white/90 text-sm">
+        <div className="grid grid-cols-2 gap-3 mb-4 bg-black/30 p-3 rounded-lg text-white/90 text-sm">
           <div>
             <p className="text-white/60 text-[11px]">Match Type</p>
             <p className="font-semibold">{isTutorial ? 'Tutorial' : 'Ranked'}</p>

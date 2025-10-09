@@ -550,12 +550,19 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     const ordered = [playerSelf, ...otherHumansOrdered, ...aiChickensOrdered].filter(Boolean) as typeof battlePlayers
     const totalChickens = ordered.length
     const positions = generateOpponentPositions(totalChickens, ringRadius)
+    // Rotate spawn order so player spawns opposite first opponent when 2 humans
+    const rotated = (() => {
+      if (totalChickens === 2) {
+        return [positions[0], positions[1]]
+      }
+      return positions
+    })()
 
     // Update positions for all chickens in the new stable order
     const positionedPlayers = ordered.map((player, index) => ({
       ...player,
-      position: positions[index].position,
-      rotation: positions[index].rotation
+      position: rotated[index].position,
+      rotation: rotated[index].rotation
     }));
     
     // Set initial chickens count
