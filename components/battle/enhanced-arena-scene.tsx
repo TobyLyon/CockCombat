@@ -516,6 +516,11 @@ function SceneContent({
   const { socket } = useSocket() as any
   useEffect(() => {
     if (!socket) return
+    // Ensure we are in the match room on mount if we have a session id
+    try {
+      const msid = (window as any)?.__last_match_session_id
+      if (msid) socket.emit('join_match_room', { matchSessionId: msid })
+    } catch {}
     const onPlayerState = (payload: any) => {
       try {
         const id = String(payload?.playerId || '')
@@ -540,11 +545,33 @@ function SceneContent({
     }
     socket.on('player_state', onPlayerState)
     socket.on('player_damage', onPlayerDamage)
+    const onArenaLockJoin = (payload: any) => {
+      try {
+        const msid = payload?.matchSessionId
+        if (msid) {
+          try { (window as any).__last_match_session_id = msid } catch {}
+          socket.emit('join_match_room', { matchSessionId: msid })
+        }
+      } catch {}
+    }
+    const onRoundStartJoin = (payload: any) => {
+      try {
+        const msid = payload?.matchSessionId
+        if (msid) {
+          try { (window as any).__last_match_session_id = msid } catch {}
+          socket.emit('join_match_room', { matchSessionId: msid })
+        }
+      } catch {}
+    }
+    socket.on('arena_lock_roster', onArenaLockJoin)
+    socket.on('round_start', onRoundStartJoin)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
     socket.on('debug_trace', onDebug)
     return () => {
       socket.off('player_state', onPlayerState)
       socket.off('player_damage', onPlayerDamage)
+      socket.off('arena_lock_roster', onArenaLockJoin)
+      socket.off('round_start', onRoundStartJoin)
       socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])

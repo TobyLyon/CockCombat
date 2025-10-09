@@ -1260,8 +1260,20 @@ preparePromise.then(() => {
         setTimeout(tryRemoveAfterGrace, 1500);
       } catch {}
 
-      // Remove this socket from active connections immediately; presence uses wallet map above
-      activeConnections.delete(socket.id);
+      // Remove this socket from active connections immediately; but if this wallet still has another live socket, keep the connection as a handoff
+      try {
+        const conn = activeConnections.get(socket.id);
+        const walletAtDisconnect = conn?.walletAddress;
+        let hasOtherLive = false;
+        if (walletAtDisconnect) {
+          for (const [id, c] of activeConnections.entries()) {
+            if (id !== socket.id && c.walletAddress === walletAtDisconnect) { hasOtherLive = true; break; }
+          }
+        }
+        if (!hasOtherLive) {
+          activeConnections.delete(socket.id);
+        }
+      } catch { activeConnections.delete(socket.id); }
 
       // Check if player was in a game room
       for (const [roomId, room] of gameRooms.entries()) {
