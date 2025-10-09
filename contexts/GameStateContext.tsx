@@ -398,13 +398,16 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         return currentPlayers; // Return current state if target is not valid
       }
       
-      const amount = Math.max(1, Math.min(3, Number(damageAmount)));
+      // Treat fractional amounts as visual-only (flash without HP change)
+      const rawAmount = Number(damageAmount)
+      const visualOnly = rawAmount > 0 && rawAmount < 1
+      const amount = visualOnly ? 0 : Math.max(1, Math.min(3, Math.round(rawAmount)));
       newHp = targetPlayer.hp - amount;
       // Play regular hit sound on non-lethal hits
       const isKillshot = newHp <= 0;
-      playSound(isKillshot ? 'strong_punch' : 'punch');
+      if (!visualOnly) playSound(isKillshot ? 'strong_punch' : 'punch');
       
-      if (newHp <= 0) {
+      if (!visualOnly && newHp <= 0) {
         // Player is defeated
         setLastDefeatedChickenId(targetPlayerId);
         if (attackerId) setLastKillerId(String(attackerId));
@@ -431,10 +434,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         return updatedPlayers;
         
       } else {
-        // Player is hit but not defeated
-        return currentPlayers.map(p =>
-          p.id === targetPlayerId ? { ...p, hp: newHp, isHitFlashing: true, lastHitTime: Date.now() } : p
-        );
+        // Player is hit but not defeated (or visual-only)
+        return currentPlayers.map(p => {
+          if (p.id !== targetPlayerId) return p
+          const next = { ...p, isHitFlashing: true, lastHitTime: Date.now() }
+          return visualOnly ? next : { ...next, hp: newHp }
+        });
       }
     });
   };

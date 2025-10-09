@@ -598,12 +598,17 @@ function SceneContent({
         rec.ts = Number(payload.ts)||Date.now()
       } catch {}
     }
+    const lastAppliedDamageRef: Record<string, number> = Object.create(null)
     const onRemotePlayerDamage = (payload: any) => {
       try {
         const targetId = String(payload?.targetId || '')
         const amount = Math.max(1, Math.min(3, Number(payload?.amount)||1))
         if (!targetId || !onPlayerDamage) return
         const byId = typeof payload?.by === 'string' ? payload.by : undefined
+        // Client-side de-dupe by target
+        const now = Date.now()
+        if ((lastAppliedDamageRef[targetId]||0) && now - (lastAppliedDamageRef[targetId]||0) < 150) return
+        lastAppliedDamageRef[targetId] = now
         onPlayerDamage(targetId, amount, byId)
         // Mark a peck moment on attacker for visual sync without duplicating
         try { if (byId && remoteHumansRef.current[byId]) { (remoteHumansRef.current[byId] as any).peckAt = Date.now() } } catch {}
@@ -758,7 +763,9 @@ function SceneContent({
             if (!opponent.isAi && socket) {
               try {
                 const msid = (window as any)?.__last_match_session_id
+                // Send once and locally show hit flash immediately
                 socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
+                try { onPlayerDamage && onPlayerDamage(opponent.id, 0.0001) } catch {}
               } catch {}
             } else if (onPlayerDamage) {
               onPlayerDamage(opponent.id, 1)

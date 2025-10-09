@@ -1106,6 +1106,8 @@ preparePromise.then(() => {
     });
 
     // Realtime arena sync: damage application (tutorial trust model)
+    // Simple de-dupe window per attacker->target to avoid double application
+    if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
     socket.on('player_damage', (payload) => {
       try {
         if (!checkRateLimit('player_damage', 120)) {
@@ -1120,6 +1122,14 @@ preparePromise.then(() => {
         const targetId = String(payload?.targetId || '');
         if (!targetId) return;
         const amount = Math.max(0, Math.min(3, Number(payload?.amount) || 1));
+        // dedupe: attacker-target key
+        try {
+          const key = wallet + '->' + targetId;
+          const now = Date.now();
+          const last = global.__lastDamageMap[key] || 0;
+          if (now - last < 200) return; // 200ms de-dupe
+          global.__lastDamageMap[key] = now;
+        } catch {}
         const targetRoom = matchId ? matchId : lobbyId;
         io.to(targetRoom).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
       } catch {}
