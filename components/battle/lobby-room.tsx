@@ -177,6 +177,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   useEffect(() => {
     if (!socket) return;
 
+    const getDisplayUsername = (p: { playerId?: string; username?: string; isAi?: boolean }) => {
+      const idStr = String(p.playerId || '')
+      const isGuest = idStr.startsWith('guest_')
+      if (p.isAi) return (p.username && p.username.trim()) || 'AI'
+      if (p.username && p.username.trim()) return p.username
+      return isGuest ? idStr : (idStr ? idStr.slice(0, 8) + '...' : 'Player')
+    }
+
+    const getChickenName = (p: any) => p.chickenId || p.chickenName || 'Default'
+
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
@@ -185,36 +195,36 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       // Update players list with the lobby data
       if (updatedLobby.players) {
         console.log('Setting players:', updatedLobby.players);
-        // Map to display format (no client placeholders)
-        const mapped: LobbyPlayer[] = updatedLobby.players.map((p: any) => {
-          const idStr = String(p.playerId || '')
-          const isGuest = idStr.startsWith('guest_')
-          const displayName = p.isAi
-            ? (p.username || 'AI')
-            : (p.username || (isGuest ? idStr : idStr.slice(0, 8) + '...'))
-          return {
-            playerId: p.playerId,
-            username: displayName,
-            chickenName: p.chickenId || 'Default',
+        // Map and dedupe to display format (consistent across sources)
+        const seen = new Set<string>()
+        const mapped: LobbyPlayer[] = []
+        for (const p of updatedLobby.players as any[]) {
+          const pid = String(p.playerId || '')
+          if (seen.has(pid)) continue
+          seen.add(pid)
+          mapped.push({
+            playerId: pid,
+            username: getDisplayUsername(p),
+            chickenName: getChickenName(p),
             isReady: p.isAi ? true : Boolean(p.isReady),
             isAi: !!p.isAi,
-          }
-        })
-        setPlayers(mapped);
+          })
+        }
+        setPlayers(mapped)
       }
     };
 
-    const handlePlayerJoined = (data: { playerId: string, username: string, chickenName?: string, isReady: boolean, isAi: boolean }) => {
+    const handlePlayerJoined = (data: { playerId: string, username?: string, chickenName?: string, isReady?: boolean, isAi?: boolean }) => {
       console.log('👋 Player joined:', data);
       setPlayers(prev => {
         // Remove existing player if any, then add new one
         const filtered = prev.filter(p => p.playerId !== data.playerId);
         return [...filtered, {
           playerId: data.playerId,
-          username: data.username,
-          chickenName: data.chickenName,
-          isReady: data.isReady,
-          isAi: data.isAi
+          username: getDisplayUsername(data),
+          chickenName: data.chickenName || 'Default',
+          isReady: data.isAi ? true : Boolean(data.isReady),
+          isAi: !!data.isAi
         }];
       });
     };
