@@ -57,6 +57,8 @@ export default function BattleArena() {
     setMatchMeta
   } = useGameState();
   const { socket } = useSocket();
+  // Live counts overlay
+  const [liveCounts, setLiveCounts] = useState<Record<string, { liveHumans: number; liveTotal: number }>>({})
   
   // Local state for chicken selection since we removed it from the context
   const [selectedChicken, setSelectedChicken] = useState(null);
@@ -207,6 +209,32 @@ export default function BattleArena() {
       }
     };
   }, [inLobbyRoom, hasLoadedLobbies]);
+
+  // Subscribe to live lobby counts from socket
+  useEffect(() => {
+    if (!socket) return
+    const onCounts = (payload: any) => {
+      try {
+        const { id, liveHumans, liveTotal } = payload || {}
+        if (!id) return
+        setLiveCounts(prev => ({ ...prev, [id]: { liveHumans: Number(liveHumans)||0, liveTotal: Number(liveTotal)||0 } }))
+      } catch {}
+    }
+    const onSnapshot = (payload: any) => {
+      try {
+        const map = (payload && payload.counts) || {}
+        setLiveCounts(map)
+      } catch {}
+    }
+    socket.on('lobby_counts', onCounts)
+    socket.on('lobby_counts_snapshot', onSnapshot)
+    // Request an initial snapshot
+    try { socket.emit('get_lobby_counts') } catch {}
+    return () => {
+      socket.off('lobby_counts', onCounts)
+      socket.off('lobby_counts_snapshot', onSnapshot)
+    }
+  }, [socket])
 
   // Handle drumstick collection
   const handleDrumstickCollected = (id: string) => {
@@ -462,9 +490,10 @@ export default function BattleArena() {
                           
                           {/* Players Count */}
                           {(() => {
-                            const rawCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0;
-                            const playerCount = rawCount;
-                            const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100));
+                            const rawCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0
+                            const live = liveCounts[lobby.id]
+                            const playerCount = live ? Math.max(rawCount, live.liveHumans) : rawCount
+                            const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
                             return (
                               <>
                                 <div className="flex items-center justify-between mb-2 lg:mb-2">

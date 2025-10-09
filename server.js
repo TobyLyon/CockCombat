@@ -213,6 +213,13 @@ preparePromise.then(() => {
             global.lobbyPresence.get(lobbyId).add(connection.walletAddress);
           }
         }
+
+        // Broadcast updated counts derived from presence
+        try {
+          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+          io.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+        } catch {}
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
         try {
@@ -317,6 +324,13 @@ preparePromise.then(() => {
             // Handshake: confirm to the joiner that the lobby is synced
             try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
 
+            // Also send current counts snapshot for this lobby to the joiner
+            try {
+              const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+              const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+              socket.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+            } catch {}
+
             // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
             try {
               const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
@@ -413,11 +427,21 @@ preparePromise.then(() => {
           }
         }
         
-        // Broadcast to lobby that someone left
-        socket.to(lobbyId).emit('player_left_lobby', {
-          playerId: socket.id,
-          timestamp: Date.now()
-        });
+        // Broadcast to lobby that someone left (use wallet if known to avoid ghost entries)
+        try {
+          const leftPlayerId = connection?.walletAddress || socket.id;
+          socket.to(lobbyId).emit('player_left_lobby', {
+            playerId: leftPlayerId,
+            timestamp: Date.now()
+          });
+        } catch {}
+
+        // Also broadcast updated live counts for the lobby
+        try {
+          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+          io.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+        } catch {}
 
         // Emit an updated lobby roster immediately
         try {
@@ -697,6 +721,30 @@ preparePromise.then(() => {
         }
       } catch (e) {
         console.warn('ensure_queue_progress failed:', e?.message || e);
+      }
+    });
+
+    // Provide a snapshot of lobby counts for all lobbies
+    socket.on('get_lobby_counts', async () => {
+      if (!checkRateLimit('get_lobby_counts', 10)) {
+        console.warn(`⚠️ Rate limit exceeded for get_lobby_counts: ${socket.id}`);
+        return;
+      }
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+        const all = res ? await res.json().catch(() => []) : [];
+        const counts = {};
+        for (const l of Array.isArray(all) ? all : []) {
+          const lid = l && l.id ? l.id : null;
+          if (!lid) continue;
+          const presence = (global.lobbyPresence && global.lobbyPresence.get(lid)) || new Set();
+          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+          counts[lid] = { liveHumans: humans.length, liveTotal: presence.size };
+        }
+        socket.emit('lobby_counts_snapshot', { counts });
+      } catch (e) {
+        socket.emit('lobby_counts_snapshot', { counts: {} });
       }
     });
 
@@ -1107,7 +1155,7 @@ preparePromise.then(() => {
                     isAi: player.isAi || false
                   };
                 });
-                io.to(lobbyAtDisconnect).emit('lobby_updated', {
+            io.to(lobbyAtDisconnect).emit('lobby_updated', {
                   id: lobbyAtDisconnect,
                   players: lobbyPlayers,
                   capacity: lobby.capacity,
@@ -1115,6 +1163,12 @@ preparePromise.then(() => {
                   currency: lobby.currency,
                   matchType: lobby.matchType
                 });
+            // Broadcast updated counts derived from presence
+            try {
+              const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
+              const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+              io.emit('lobby_counts', { id: lobbyAtDisconnect, liveHumans: humans.length, liveTotal: presence.size });
+            } catch {}
               }
             } catch {}
           } catch {}

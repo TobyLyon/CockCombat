@@ -361,6 +361,13 @@ export async function POST(req: NextRequest) {
         matchType: lobby.matchType
       });
 
+      // Emit live counts for cards based on presence
+      try {
+        const presence = ((global as any).lobbyPresence && (global as any).lobbyPresence.get(lobbyId)) || new Set();
+        const humans = Array.from(presence.values()).filter((w: any) => !(String(w).startsWith('ai-')));
+        socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+      } catch {}
+
       console.log(`🔄 Broadcasted player join to lobby room ${lobbyId}`);
     } else {
       console.log('⚠️ Socket.IO not available - player join not broadcasted');
@@ -445,6 +452,13 @@ export async function DELETE(req: NextRequest) {
           currency: lobby.currency,
           matchType: lobby.matchType
         });
+
+        // Emit live counts for cards based on presence
+        try {
+          const presence = ((global as any).lobbyPresence && (global as any).lobbyPresence.get(lobbyId)) || new Set();
+          const humans = Array.from(presence.values()).filter((w: any) => !(String(w).startsWith('ai-')));
+          socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+        } catch {}
       }
     } catch (e) {
       console.log('Could not broadcast lobby leave:', e);
