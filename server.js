@@ -1036,9 +1036,10 @@ preparePromise.then(() => {
           return;
         }
         const connection = activeConnections.get(socket.id);
-        if (!connection || !connection.currentLobby) return;
-        const lobbyId = connection.currentLobby;
+        if (!connection) return;
+        const lobbyId = connection.currentLobby || String(payload?.lobbyId || '');
         const matchId = connection.currentMatch || String(payload?.matchSessionId || '');
+        if (!lobbyId && !matchId) return;
         const wallet = connection.walletAddress || socket.id;
         // Sanitize payload
         const pos = Array.isArray(payload?.position) && payload.position.length >= 3
@@ -1064,9 +1065,10 @@ preparePromise.then(() => {
           return;
         }
         const connection = activeConnections.get(socket.id);
-        if (!connection || !connection.currentLobby) return;
-        const lobbyId = connection.currentLobby;
+        if (!connection) return;
+        const lobbyId = connection.currentLobby || String(payload?.lobbyId || '');
         const matchId = connection.currentMatch || String(payload?.matchSessionId || '');
+        if (!lobbyId && !matchId) return;
         const wallet = connection.walletAddress || socket.id;
         const targetId = String(payload?.targetId || '');
         if (!targetId) return;
