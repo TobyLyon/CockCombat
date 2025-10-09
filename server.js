@@ -304,23 +304,38 @@ preparePromise.then(() => {
               socket.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
             } catch {}
 
-            // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
+            // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
             try {
               const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
               const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
               const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
               const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
               if (allReady && lobbyId.includes('tutorial')) {
-                // Emit only to this socket to avoid double-emitting to the entire room
-                let c = 5;
-                const t = setInterval(() => {
-                  socket.emit('match_starting', { countdown: c });
-                  c--;
-                  if (c < 0) {
-                    clearInterval(t);
-                    socket.emit('match_started');
-                  }
-                }, 1000);
+                if (global.countdownActive && global.countdownActive[lobbyId]) {
+                  // already counting down
+                } else {
+                  if (!global.countdownActive) global.countdownActive = Object.create(null);
+                  global.countdownActive[lobbyId] = true;
+                  let c = 5;
+                  const interval = setInterval(() => {
+                    try { io.to(lobbyId).emit('match_starting', { countdown: c }); } catch {}
+                    c--;
+                    if (c < 0) {
+                      clearInterval(interval);
+                      try { io.to(lobbyId).emit('match_started'); } catch {}
+                      try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+                      // Build presence-based roster
+                      try {
+                        const presence = global.lobbyPresence?.get(lobbyId) || new Set();
+                        const humans = Array.from(presence.values()).map((addr) => ({
+                          wallet: String(addr), isAi: false,
+                          username: String(addr).slice(0,8)+'...', chickenName: 'Default'
+                        }));
+                        startQueuePhase(lobbyId, io, humans).catch(() => {});
+                      } catch {}
+                    }
+                  }, 1000);
+                }
               }
             } catch {}
             
