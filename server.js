@@ -1030,7 +1030,7 @@ preparePromise.then(() => {
         const lobbyAtDisconnect = connection?.currentLobby;
         const walletAtDisconnect = connection?.walletAddress;
 
-        const tryRemoveAfterGrace = () => {
+        const tryRemoveAfterGrace = async () => {
           try {
             if (!lobbyAtDisconnect || !walletAtDisconnect) return;
             // If any other socket with the same wallet is connected, skip removal
