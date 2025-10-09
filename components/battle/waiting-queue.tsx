@@ -246,7 +246,12 @@ export default function WaitingQueue({
       setCurrentLobby(prev => {
         const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players;
         // Prevent regressions (e.g., falling back to HTTP with smaller list overwriting socket state)
-        const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers;
+        // Merge by playerId to avoid disappearing entries on quick-ready updates
+        const byId = new Map<string, any>(Array.isArray(prev.players) ? prev.players.map((p:any) => [String(p.playerId), p]) : [])
+        for (const p of (Array.isArray(nextPlayers) ? nextPlayers : [])) {
+          byId.set(String(p.playerId), { ...(byId.get(String(p.playerId))||{}), ...p })
+        }
+        const mergedPlayers = Array.from(byId.values())
         mergedPlayersLocal = mergedPlayers
         return {
           ...prev,
@@ -268,7 +273,11 @@ export default function WaitingQueue({
       let mergedPlayersLocal: any[] = []
       setCurrentLobby(prev => {
         const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players
-        const mergedPlayers = (prev.players || []).length > (nextPlayers || []).length ? prev.players : nextPlayers
+        const byId = new Map<string, any>(Array.isArray(prev.players) ? prev.players.map((p:any) => [String(p.playerId), p]) : [])
+        for (const p of (Array.isArray(nextPlayers) ? nextPlayers : [])) {
+          byId.set(String(p.playerId), { ...(byId.get(String(p.playerId))||{}), ...p })
+        }
+        const mergedPlayers = Array.from(byId.values())
         mergedPlayersLocal = mergedPlayers
         return {
           ...prev,

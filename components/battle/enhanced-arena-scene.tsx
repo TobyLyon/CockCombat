@@ -575,6 +575,16 @@ function SceneContent({
         if (!targetId || !onPlayerDamage) return
         const byId = typeof payload?.by === 'string' ? payload.by : undefined
         onPlayerDamage(targetId, amount, byId)
+        // Drive a peck visual on attacker even if a peck-state packet was dropped
+        try {
+          if (byId) {
+            const rec = remoteHumansRef.current[byId]
+            if (rec) {
+              ;(rec as any).isPecking = true
+              setTimeout(() => { try { (rec as any).isPecking = false } catch {} }, 250)
+            }
+          }
+        } catch {}
       } catch {}
     }
     socket.on('player_state', onPlayerState)
@@ -1182,8 +1192,12 @@ function ChickenInstances({
           // Apply smoothing toward remote transform and set anim hints
           const prevX = g.position.x
           const prevZ = g.position.z
-          // Smooth position and rotation
-          g.position.lerp(pos, 0.35)
+          // Smooth X/Z toward remote, snap Y for crisp jump arc
+          const prevX2 = g.position.x
+          const prevZ2 = g.position.z
+          g.position.x += (pos.x - g.position.x) * 0.35
+          g.position.z += (pos.z - g.position.z) * 0.35
+          g.position.y = pos.y
           if (net) {
             const targetY = net.rotY
             const lerpAngle = (a: number, b: number, t: number) => {
@@ -1194,8 +1208,8 @@ function ChickenInstances({
             }
             g.rotation.y = lerpAngle(g.rotation.y, targetY, 0.35)
             // Drive walk/peck anims from deltas and net flags
-            const dx = g.position.x - prevX
-            const dz = g.position.z - prevZ
+            const dx = g.position.x - prevX2
+            const dz = g.position.z - prevZ2
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try { if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now() } catch {}
           } else {
