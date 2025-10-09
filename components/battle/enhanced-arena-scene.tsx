@@ -785,6 +785,8 @@ function FinalArenaCountdownWithPings({ playPing }: { playPing?: (s: string) => 
   useEffect(() => {
     let v = 3
     setValue(v)
+    // Immediate soft ping for the initial '3'
+    try { if (playPing) playPing('click') } catch {}
     const t = setInterval(() => {
       v -= 1
       setValue(v)
