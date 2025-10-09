@@ -86,7 +86,8 @@ export default function BattleArena() {
     if (!socket) return
     let startTimer: ReturnType<typeof setTimeout> | null = null
     const ensureStart = () => {
-      if (gameState !== 'battle') {
+      // Only allow auto-start while explicitly on the queue screen.
+      if (gameState === 'queue') {
         try { startBattle() } catch {}
       }
     }
