@@ -209,7 +209,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             Share to X (Twitter)
           </Button>
           <p className="text-gray-400 text-sm">
-            Auto-returning in {autoExitTimer}s...
+            Auto-returning in {Math.max(10, autoExitTimer)}s...
           </p>
         </div>
       </motion.div>

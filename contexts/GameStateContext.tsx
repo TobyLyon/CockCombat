@@ -396,7 +396,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         return currentPlayers; // Return current state if target is not valid
       }
       
-      newHp = targetPlayer.hp - damageAmount;
+      const amount = Math.max(1, Math.min(3, Number(damageAmount)));
+      newHp = targetPlayer.hp - amount;
       // Play regular hit sound on non-lethal hits
       const isKillshot = newHp <= 0;
       playSound(isKillshot ? 'strong_punch' : 'punch');
@@ -519,51 +520,29 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       return 'guest_local';
     })();
 
-    // Build self entry with deterministic colors
-    const selfColors = getDeterministicColorsForId(myId);
-    const selfPlayer: PlayerStatus = {
-      id: myId,
-      name: profile?.username || 'You',
-      isPlayer: true,
-      position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
-      rotation: new THREE.Euler(0, 0, 0),
-      colors: selfColors,
-      hp: 3,
-      maxHp: 3,
-      isAlive: true,
-      visible: true,
-    };
-
-    // Other humans come directly from lobbyPlayers (these are synced from sockets) with stable sort by id
-    const otherHumans = lobbyPlayers
-      .filter(lp => String(lp.id) !== myId && !(lp as any).isAi)
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const aiChickens = lobbyPlayers.filter(lp => (lp as any).isAi);
-    const battlePlayers = [selfPlayer, ...otherHumans, ...aiChickens];
-    
-    // Position ALL chickens (including player) around the ring using stable order:
-    // 1) Player first, then humans, then AIs, to reserve unique spawn slots for humans
-    const ringRadius = 10; // Reduced from 20 to 10 for smaller arena
-    const playerSelf = battlePlayers.find(p => p.isPlayer)
-    const otherHumansOrdered = battlePlayers.filter(p => !p.isPlayer && !(p as any).isAi)
-    const aiChickensOrdered = battlePlayers.filter(p => (p as any).isAi)
-    const ordered = [playerSelf, ...otherHumansOrdered, ...aiChickensOrdered].filter(Boolean) as typeof battlePlayers
-    const totalChickens = ordered.length
-    const positions = generateOpponentPositions(totalChickens, ringRadius)
-    // Rotate spawn order so player spawns opposite first opponent when 2 humans
-    const rotated = (() => {
-      if (totalChickens === 2) {
-        return [positions[0], positions[1]]
-      }
-      return positions
-    })()
-
-    // Update positions for all chickens in the new stable order
-    const positionedPlayers = ordered.map((player, index) => ({
-      ...player,
-      position: rotated[index].position,
-      rotation: rotated[index].rotation
-    }));
+    // Build battle roster in the exact server-provided order (from syncLobbyPlayers)
+    const ringRadius = 10;
+    const roster = lobbyPlayers.slice();
+    const totalChickens = roster.length;
+    const positions = generateOpponentPositions(totalChickens, ringRadius);
+    const positionedPlayers: PlayerStatus[] = roster.map((entry, index) => {
+      const id = String(entry.id);
+      const isSelf = id === myId;
+      const colors = entry.colors || getDeterministicColorsForId(id);
+      return {
+        id,
+        name: isSelf ? (profile?.username || 'You') : (entry.name || entry.id.slice(0, 8) + '...'),
+        isPlayer: isSelf,
+        isAi: Boolean((entry as any).isAi),
+        position: positions[index].position,
+        rotation: positions[index].rotation,
+        colors,
+        hp: 3,
+        maxHp: 3,
+        isAlive: true,
+        visible: true,
+      };
+    });
     
     // Set initial chickens count
     setChickensLeft(positionedPlayers.length);

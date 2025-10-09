@@ -538,7 +538,7 @@ function SceneContent({
     const onRemotePlayerDamage = (payload: any) => {
       try {
         const targetId = String(payload?.targetId || '')
-        const amount = Math.max(0, Math.min(3, Number(payload?.amount)||1))
+        const amount = Math.max(1, Math.min(3, Number(payload?.amount)||1))
         if (!targetId || !onPlayerDamage) return
         onPlayerDamage(targetId, amount)
       } catch {}
