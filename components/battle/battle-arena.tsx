@@ -79,6 +79,37 @@ export default function BattleArena() {
   // Check if player is victorious (player is alive and all others are dead)
   const isVictorious = Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);
 
+  // Robust queue->battle transition: listen at top-level too in case the waiting view misses the event
+  useEffect(() => {
+    if (!socket) return
+    let startTimer: ReturnType<typeof setTimeout> | null = null
+    const ensureStart = () => {
+      if (gameState !== 'battle') {
+        try { startBattle() } catch {}
+      }
+    }
+    const onStarted = () => ensureStart()
+    const onLock = (payload: any) => {
+      try {
+        const startAt = Number(payload?.roundStartAtEpochMs) || 0
+        if (startAt > 0) {
+          const delay = Math.max(0, startAt - Date.now() + 100)
+          if (startTimer) clearTimeout(startTimer)
+          startTimer = setTimeout(ensureStart, delay)
+        }
+      } catch {}
+    }
+    socket.on('round_start', onStarted)
+    socket.on('match_started', onStarted)
+    socket.on('arena_lock_roster', onLock)
+    return () => {
+      socket.off('round_start', onStarted)
+      socket.off('match_started', onStarted)
+      socket.off('arena_lock_roster', onLock)
+      if (startTimer) clearTimeout(startTimer)
+    }
+  }, [socket, startBattle, gameState])
+
   // Apply arena-specific CSS classes only during active battles
   useEffect(() => {
     const arenaDiv = document.querySelector('.battle-arena-container');

@@ -1436,7 +1436,11 @@ preparePromise.then(() => {
       }
 
       // Build final roster: include present humans; tutorial also keeps any AI in expected roster
-      const finalRoster = expectedRoster.filter(p => p.isAi || presentHumans.includes(p.wallet));
+      let finalRoster = expectedRoster.filter(p => p.isAi || presentHumans.includes(p.wallet));
+      // Tutorial safety: if somehow empty, keep at least the first ready human to avoid stalling
+      if (isTutorial && finalRoster.length === 0 && presentHumans.length > 0) {
+        finalRoster = expectedRoster.filter(p => p.wallet === presentHumans[0]);
+      }
 
       // Refund any paid human who failed the queue handshake (ranked only)
       if (!isTutorial) {
