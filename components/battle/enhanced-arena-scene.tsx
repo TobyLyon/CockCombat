@@ -512,6 +512,9 @@ function SceneContent({
     [players, playerChicken?.id]
   );
 
+  // Maintain a brief decay window for remote jump flags to avoid flicker
+  const remoteJumpUntilRef = useRef<Record<string, number>>({})
+
   // Socket hookup for consuming remote transforms and applying remote hits
   const { socket } = useSocket() as any
   useEffect(() => {
@@ -532,6 +535,10 @@ function SceneContent({
         rec.pos.set(Number(payload.position?.x)||0, Number(payload.position?.y)||0.85, Number(payload.position?.z)||0)
         rec.rotY = Number(payload.rotationY)||0
         rec.isPecking = Boolean(payload.isPecking)
+        ;(rec as any).isJumping = Boolean(payload.isJumping)
+        if ((rec as any).isJumping) {
+          remoteJumpUntilRef.current[id] = Date.now() + 300 // keep jumping true for 300ms after last true
+        }
         rec.ts = Number(payload.ts)||Date.now()
       } catch {}
     }
@@ -832,6 +839,7 @@ function SceneContent({
           position: [selfPosition.x, selfPosition.y, selfPosition.z],
           rotationY: selfRotation.y,
           isPecking: selfIsPecking,
+          isJumping: selfIsJumping,
         })
       }
     } catch {}
@@ -895,6 +903,7 @@ function SceneContent({
                 position: rec.pos.clone(),
                 rotation: new THREE.Euler(0, rec.rotY, 0),
                 isAi: false,
+                isJumping: Boolean((rec as any).isJumping) || ((remoteJumpUntilRef.current[p.id]||0) > Date.now()),
               } as PlayerStatus
               return blended
             }

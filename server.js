@@ -1076,12 +1076,14 @@ preparePromise.then(() => {
           : [0, 0.85, 0];
         const rotY = Number(payload?.rotationY);
         const isPecking = Boolean(payload?.isPecking);
+        const isJumping = Boolean(payload?.isJumping);
         const targetRoom = matchId ? matchId : lobbyId;
         io.to(targetRoom).emit('player_state', {
           playerId: wallet,
           position: { x: Number(pos[0]) || 0, y: Number(pos[1]) || 0.85, z: Number(pos[2]) || 0 },
           rotationY: isFinite(rotY) ? rotY : 0,
           isPecking,
+          isJumping,
           ts: Date.now(),
         });
       } catch {}
