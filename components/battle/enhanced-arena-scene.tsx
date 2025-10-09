@@ -706,7 +706,7 @@ function SceneContent({
     <>
       {/* In-arena 3-second final countdown overlay */}
       <Html center style={{ pointerEvents: 'none' }}>
-        <FinalArenaCountdownWithPings />
+        <FinalArenaCountdownWithPings playPing={playSound} />
       </Html>
       {/* Lights */}
       <ambientLight intensity={0.5} />
@@ -779,10 +779,9 @@ function SceneContent({
 }
 
 // Simple 3s countdown shown in the arena when the battle scene first mounts
-function FinalArenaCountdownWithPings() {
+function FinalArenaCountdownWithPings({ playPing }: { playPing?: (s: string) => void }) {
   const [value, setValue] = useState(3)
   const [done, setDone] = useState(false)
-  const { playSound } = useGameState();
   useEffect(() => {
     let v = 3
     setValue(v)
@@ -790,7 +789,7 @@ function FinalArenaCountdownWithPings() {
       v -= 1
       setValue(v)
       try {
-        if (v > 0) playSound('click'); // light ping for 3..2..1
+        if (v > 0 && playPing) playPing('click'); // light ping for 3..2..1
       } catch {}
       if (v <= 0) { clearInterval(t); setDone(true) }
     }, 1000)
