@@ -261,29 +261,16 @@ export default function WaitingQueue({
     const expected = Math.min(expectedCountRef.current || count, currentLobby.capacity || count)
     const hasHuman = players.some((p: any) => !p.isAi)
     if (count >= expected && hasHuman) {
-      if (lastCountRef.current === count) {
-        stableTicksRef.current = (stableTicksRef.current || 0) + 1
-      } else {
-        lastCountRef.current = count
-        stableTicksRef.current = 1
-      }
-      // After two stable ticks (~two consecutive updates), trigger a final state fetch then start
-      if (stableTicksRef.current >= 2) {
-        try {
-          socket?.emit?.('get_lobby_state', lobby.id)
-          socket?.emit?.('ensure_queue_progress', lobby.id)
-        } catch {}
-        setTimeout(() => {
-          if (!launchedRef.current) {
-            launchedRef.current = true
-            try { playSound('button') } catch {}
-            onStartBattle()
-          }
-        }, 400)
-      }
-    } else {
-      lastCountRef.current = count
-      stableTicksRef.current = 0
+      // Fire immediately to avoid race with server events; also request server progress
+      try {
+        socket?.emit?.('get_lobby_state', lobby.id)
+        socket?.emit?.('ensure_queue_progress', lobby.id)
+      } catch {}
+      launchedRef.current = true
+      setTimeout(() => {
+        try { playSound('button') } catch {}
+        onStartBattle()
+      }, 200)
     }
   }, [players, socket, lobby.id, currentLobby.capacity, onStartBattle, playSound])
   
