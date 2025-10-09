@@ -56,6 +56,30 @@ global.gameRooms = gameRooms;
 
 // Username cache to reduce database queries
 const usernameCache = new Map();
+async function getUsernameForWallet(wallet) {
+  try {
+    const key = String(wallet || '');
+    if (!key) return '';
+    const cached = usernameCache.get(key);
+    if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.name;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+    const res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
+    let name = null;
+    if (res && res.ok) {
+      try { const data = await res.json(); name = (data && data.username) ? String(data.username) : null; } catch {}
+    }
+    if (!name) name = `${key.slice(0,8)}...`;
+    usernameCache.set(key, { name, ts: Date.now() });
+    return name;
+  } catch {
+    try {
+      const key = String(wallet || '');
+      const fallback = key ? `${key.slice(0,8)}...` : '';
+      usernameCache.set(key, { name: fallback, ts: Date.now() });
+      return fallback;
+    } catch { return ''; }
+  }
+}
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 preparePromise.then(() => {
@@ -240,24 +264,23 @@ preparePromise.then(() => {
             // Instead, just refresh the lobby state for everyone
             console.log(`🔄 Refreshing lobby state for all players in ${lobbyId}`);
             
-            let lobbyPlayers = lobby.players.map(player => {
-              // Check ready status from socket connections PER PLAYER
+            let lobbyPlayers = [];
+            for (const player of lobby.players) {
               let isReady = false;
               for (const [, conn] of activeConnections.entries()) {
-                if (conn.currentLobby === lobbyId && conn.walletAddress === player.playerId) {
-                  isReady = !!conn.isReady;
-                  break;
-                }
+                if (conn.currentLobby === lobbyId && conn.walletAddress === player.playerId) { isReady = !!conn.isReady; break; }
               }
-              return {
+              const displayName = player.username && player.username.trim().length > 0
+                ? player.username
+                : await getUsernameForWallet(player.playerId);
+              lobbyPlayers.push({
                 playerId: player.playerId,
-                username: player.username || player.playerId.slice(0, 8) + '...',
+                username: displayName,
                 chickenName: player.chickenId || 'Default',
-                // AI auto-ready only in tutorial lobbies
                 isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
                 isAi: player.isAi || false
-              };
-            });
+              });
+            }
 
             // Presence-based fallback: if API list is empty but sockets are present, synthesize players from presence
             try {
@@ -438,19 +461,23 @@ preparePromise.then(() => {
           const all = res ? await res.json().catch(() => []) : [];
           const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
           if (lobby) {
-            let lobbyPlayers = lobby.players.map(player => {
+            let lobbyPlayers = [];
+            for (const player of lobby.players) {
               let isReady = false;
               for (const [, c] of activeConnections.entries()) {
                 if (c.currentLobby === lobbyId && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
               }
-              return {
+              const displayName = player.username && player.username.trim().length > 0
+                ? player.username
+                : await getUsernameForWallet(player.playerId);
+              lobbyPlayers.push({
                 playerId: player.playerId,
-                username: player.username || player.playerId.slice(0, 8) + '...',
+                username: displayName,
                 chickenName: player.chickenId || 'Default',
                 isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
                 isAi: player.isAi || false
-              };
-            });
+              });
+            }
             io.to(lobbyId).emit('lobby_updated', {
               id: lobbyId,
               players: lobbyPlayers,
@@ -601,8 +628,8 @@ preparePromise.then(() => {
         
         if (lobby) {
           // Merge API lobby players with socket ready status
-          let lobbyPlayers = lobby.players.map(player => {
-            // Check if this player has a socket connection with ready status
+          let lobbyPlayers = [];
+          for (const player of lobby.players) {
             let isReady = false;
             for (const [, connection] of activeConnections.entries()) {
               if (connection.currentLobby === lobbyId && connection.walletAddress === player.playerId) {
@@ -610,15 +637,17 @@ preparePromise.then(() => {
                 break;
               }
             }
-            return {
+            const displayName = player.username && player.username.trim().length > 0
+              ? player.username
+              : await getUsernameForWallet(player.playerId);
+            lobbyPlayers.push({
               playerId: player.playerId,
-              username: player.username || player.playerId.slice(0, 8) + '...',
+              username: displayName,
               chickenName: player.chickenId || 'Default',
-              // AI auto-ready only in tutorial lobbies
               isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
               isAi: player.isAi || false
-            };
-          });
+            });
+          }
 
           // Presence-based fallback if API is empty
           try {
