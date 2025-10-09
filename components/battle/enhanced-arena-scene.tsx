@@ -739,6 +739,8 @@ function SceneContent({
         <ChickenInstances
           chickens={players.filter(p => p.isAlive && !p.isPlayer)}
           playerChickenId={playerChicken?.id || ''}
+          playerRef={playerRef}
+          onAiDamagePlayer={() => { if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1) }}
         />
       )}
 
@@ -850,61 +852,135 @@ BarbedWireFence.displayName = 'BarbedWireFence';
 
 // ChickenInstances component (Modified)
 function ChickenInstances({
-    chickens, 
-    playerChickenId 
+    chickens,
+    playerChickenId,
+    playerRef,
+    onAiDamagePlayer
   }: {
-    chickens: PlayerStatus[], // Expects already filtered opponents if playerChickenId is also used for filtering
-    playerChickenId: string 
+    chickens: PlayerStatus[],
+    playerChickenId: string,
+    playerRef?: React.RefObject<THREE.Group>,
+    onAiDamagePlayer?: () => void
   }) {
+    const groupsRef = useRef<Record<string, THREE.Group | null>>({})
+    const lastPeckRef = useRef<Record<string, number>>({})
+    const wanderTargetRef = useRef<Record<string, THREE.Vector3>>({})
+    const wanderUntilRef = useRef<Record<string, number>>({})
+
+    useFrame((_, delta) => {
+      const playerPos = (() => {
+        try {
+          const v = new THREE.Vector3()
+          if (playerRef?.current) { playerRef.current.getWorldPosition(v); return v }
+        } catch {}
+        return new THREE.Vector3(0, 0.85, 0)
+      })()
+
+      const now = performance.now()
+      const ringRadius = ARENA_CONFIG.ringRadius
+      const maxBounds = ringRadius - 2
+
+      for (const chicken of chickens) {
+        if (!chicken.isAlive || chicken.id === playerChickenId) continue
+        const g = groupsRef.current[chicken.id]
+        if (!g) continue
+
+        const pos = g.position.clone()
+        pos.y = 0.85
+        const toPlayer = playerPos.clone().sub(pos)
+        const dist = Math.hypot(toPlayer.x, toPlayer.z)
+
+        // Face player
+        const targetAngle = Math.atan2(toPlayer.x, toPlayer.z)
+        g.rotation.y = THREE.MathUtils.lerpAngle(g.rotation.y, targetAngle, 0.15)
+
+        let speed = 2.2 // easy chase speed
+        let moveVec = new THREE.Vector3(0, 0, 0)
+
+        if (dist > 6) {
+          // Wander when far: pick a temporary target and stroll
+          if (!wanderTargetRef.current[chicken.id] || (wanderUntilRef.current[chicken.id] || 0) < now) {
+            const angle = Math.random() * Math.PI * 2
+            const r = Math.min(maxBounds - 1, 6 + Math.random() * 6)
+            wanderTargetRef.current[chicken.id] = new THREE.Vector3(
+              Math.cos(angle) * r,
+              0.85,
+              Math.sin(angle) * r
+            )
+            wanderUntilRef.current[chicken.id] = now + 2500 + Math.random() * 2000
+          }
+          const w = wanderTargetRef.current[chicken.id].clone().sub(pos)
+          const len = Math.hypot(w.x, w.z) || 1
+          moveVec.set((w.x / len) * 1.2, 0, (w.z / len) * 1.2)
+        } else if (dist > 2.6) {
+          // Chase when near
+          const len = Math.max(0.0001, Math.hypot(toPlayer.x, toPlayer.z))
+          moveVec.set((toPlayer.x / len) * speed, 0, (toPlayer.z / len) * speed)
+        } else {
+          // In range: try to peck with cooldown
+          const last = lastPeckRef.current[chicken.id] || 0
+          if (now - last > 1200) {
+            lastPeckRef.current[chicken.id] = now
+            try { onAiDamagePlayer && onAiDamagePlayer() } catch {}
+          }
+        }
+
+        // Apply movement
+        pos.x += moveVec.x * delta
+        pos.z += moveVec.z * delta
+
+        // Keep inside ring
+        const d = Math.hypot(pos.x, pos.z)
+        if (d > maxBounds) {
+          pos.x = (pos.x / d) * maxBounds
+          pos.z = (pos.z / d) * maxBounds
+        }
+        g.position.copy(pos)
+      }
+    })
 
     return (
       <>
         {chickens.map((chicken) => {
-          // Ensure chicken is alive (primary filter, could also be done before passing to this component)
-          if (!chicken.isAlive) return null;
-          // If this component receives all players, filter out the main player
-          if (chicken.id === playerChickenId) return null;
-
+          if (!chicken.isAlive) return null
+          if (chicken.id === playerChickenId) return null
           const chickenPos = chicken.position instanceof THREE.Vector3
             ? chicken.position
             : Array.isArray(chicken.position)
               ? new THREE.Vector3(chicken.position[0], chicken.position[1], chicken.position[2])
-              : new THREE.Vector3(0, 0.85, 0); // Default if no position
-
-          // Ensure Y position is correct for the ground
-          chickenPos.y = 0.85;
-
+              : new THREE.Vector3(0, 0.85, 0)
+          chickenPos.y = 0.85
           const chickenRot = chicken.rotation instanceof THREE.Euler
             ? chicken.rotation
             : new THREE.Euler(
                 Array.isArray(chicken.rotation) ? chicken.rotation[0] : 0,
                 Array.isArray(chicken.rotation) ? chicken.rotation[1] : 0,
                 Array.isArray(chicken.rotation) ? chicken.rotation[2] : 0
-              );
-
+              )
           return (
             <group
               key={chicken.id}
+              ref={(el) => { groupsRef.current[chicken.id] = el }}
               position={chickenPos}
               rotation={chickenRot}
             >
               <PixelChicken
-                position={[0,0,0]} 
-                colors={chicken.colors} // Pass opponent's specific colors
-                isWalking={chicken.isWalking || false} 
-                isPecking={chicken.isPecking || false} 
-                isJumping={chicken.isJumping || false} 
+                position={[0,0,0]}
+                colors={chicken.colors}
+                isWalking={false}
+                isPecking={false}
+                isJumping={false}
                 isHitFlashing={chicken.isHitFlashing || false}
-                isDying={!chicken.isAlive} 
+                isDying={!chicken.isAlive}
                 health={chicken.hp}
                 maxHealth={chicken.maxHp}
-                disableBobbing={true} // AI chickens should not bob
+                disableBobbing={true}
               />
             </group>
-          );
+          )
         })}
       </>
-    );
+    )
 }
 
 // Optimize main component with React.memo
