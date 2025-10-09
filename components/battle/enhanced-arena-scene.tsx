@@ -238,6 +238,10 @@ function SceneContent({
   const lookAtPosition = useRef<THREE.Vector3 | null>(null);
 
   const lastUpdateTime = useRef(Date.now());
+  // Round start freeze/invulnerability
+  const freezeUntilRef = useRef<number>(0)
+  const invulnerableUntilRef = useRef<number>(0)
+  const hasArmedCountdownRef = useRef<boolean>(false)
 
   // Note: Do not access app contexts inside R3F Canvas; it runs on a separate React root.
 
@@ -476,12 +480,20 @@ function SceneContent({
 
     // Skip if game is not in battle state
     if (gameState !== 'battle') return; // Note: 'battle' might need to be GameState.PLAYING or similar
+
+    // Arm a 3s freeze and 4s invulnerability once at mount
+    if (!hasArmedCountdownRef.current) {
+      const nowMs = Date.now()
+      freezeUntilRef.current = nowMs + 3000
+      invulnerableUntilRef.current = nowMs + 4000
+      hasArmedCountdownRef.current = true
+    }
     
     // Skip if player is not alive
     if (playerChicken && !playerChicken.isAlive) return;
 
-    const jumpPressed = jumpKey;
-    const peckPressed = peckKey;
+    const jumpPressed = Date.now() < freezeUntilRef.current ? false : jumpKey;
+    const peckPressed = Date.now() < freezeUntilRef.current ? false : peckKey;
     const isPeckingNow = selfIsPecking;
 
     if (isPeckingNow && peckPressed) {
@@ -523,6 +535,9 @@ function SceneContent({
           // Slightly increase reach to improve corner-angle registration
           const peckReach = 3.4;
           if (horizontalDistance <= peckReach) {
+            // Respect invulnerability window at round start for opponents
+            const isInvulnerable = Date.now() < invulnerableUntilRef.current
+            if (isInvulnerable) break
             if (onPlayerDamage) onPlayerDamage(opponent.id, 1); // will play punch/kill sound via handler
             break;
           }
@@ -554,9 +569,11 @@ function SceneContent({
     // if (right) moveVector.x += 1;
 
 
-    // Handle rotation with deltaTime scaling and clamping
-    if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
-    if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
+    // Handle rotation with deltaTime scaling and clamping (disabled during freeze)
+    if (Date.now() >= freezeUntilRef.current) {
+      if (left) selfRotation.y += ROTATION_SPEED * deltaTime;
+      if (right) selfRotation.y -= ROTATION_SPEED * deltaTime;
+    }
     if (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2;
     if (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2;
 
@@ -582,8 +599,11 @@ function SceneContent({
     selfVelocity.current.x = movementDirection.x;
     selfVelocity.current.z = movementDirection.z;
 
-    selfPosition.x += selfVelocity.current.x * deltaTime;
-    selfPosition.z += selfVelocity.current.z * deltaTime;
+    // Apply movement (disabled during freeze)
+    if (Date.now() >= freezeUntilRef.current) {
+      selfPosition.x += selfVelocity.current.x * deltaTime;
+      selfPosition.z += selfVelocity.current.z * deltaTime;
+    }
 
     // Arena bounds
     const currentRingRadius = ARENA_CONFIG.ringRadius; // Use configured radius
