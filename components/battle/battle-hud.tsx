@@ -88,7 +88,7 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
                   <div className="flex items-center flex-1 min-w-0">
                     <span className="text-gray-400 w-3 sm:w-4 lg:w-5 text-right mr-1 sm:mr-2 text-xs">{index + 1}.</span>
                     <span className={`${p.isPlayer ? 'text-yellow-300' : 'text-white'} ${!p.isAlive ? 'line-through' : ''} truncate text-xs sm:text-sm`}>
-                      {p.name}
+                      {p.name || (p.id?.startsWith('guest_') ? p.id : (p.id ? p.id.slice(0,8)+'...' : 'Player'))}
                     </span>
                   </div>
                   {/* Mini Health Bar */}

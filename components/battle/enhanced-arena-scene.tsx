@@ -263,6 +263,18 @@ function SceneContent({
     }
   }, [gameState])
 
+  // Ensure a visible countdown even if we mounted after match_started
+  useEffect(() => {
+    if (gameState === 'battle') {
+      const startAt = roundStartAtMsRef.current || 0
+      if (!(startAt > Date.now())) {
+        roundStartAtMsRef.current = Date.now() + 3000
+        freezeUntilRef.current = roundStartAtMsRef.current
+        invulnerableUntilRef.current = roundStartAtMsRef.current + 1000
+      }
+    }
+  }, [gameState])
+
   // Snap player to assigned spawn when battle starts or spawn data changes
   useEffect(() => {
     if (gameState !== 'battle') return
@@ -943,8 +955,9 @@ function SceneContent({
         </Html>
       )}
       {/* Lights */}
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[10, 20, 5]} intensity={0.9} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <hemisphereLight args={["#87CEEB", "#8B7355", 0.25]} />
 
       <MemeSky />
 
