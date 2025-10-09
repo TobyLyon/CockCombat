@@ -253,6 +253,12 @@ export function PixelChicken({
   const [wingState, setWingState] = useState('rest');
   const [wingTimer, setWingTimer] = useState(0);
   const [randomFlapTimer, setRandomFlapTimer] = useState(0);
+  // Expose wing state to parent via group userData for remote blending if needed
+  useEffect(() => {
+    if (chickenRef.current) {
+      try { chickenRef.current.userData.wingState = wingState } catch {}
+    }
+  }, [wingState])
   const restAngle = 0; // Wings by the side
   const maxFlapAngle = Math.PI / 3; // Flap 60 degrees outwards/upwards (adjust as needed)
 

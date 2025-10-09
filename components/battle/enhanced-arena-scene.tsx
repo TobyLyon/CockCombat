@@ -211,6 +211,9 @@ function SceneContent({
   const lastEmitAtRef = useRef<number>(0);
   const lastSentRef = useRef({ x: 0, y: 0.85, z: 0, ry: 0, pk: false, jp: false });
   const remoteHumansRef = useRef<Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>>({})
+  // Synced round start epoch for universal countdown
+  const roundStartAtMsRef = useRef<number | null>(null)
+  const [syncedCountdown, setSyncedCountdown] = useState<number | null>(null)
 
   // Get keyboard controls state directly (Drei hook)
   const forward = useKeyboardControls<Controls>(state => state.forward);
@@ -563,6 +566,12 @@ function SceneContent({
           try { (window as any).__last_match_session_id = msid } catch {}
           socket.emit('join_match_room', { matchSessionId: msid })
         }
+        const startAt = Number(payload?.roundStartAtEpochMs) || 0
+        if (startAt > 0) {
+          roundStartAtMsRef.current = startAt
+          freezeUntilRef.current = startAt
+          invulnerableUntilRef.current = startAt + 1000
+        }
       } catch {}
     }
     const onRoundStartJoin = (payload: any) => {
@@ -571,6 +580,12 @@ function SceneContent({
         if (msid) {
           try { (window as any).__last_match_session_id = msid } catch {}
           socket.emit('join_match_room', { matchSessionId: msid })
+        }
+        const startAt = Number((payload as any)?.roundStartAtEpochMs) || 0
+        if (startAt > 0) {
+          roundStartAtMsRef.current = startAt
+          freezeUntilRef.current = startAt
+          invulnerableUntilRef.current = startAt + 1000
         }
       } catch {}
     }
@@ -586,6 +601,19 @@ function SceneContent({
       socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])
+
+  // Synced countdown updater
+  useEffect(() => {
+    const id = setInterval(() => {
+      const startAt = roundStartAtMsRef.current
+      if (typeof startAt === 'number' && startAt > Date.now()) {
+        setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+      } else {
+        if (syncedCountdown !== null) setSyncedCountdown(null)
+      }
+    }, 100)
+    return () => clearInterval(id)
+  }, [syncedCountdown])
 
   // MAIN RENDER LOOP HOOK (useFrame)
   // The useFrame hook itself must be called unconditionally.
@@ -894,9 +922,14 @@ function SceneContent({
   // ----- JSX to render the scene -----
   return (
     <>
-      {gameState === 'battle' && (
+      {gameState === 'battle' && typeof syncedCountdown === 'number' && syncedCountdown > 0 && (
         <Html center style={{ pointerEvents: 'none' }}>
-          <FinalArenaCountdownWithPings playPing={playSound} />
+          <div className="pixel-font" style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            fontSize: '72px', color: '#FFD400', textShadow: '6px 6px 0 rgba(0,0,0,0.85)', zIndex: 9999
+          }}>
+            {syncedCountdown}
+          </div>
         </Html>
       )}
       {/* Lights */}
@@ -1220,7 +1253,7 @@ function ChickenInstances({
                 colors={chicken.colors}
                 isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
                 isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
-                isJumping={false}
+                isJumping={Boolean((remoteHumans && remoteHumans[chicken.id]) ? (remoteHumans[chicken.id] as any).isJumping : false) || false}
                 isHitFlashing={chicken.isHitFlashing || false}
                 isDying={!chicken.isAlive} 
                 health={chicken.hp}
