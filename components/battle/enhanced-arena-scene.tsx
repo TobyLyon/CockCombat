@@ -554,14 +554,11 @@ function SceneContent({
           remoteHumansRef.current[id] = { pos: new THREE.Vector3(), rotY: 0, isPecking: false, ts: 0 }
         }
         const rec = remoteHumansRef.current[id]
-        // Smooth Y to preserve remote jump height and reduce popping
+        // Use authoritative network Y to fully reflect jump height
         const nextX = Number(payload.position?.x)||0
         const nextY = Number(payload.position?.y)||0.85
         const nextZ = Number(payload.position?.z)||0
-        // Lerp previous Y toward incoming to avoid clipped jumps on clients
-        const prevY = rec.pos?.y ?? 0.85
-        const ySmoothed = prevY + (nextY - prevY) * 0.5
-        rec.pos.set(nextX, ySmoothed, nextZ)
+        rec.pos.set(nextX, nextY, nextZ)
         rec.rotY = Number(payload.rotationY)||0
         rec.isPecking = Boolean(payload.isPecking)
         ;(rec as any).isJumping = Boolean(payload.isJumping)
@@ -974,13 +971,18 @@ function SceneContent({
       {/* Lights */}
       <ambientLight intensity={0.35} />
       <directionalLight
-        position={[10, 20, 5]}
+        position={[18, 38, 14]}
         intensity={1.35}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
         shadow-camera-near={0.5}
-        shadow-camera-far={200}
+        shadow-camera-far={400}
+        // Expand orthographic shadow frustum to cover fence
+        shadow-camera-left={-80}
+        shadow-camera-right={80}
+        shadow-camera-top={80}
+        shadow-camera-bottom={-80}
       />
       <hemisphereLight args={["#87CEEB", "#8B7355", 0.25]} />
 

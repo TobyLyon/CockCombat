@@ -596,6 +596,30 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, [publicKey]);
+
+  // Hydrate usernames when battle starts (inside match) to replace wallets on any stale entries
+  useEffect(() => {
+    const fetchUsernames = async () => {
+      try {
+        const updated = await Promise.all(lobbyPlayers.map(async (p) => {
+          if (p.isAi || (p.name && !p.name.endsWith('...'))) return p;
+          try {
+            const res = await fetch(`/api/profile/${encodeURIComponent(p.id)}`)
+            if (res.ok) {
+              const data = await res.json()
+              const username = (data && data.username && String(data.username).trim()) || null
+              if (username) {
+                return { ...p, name: username }
+              }
+            }
+          } catch {}
+          return p
+        }))
+        setLobbyPlayers(updated)
+      } catch {}
+    }
+    if (gameState === 'battle' && lobbyPlayers.length > 0) fetchUsernames()
+  }, [gameState, lobbyPlayers.map(p => p.id).join('|')])
   
   // Leave queue
   const leaveQueue = useCallback(() => {
