@@ -890,9 +890,15 @@ function ChickenInstances({
         const toPlayer = playerPos.clone().sub(pos)
         const dist = Math.hypot(toPlayer.x, toPlayer.z)
 
-        // Face player
+        // Face player - custom angle lerp (THREE.MathUtils.lerpAngle not available)
         const targetAngle = Math.atan2(toPlayer.x, toPlayer.z)
-        g.rotation.y = THREE.MathUtils.lerpAngle(g.rotation.y, targetAngle, 0.15)
+        const lerpAngle = (a: number, b: number, t: number) => {
+          let diff = (b - a + Math.PI) % (Math.PI * 2)
+          if (diff < 0) diff += Math.PI * 2
+          diff -= Math.PI
+          return a + diff * t
+        }
+        g.rotation.y = lerpAngle(g.rotation.y, targetAngle, 0.15)
 
         let speed = 2.2 // easy chase speed
         let moveVec = new THREE.Vector3(0, 0, 0)
