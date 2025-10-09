@@ -105,6 +105,15 @@ export default function WaitingQueue({
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
         return { playerId: p.wallet, username, isAi: p.isAi }
       })) } catch {}
+      // Immediately ack presence for this client to allow session progression
+      try {
+        const id = (publicKey as any)?.toBase58?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+        if (id && payload?.matchSessionId) {
+          socket.emit('queue_presence', { matchSessionId: payload.matchSessionId, wallet: id, latencyMs: 0 })
+          // Best-effort assets ack once roster shown; waiting room has no heavy assets, so ack now
+          socket.emit('assets_loaded', { matchSessionId: payload.matchSessionId, wallet: id })
+        }
+      } catch {}
     }
     const onArenaLock = (payload: any) => {
       // Replace roster with locked list and keep provided names with guest rule

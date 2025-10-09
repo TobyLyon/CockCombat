@@ -11,12 +11,12 @@ const SOUND_VOLUMES = {
   die: 0.8,
   jump: 0.5,
   land: 0.4,
-  button: 0.3,
+  button: 0.9,
   music: 0.075, // Background music lower than effects - Reduced by 50% from 0.15
   battle: 0.15, // Arena battle music same as background
   win: 0.4,
   lose: 0.4,
-  click: 0.2,
+  click: 0.9,
   collect: 0.7,
 };
 

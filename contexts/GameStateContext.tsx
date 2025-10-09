@@ -243,7 +243,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     die: 0.8,
     pickup: 0.7,
     jump: 0.5,
-    click: 0.6,
+    click: 1.2,
+    button: 1.2,
     arena: 0.4,
     background: 0.3
   };
@@ -258,6 +259,10 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     jump: '/sounds/jump.mp3',
     click: '/sounds/click.mp3',
     button: '/sounds/click.mp3',
+    // Additional common SFX keys used across components
+    bump: '/sounds/punch.mp3',
+    success: '/sounds/pickup.mp3',
+    error: '/sounds/die.mp3',
     arena: '/sounds/arena.mp3',
     background: '/sounds/background.mp3',
     background_music: '/sounds/background.mp3',
@@ -447,11 +452,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         return;
     }
 
-    // Exclude background tracks explicitly
-    if (sound === 'battle_start' || sound === 'victory' || sound === 'background_music') {
-        // console.warn(`playSound called for background track key: ${sound}. Background music is now handled automatically.`);
-        return; // Don't play background tracks as effects
-    }
+    // Allow all mapped keys to play as effects; background music is handled separately
+    // but if a background key is passed here accidentally, it will play once as an effect.
 
     // Play sound effect using audioRefs pool or create new?
     // Using new Audio() is simpler and avoids potential issues with rapidly re-triggering the same effect ref
@@ -656,10 +658,12 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     if (!hasInteracted || !audioEnabled) return;
 
     // Determine target music based on game state
-    // Play soundscape on lobby/queue; stop when in arena (battle)
-    let targetTrack: 'background' | null = null;
+    // Play soundscape on lobby/queue; play arena track during battle
+    let targetTrack: 'background' | 'arena' | null = null;
     if (gameState === 'lobby' || gameState === 'queue') {
       targetTrack = 'background' as const;
+    } else if (gameState === 'battle') {
+      targetTrack = 'arena' as const;
     }
 
     // If we have a target track, play it

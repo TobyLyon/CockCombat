@@ -1344,6 +1344,17 @@ preparePromise.then(() => {
         }));
         isTutorial = lobby.matchType === 'tutorial';
         if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
+        // Ensure tutorial expected roster includes AI backfill to capacity
+        if (isTutorial) {
+          const missing = Math.max(0, (lobby.capacity || 8) - expectedRoster.length);
+          if (missing > 0) {
+            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+            for (let i = 0; i < missing; i++) {
+              const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+              expectedRoster.push({ wallet: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenName: 'default-ai-chicken' });
+            }
+          }
+        }
       }
 
       const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
