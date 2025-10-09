@@ -864,6 +864,7 @@ function SceneContent({
                 ...p,
                 position: rec.pos.clone(),
                 rotation: new THREE.Euler(0, rec.rotY, 0),
+                isAi: false,
               } as PlayerStatus
               return blended
             }
@@ -1024,6 +1025,14 @@ function ChickenInstances({
 
         const pos = g.position.clone()
         pos.y = 0.85
+        // Human opponents are network-driven: do not apply local AI movement
+        const isAI = Boolean((chicken as any).isAi)
+        if (!isAI) {
+          // Clear AI velocity indicators for proper idle animations
+          try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
+          continue
+        }
+
         const toPlayer = playerPos.clone().sub(pos)
         const dist = Math.hypot(toPlayer.x, toPlayer.z)
 
