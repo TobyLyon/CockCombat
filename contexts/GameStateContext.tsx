@@ -420,8 +420,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
             const winner = alivePlayers[0];
             console.log(`Winner found: ${winner.id}`);
             setPrizeAmount(updatedPlayers.length);
-            // Trigger victory sound for the winner locally
-            try { playSound('victory'); } catch {}
+            // Rely on server 'play_sound' broadcast or UI screens to play victory
           } else {
             console.log("All players defeated.");
             setPrizeAmount(0);
@@ -449,7 +448,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         if (!prevPlayers.some(p => p.isHitFlashing)) return prevPlayers;
         
         return prevPlayers.map(player => {
-          if (player.isHitFlashing && player.lastHitTime && (Date.now() - player.lastHitTime > 150)) {
+          if (player.isHitFlashing && player.lastHitTime && (Date.now() - player.lastHitTime > 300)) {
             return { ...player, isHitFlashing: false };
           }
           return player;

@@ -51,7 +51,10 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   // Play sound and trigger payout on component mount
   useEffect(() => {
-    playSound(isHumanWinner ? 'victory' : 'death');
+    // Victory sound is broadcast by server; avoid duplicate. Fallback: only non-winner plays death.
+    if (!isHumanWinner) {
+      playSound('death');
+    }
 
     const handlePayout = async () => {
       if (isHumanWinner && publicKey && grossPool > 0) {
