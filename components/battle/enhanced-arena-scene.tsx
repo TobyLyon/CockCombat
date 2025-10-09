@@ -93,6 +93,8 @@ function ArenaFloor() {
   // Apply texture settings directly to the loaded texture
   useEffect(() => {
     if (floorTexture) {
+      // Ensure correct color space for PBR albedo
+      try { (floorTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
       floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
       floorTexture.repeat.set(12, 12);
       floorTexture.anisotropy = 4;
@@ -102,6 +104,8 @@ function ArenaFloor() {
       floorTexture.needsUpdate = true;
     }
     if (dirtTexture) {
+      // Ensure correct color space for PBR albedo
+      try { (dirtTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
       dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
       dirtTexture.repeat.set(10, 10);
       dirtTexture.anisotropy = 4;
@@ -550,7 +554,14 @@ function SceneContent({
           remoteHumansRef.current[id] = { pos: new THREE.Vector3(), rotY: 0, isPecking: false, ts: 0 }
         }
         const rec = remoteHumansRef.current[id]
-        rec.pos.set(Number(payload.position?.x)||0, Number(payload.position?.y)||0.85, Number(payload.position?.z)||0)
+        // Smooth Y to preserve remote jump height and reduce popping
+        const nextX = Number(payload.position?.x)||0
+        const nextY = Number(payload.position?.y)||0.85
+        const nextZ = Number(payload.position?.z)||0
+        // Lerp previous Y toward incoming to avoid clipped jumps on clients
+        const prevY = rec.pos?.y ?? 0.85
+        const ySmoothed = prevY + (nextY - prevY) * 0.5
+        rec.pos.set(nextX, ySmoothed, nextZ)
         rec.rotY = Number(payload.rotationY)||0
         rec.isPecking = Boolean(payload.isPecking)
         ;(rec as any).isJumping = Boolean(payload.isJumping)
@@ -755,11 +766,15 @@ function SceneContent({
     if (Date.now() >= freezeUntilRef.current) {
       const turn = (right ? -1 : 0) + (left ? 1 : 0)
       if (turn !== 0) {
-        selfRotation.y += (ROTATION_SPEED * deltaTime) * turn
+        // Normalize current angle to [-PI, PI]
+        while (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2
+        while (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2
+        // Apply turn
+        const nextAngle = selfRotation.y + (ROTATION_SPEED * deltaTime) * turn
+        // Wrap to avoid jumps across the branch cut
+        selfRotation.y = ((nextAngle + Math.PI) % (Math.PI * 2)) - Math.PI
       }
     }
-    if (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2;
-    if (selfRotation.y < -Math.PI) selfRotation.y += Math.PI * 2;
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
@@ -957,8 +972,16 @@ function SceneContent({
         </Html>
       )}
       {/* Lights */}
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <ambientLight intensity={0.35} />
+      <directionalLight
+        position={[10, 20, 5]}
+        intensity={1.35}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={0.5}
+        shadow-camera-far={200}
+      />
       <hemisphereLight args={["#87CEEB", "#8B7355", 0.25]} />
 
       <MemeSky />
@@ -1334,7 +1357,7 @@ export default React.memo(function EnhancedArenaScene({
       <KeyboardControls map={controlsMap}>
       <Canvas 
           style={{ width: '100%', height: '100%', display: 'block' }}
-          shadows={false}
+          shadows
           camera={{ 
             fov: 75, 
             near: 0.1, 
@@ -1348,7 +1371,7 @@ export default React.memo(function EnhancedArenaScene({
             powerPreference: "high-performance",
             stencil: false
           }}
-          frameloop="demand"
+          frameloop="always"
           dpr={[1, 1.5]}
           onCreated={({ gl }) => {
             try {
@@ -1357,6 +1380,11 @@ export default React.memo(function EnhancedArenaScene({
               const onRestored = () => { console.info('✅ WebGL context restored in EnhancedArena'); };
               canvas.addEventListener('webglcontextlost', onLost as any, { passive: false } as any);
               canvas.addEventListener('webglcontextrestored', onRestored as any, { passive: true } as any);
+              // Ensure consistent color management and shadow quality
+              try { (gl as any).outputColorSpace = THREE.SRGBColorSpace } catch {}
+              try { (gl as any).toneMapping = THREE.ACESFilmicToneMapping } catch {}
+              try { (gl as any).toneMappingExposure = 1.0 } catch {}
+              try { gl.shadowMap.enabled = true; (gl.shadowMap as any).type = THREE.PCFSoftShadowMap } catch {}
             } catch {}
           }}
         >

@@ -575,9 +575,10 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || getDeterministicColorsForId(id);
         const isGuest = id.startsWith('guest_')
+        // Prefer username if present; otherwise wallet short form; keep AI labeled as AI
         const displayName = p.isAi
           ? (p.username || 'AI')
-          : (p.username || (isGuest ? id : id.slice(0, 8) + '...'))
+          : ((p as any).username || (isGuest ? id : id.slice(0, 8) + '...'))
         return {
           id,
           name: displayName,
