@@ -808,12 +808,12 @@ function FinalArenaCountdownWithPings({ playPing }: { playPing?: (s: string) => 
     let v = 3
     setValue(v)
     // Immediate soft ping for the initial '3'
-    try { if (playPing) playPing('click') } catch {}
+    try { if (playPing) playPing('countdown') } catch {}
     const t = setInterval(() => {
       v -= 1
       setValue(v)
       try {
-        if (v > 0 && playPing) playPing('click'); // light ping for 3..2..1
+        if (v > 0 && playPing) playPing('countdown'); // louder ping for 3..2..1
       } catch {}
       if (v <= 0) { clearInterval(t); setDone(true) }
     }, 1000)
@@ -822,8 +822,8 @@ function FinalArenaCountdownWithPings({ playPing }: { playPing?: (s: string) => 
   if (done) return null
   return (
     <div className="pixel-font" style={{
-      position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
-      fontSize: '72px', color: '#FFD400', textShadow: '6px 6px 0 rgba(0,0,0,0.85)'
+      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+      fontSize: '72px', color: '#FFD400', textShadow: '6px 6px 0 rgba(0,0,0,0.85)', zIndex: 9999, pointerEvents: 'none'
     }}>
       {value}
     </div>

@@ -247,6 +247,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     jump: 0.5,
     click: 1.2,
     button: 1.2,
+    countdown: 1.4, // louder countdown ping
     arena: 0.4,
     background: 0.3
   };
@@ -261,6 +262,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     jump: '/sounds/jump.mp3',
     click: '/sounds/click.mp3',
     button: '/sounds/click.mp3',
+    countdown: '/sounds/click.mp3',
     // Additional common SFX keys used across components
     bump: '/sounds/punch.mp3',
     success: '/sounds/pickup.mp3',
