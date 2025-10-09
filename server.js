@@ -1933,30 +1933,45 @@ preparePromise.then(() => {
         break;
     }
 
-    // Check if battle is over
-    const battleOver = opponent.health <= 0;
-    const winner = battleOver ? playerId : null;
+    // Mark last hit time for tie-breaks
+    if (actionSuccess && damage > 0 && opponent.health === 0) {
+      const now = Date.now();
+      room.lastKillTime = room.lastKillTime || {};
+      room.lastKillTime[playerId] = now;
+    }
+
+    // Check if battle is over with tie-breaker
+    const p1Dead = gameState.player1.health <= 0;
+    const p2Dead = gameState.player2.health <= 0;
+
+    let battleOver = false;
+    let winner = null;
+
+    if (p1Dead && p2Dead) {
+      battleOver = true;
+      // Resolve by earliest kill timestamp (who delivered lethal blow first)
+      const k1 = room.lastKillTime && room.lastKillTime[room.player1Id] || Infinity;
+      const k2 = room.lastKillTime && room.lastKillTime[room.player2Id] || Infinity;
+      if (k1 < k2) winner = room.player1Id; else if (k2 < k1) winner = room.player2Id; else winner = playerId;
+    } else if (p1Dead || p2Dead) {
+      battleOver = true;
+      winner = p1Dead ? room.player2Id : room.player1Id;
+    }
 
     if (battleOver) {
       gameState.battleStatus = 'ended';
-      opponent.status = 'defeated';
-      currentPlayer.status = 'winner';
-    } else {
-      // Switch turns
-      gameState.turn = isPlayer1 ? room.player2Id : room.player1Id;
+      gameState.winner = winner;
+      gameState.endedAt = Date.now();
     }
-
-    room.lastUpdateTime = Date.now();
 
     return {
       action,
+      playerId,
       damage,
-      actionSuccess,
+      success: actionSuccess,
       battleOver,
       winner,
-      newPlayerState: currentPlayer,
-      newOpponentState: opponent,
-      gameState: gameState
+      gameState
     };
   }
 

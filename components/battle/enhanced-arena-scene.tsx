@@ -543,7 +543,7 @@ function SceneContent({
         rec.isPecking = Boolean(payload.isPecking)
         ;(rec as any).isJumping = Boolean(payload.isJumping)
         if ((rec as any).isJumping) {
-          remoteJumpUntilRef.current[id] = Date.now() + 300 // keep jumping true for 300ms after last true
+          remoteJumpUntilRef.current[id] = Date.now() + 500 // keep jumping true a bit longer to avoid flicker
         }
         rec.ts = Number(payload.ts)||Date.now()
       } catch {}
@@ -1253,7 +1253,7 @@ function ChickenInstances({
                 colors={chicken.colors}
                 isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
                 isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
-                isJumping={Boolean((remoteHumans && remoteHumans[chicken.id]) ? (remoteHumans[chicken.id] as any).isJumping : false) || false}
+                isJumping={Boolean((chicken as any).isJumping)}
                 isHitFlashing={chicken.isHitFlashing || false}
                 isDying={!chicken.isAlive} 
                 health={chicken.hp}
