@@ -1076,8 +1076,8 @@ preparePromise.then(() => {
     // Realtime arena sync: receive local player transform and broadcast to lobby room
     socket.on('player_state', (payload) => {
       try {
-        // Allow ~40 Hz per minute cap (higher movement bandwidth so inputs don't starve remote updates)
-        if (!checkRateLimit('player_state', 2400)) {
+        // Allow ~25 Hz per minute cap (slightly higher for smoother jumps)
+        if (!checkRateLimit('player_state', 1800)) {
           return;
         }
         const connection = activeConnections.get(socket.id);
