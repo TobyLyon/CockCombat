@@ -93,8 +93,8 @@ function ArenaFloor() {
   useEffect(() => {
     if (floorTexture) {
       floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-      floorTexture.repeat.set(24, 24);
-      floorTexture.anisotropy = 8;
+      floorTexture.repeat.set(12, 12);
+      floorTexture.anisotropy = 4;
       floorTexture.generateMipmaps = true;
       floorTexture.minFilter = THREE.LinearMipmapLinearFilter;
       floorTexture.magFilter = THREE.LinearFilter;
@@ -102,8 +102,8 @@ function ArenaFloor() {
     }
     if (dirtTexture) {
       dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
-      dirtTexture.repeat.set(18, 18);
-      dirtTexture.anisotropy = 8;
+      dirtTexture.repeat.set(10, 10);
+      dirtTexture.anisotropy = 4;
       dirtTexture.generateMipmaps = true;
       dirtTexture.minFilter = THREE.LinearMipmapLinearFilter;
       dirtTexture.magFilter = THREE.LinearFilter;
@@ -113,8 +113,8 @@ function ArenaFloor() {
 
   return (
     <group>
-      {/* Grass annulus */}
-      <Plane args={[2000, 2000]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      {/* Grass annulus (reduced extent) */}
+      <Plane args={[600, 600]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <meshStandardMaterial map={floorTexture} roughness={0.9} />
       </Plane>
       {/* Dirt in-fighting ring (slightly smaller circle) */}
@@ -301,7 +301,7 @@ function SceneContent({
             <group>
                 {/* Sky dome */}
                 <mesh position={[0, 0, 0]}>
-                    <sphereGeometry args={[100 * 1.5, 16, 16]} />
+                    <sphereGeometry args={[80, 16, 16]} />
                     <meshBasicMaterial color="#5DADE2" side={THREE.BackSide} />
                 </mesh>
                 {/* Meme sun */}
@@ -768,13 +768,13 @@ function SceneContent({
         <FinalArenaCountdownWithPings playPing={playSound} />
       </Html>
       {/* Lights */}
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.35} />
       <directionalLight 
         position={[10, 20, 5]} 
-        intensity={1.5} 
+        intensity={1.1} 
         castShadow 
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-near={0.5}
         shadow-camera-far={50}
         shadow-camera-left={-25}
@@ -1103,7 +1103,7 @@ export default React.memo(function EnhancedArenaScene({
       <KeyboardControls map={controlsMap}>
         <Canvas 
           style={{ width: '100%', height: '100%', display: 'block' }}
-          shadows
+          shadows={false}
           camera={{ 
             fov: 75, 
             near: 0.1, 
