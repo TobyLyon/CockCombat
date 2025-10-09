@@ -45,6 +45,7 @@ export default function WaitingQueue({
   const scheduledStartRef = useRef<number | null>(null)
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const assetsReadyRef = useRef<boolean>(false)
+  const finalizeFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
   // For ranked: expect at least min humans or the current lobby size at entry.
@@ -145,6 +146,19 @@ export default function WaitingQueue({
           prefetch()
         }
       } catch {}
+
+      // Schedule finalize fallback a bit past ack deadline
+      try {
+        if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
+        const dl = Math.max(2000, Number(payload?.ackDeadlineMs) || 4000)
+        finalizeFallbackRef.current = setTimeout(() => {
+          if (!scheduledStartRef.current) {
+            console.log('[WaitingQueue] finalize fallback kicking in')
+            try { socket.emit('ensure_queue_progress', lobby.id) } catch {}
+            try { socket.emit('get_lobby_state', lobby.id) } catch {}
+          }
+        }, dl + 1500)
+      } catch {}
     }
     const onArenaLock = (payload: any) => {
       console.log('[WaitingQueue] arena_lock_roster', payload)
@@ -167,6 +181,7 @@ export default function WaitingQueue({
             onStartBattle()
           }, delay)
         }
+        if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
       } catch {}
     }
     const onStarted = () => {
@@ -174,6 +189,7 @@ export default function WaitingQueue({
       try { playSound('button') } catch {}
       // Cancel any scheduled start if server event arrives
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
+      if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
       onStartBattle()
     }
     socket.on('queue_begin', onQueueBegin)
@@ -186,6 +202,7 @@ export default function WaitingQueue({
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
+      if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
     }
   }, [socket, isConnected, onStartBattle, playSound])
 
