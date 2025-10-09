@@ -536,7 +536,6 @@ function SceneContent({
 
   // Maintain a brief decay window for remote jump flags to avoid flicker
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
-  const remotePeckVisualUntilRef = useRef<Record<string, number>>({})
 
   // Socket hookup for consuming remote transforms and applying remote hits
   const { socket } = useSocket() as any
@@ -555,13 +554,19 @@ function SceneContent({
           remoteHumansRef.current[id] = { pos: new THREE.Vector3(), rotY: 0, isPecking: false, ts: 0 }
         }
         const rec = remoteHumansRef.current[id]
-        // Use authoritative network Y to fully reflect jump height
         const nextX = Number(payload.position?.x)||0
         const nextY = Number(payload.position?.y)||0.85
         const nextZ = Number(payload.position?.z)||0
+        // Prepare short tween for Y to smooth between packets (~20Hz)
+        try {
+          const now = Date.now()
+          ;(rec as any).yAnim = { start: rec.pos?.y ?? nextY, end: nextY, startAt: now, endAt: now + 60 }
+        } catch {}
         rec.pos.set(nextX, nextY, nextZ)
         rec.rotY = Number(payload.rotationY)||0
         rec.isPecking = Boolean(payload.isPecking)
+        // Capture peck event instant
+        try { if (payload.isPecking) (rec as any).peckAt = Date.now() } catch {}
         ;(rec as any).isJumping = Boolean(payload.isJumping)
         if ((rec as any).isJumping) {
           remoteJumpUntilRef.current[id] = Date.now() + 500 // keep jumping true a bit longer to avoid flicker
@@ -576,19 +581,8 @@ function SceneContent({
         if (!targetId || !onPlayerDamage) return
         const byId = typeof payload?.by === 'string' ? payload.by : undefined
         onPlayerDamage(targetId, amount, byId)
-        // Drive a peck visual on attacker even if a peck-state packet was dropped
-        try {
-          if (byId) {
-            const rec = remoteHumansRef.current[byId]
-            const now = Date.now()
-            const until = remotePeckVisualUntilRef.current[byId] || 0
-            if (rec && now > until) {
-              ;(rec as any).isPecking = true
-              remotePeckVisualUntilRef.current[byId] = now + 220
-              setTimeout(() => { try { (rec as any).isPecking = false } catch {} }, 220)
-            }
-          }
-        } catch {}
+        // Mark a peck moment on attacker for visual sync without duplicating
+        try { if (byId && remoteHumansRef.current[byId]) { (remoteHumansRef.current[byId] as any).peckAt = Date.now() } } catch {}
       } catch {}
     }
     socket.on('player_state', onPlayerState)
@@ -696,8 +690,8 @@ function SceneContent({
     const maxSpeed = jumpPressed ? 12.0 : 8.0; // Sprint with jump key
 
     // Handle jumping physics
-    if (jumpPressed && selfPosition.y <= 0.85 + 0.08) { // tighter threshold to increase responsiveness
-      selfVelocity.current.y = 12.0; // Jump force
+    if (jumpPressed && selfPosition.y <= 0.85 + 0.05) { // Tighter threshold for responsiveness
+      selfVelocity.current.y = 12.0; // Increased jump force
       setSelfIsJumping(true);
       if (playSound) playSound("jump");
     } else if (selfPosition.y <= 0.85) {
@@ -747,7 +741,7 @@ function SceneContent({
           }
         }
       }
-      setTimeout(() => setSelfIsPecking(false), 180); // Shorter to reduce overlap on remote
+      setTimeout(() => setSelfIsPecking(false), 250); // Peck duration
     }
 
     if (!peckPressed && wasPecking.current) {
@@ -926,7 +920,9 @@ function SceneContent({
         const sent = lastSentRef.current
         const posDelta = Math.hypot(selfPosition.x - sent.x, selfPosition.z - sent.z)
         const rotDelta = Math.abs(selfRotation.y - sent.ry)
-        const stateChanged = (selfIsPecking !== sent.pk) || (selfIsJumping !== sent.jp)
+        // Only send peck when it flips from false->true to avoid multi-peck
+        const peckEdge = (!sent.pk && selfIsPecking)
+        const stateChanged = peckEdge || (selfIsJumping !== sent.jp)
         if (posDelta > 0.02 || rotDelta > 0.02 || stateChanged) {
           lastEmitAtRef.current = nowMs
           // Quantize to 2 decimals to reduce bandwidth while keeping smoothness
@@ -937,7 +933,7 @@ function SceneContent({
             matchSessionId: msid,
             position: [q(selfPosition.x), q(selfPosition.y), q(selfPosition.z)],
             rotationY: q(selfRotation.y),
-            isPecking: selfIsPecking,
+            isPecking: peckEdge ? true : false,
             isJumping: selfIsJumping,
           })
         }
@@ -1196,15 +1192,23 @@ function ChickenInstances({
           // Apply smoothing toward remote transform and set anim hints
           const prevX = g.position.x
           const prevZ = g.position.z
-          // Smooth X/Z toward remote, snap Y for crisp jump arc and client-side tweening
+          // Smooth X/Z; ease Y via short tween captured on packet for fluid jump
           const prevX2 = g.position.x
           const prevZ2 = g.position.z
           g.position.x += (pos.x - g.position.x) * 0.35
           g.position.z += (pos.z - g.position.z) * 0.35
-          // Lightweight client-side Y tween for frames between packets
-          const dy = pos.y - g.position.y
-          const yStep = Math.sign(dy) * Math.min(Math.abs(dy), 0.5 * Math.max(0.016, delta) * 30)
-          g.position.y += yStep
+          try {
+            const ya = (net as any)?.yAnim
+            if (ya && typeof ya.start === 'number' && typeof ya.end === 'number' && typeof ya.startAt === 'number' && typeof ya.endAt === 'number') {
+              const now = Date.now()
+              const t = Math.max(0, Math.min(1, (now - ya.startAt) / Math.max(1, ya.endAt - ya.startAt)))
+              // smoothstep
+              const s = t * t * (3 - 2 * t)
+              g.position.y = ya.start + (ya.end - ya.start) * s
+            } else {
+              g.position.y = pos.y
+            }
+          } catch { g.position.y = pos.y }
           if (net) {
             const targetY = net.rotY
             const lerpAngle = (a: number, b: number, t: number) => {
@@ -1218,7 +1222,13 @@ function ChickenInstances({
             const dx = g.position.x - prevX2
             const dz = g.position.z - prevZ2
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
-            try { if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now() } catch {}
+            try {
+              const peckEventAt = (net as any)?.peckAt
+              if (peckEventAt && Date.now() - peckEventAt < 250) {
+                lastPeckRef.current[chicken.id] = Date.now()
+              }
+              if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now()
+            } catch {}
           } else {
             try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
           }
