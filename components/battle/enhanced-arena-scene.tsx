@@ -25,6 +25,7 @@ import {
 import { PixelChicken } from "../3d/pixel-chicken-viewer"
 import { ArrowLeft } from "lucide-react";
 import { PlayerStatus } from "@/contexts/GameStateContext"
+import { useSocket } from "@/hooks/use-socket"
 import { ARENA_CONFIG } from "@/mocks/game-data"
 import PoofEffect from '../effects/poof-effect'; // Import the poof effect
 import { useTexturePreloader } from '@/hooks/use-texture-preloader';
@@ -206,6 +207,9 @@ function SceneContent({
 
   // Track previous position to detect movement
   const prevPosition = useRef(new THREE.Vector3());
+  const prevRotationY = useRef<number>(0);
+  const lastEmitAtRef = useRef<number>(0);
+  const remoteHumansRef = useRef<Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>>({})
 
   // Get keyboard controls state directly (Drei hook)
   const forward = useKeyboardControls<Controls>(state => state.forward);
@@ -508,6 +512,40 @@ function SceneContent({
     [players, playerChicken?.id]
   );
 
+  // Socket hookup for consuming remote transforms and applying remote hits
+  const { socket } = useSocket() as any
+  useEffect(() => {
+    if (!socket) return
+    const onPlayerState = (payload: any) => {
+      try {
+        const id = String(payload?.playerId || '')
+        if (!id) return
+        if (!remoteHumansRef.current[id]) {
+          remoteHumansRef.current[id] = { pos: new THREE.Vector3(), rotY: 0, isPecking: false, ts: 0 }
+        }
+        const rec = remoteHumansRef.current[id]
+        rec.pos.set(Number(payload.position?.x)||0, Number(payload.position?.y)||0.85, Number(payload.position?.z)||0)
+        rec.rotY = Number(payload.rotationY)||0
+        rec.isPecking = Boolean(payload.isPecking)
+        rec.ts = Number(payload.ts)||Date.now()
+      } catch {}
+    }
+    const onPlayerDamage = (payload: any) => {
+      try {
+        const targetId = String(payload?.targetId || '')
+        const amount = Math.max(0, Math.min(3, Number(payload?.amount)||1))
+        if (!targetId || !onPlayerDamage) return
+        onPlayerDamage(targetId, amount)
+      } catch {}
+    }
+    socket.on('player_state', onPlayerState)
+    socket.on('player_damage', onPlayerDamage)
+    return () => {
+      socket.off('player_state', onPlayerState)
+      socket.off('player_damage', onPlayerDamage)
+    }
+  }, [socket, onPlayerDamage])
+
   // MAIN RENDER LOOP HOOK (useFrame)
   // The useFrame hook itself must be called unconditionally.
   // The logic *inside* its callback can, of course, be conditional.
@@ -577,7 +615,12 @@ function SceneContent({
             // Respect invulnerability window at round start for opponents
             const isInvulnerable = Date.now() < invulnerableUntilRef.current
             if (isInvulnerable) break
-            if (onPlayerDamage) onPlayerDamage(opponent.id, 1); // will play punch/kill sound via handler
+            // Emit damage for humans via network; still apply local for AI
+            if (!opponent.isAi && socket) {
+              try { socket.emit('player_damage', { targetId: opponent.id, amount: 1 }) } catch {}
+            } else if (onPlayerDamage) {
+              onPlayerDamage(opponent.id, 1)
+            }
             break;
           }
         }
@@ -640,8 +683,8 @@ function SceneContent({
 
     // Apply movement (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-    selfPosition.x += selfVelocity.current.x * deltaTime;
-    selfPosition.z += selfVelocity.current.z * deltaTime;
+      selfPosition.x += selfVelocity.current.x * deltaTime;
+      selfPosition.z += selfVelocity.current.z * deltaTime;
     }
 
     // Arena bounds
@@ -694,13 +737,17 @@ function SceneContent({
     }
     
     // Update React state only if position/rotation changed significantly
-    if (!prevPosition.current.equals(selfPosition) &&
-        (Math.abs(prevPosition.current.x - selfPosition.x) > 0.01 ||
-         Math.abs(prevPosition.current.y - selfPosition.y) > 0.01 ||
-         Math.abs(prevPosition.current.z - selfPosition.z) > 0.01)) {
-      prevPosition.current.copy(selfPosition);
-      setSelfPosition(new THREE.Vector3(selfPosition.x, selfPosition.y, selfPosition.z));
-      setSelfRotation(new THREE.Euler(selfRotation.x, selfRotation.y, selfRotation.z));
+    const posChanged = !prevPosition.current.equals(selfPosition) && (
+      Math.abs(prevPosition.current.x - selfPosition.x) > 0.01 ||
+      Math.abs(prevPosition.current.y - selfPosition.y) > 0.01 ||
+      Math.abs(prevPosition.current.z - selfPosition.z) > 0.01
+    )
+    const rotChanged = Math.abs(prevRotationY.current - selfRotation.y) > 0.01
+    if (posChanged || rotChanged) {
+      prevPosition.current.copy(selfPosition)
+      prevRotationY.current = selfRotation.y
+      setSelfPosition(new THREE.Vector3(selfPosition.x, selfPosition.y, selfPosition.z))
+      setSelfRotation(new THREE.Euler(selfRotation.x, selfRotation.y, selfRotation.z))
     }
 
     // Update Three.js object directly
@@ -734,6 +781,19 @@ function SceneContent({
       // This logic seems to have been removed or was incomplete.
       // If you have drumsticks in the scene to collect, you'd check their positions against playerPosition here.
     }
+
+    // Emit local player transform at ~20 Hz
+    try {
+      const nowMs = Date.now()
+      if (socket && nowMs - lastEmitAtRef.current > 50) {
+        lastEmitAtRef.current = nowMs
+        socket.emit('player_state', {
+          position: [selfPosition.x, selfPosition.y, selfPosition.z],
+          rotationY: selfRotation.y,
+          isPecking: selfIsPecking,
+        })
+      }
+    } catch {}
   });
 
 
@@ -796,7 +856,19 @@ function SceneContent({
       {/* Opponent Chickens */}
       {players && playerChicken && (
         <ChickenInstances
-          chickens={players.filter(p => p.isAlive && !p.isPlayer)}
+          chickens={players.filter(p => p.isAlive && !p.isPlayer).map(p => {
+            // For non-AI humans, blend towards latest networked transforms
+            if (!p.isAi && p.id && remoteHumansRef.current[p.id]) {
+              const rec = remoteHumansRef.current[p.id]
+              const blended = {
+                ...p,
+                position: rec.pos.clone(),
+                rotation: new THREE.Euler(0, rec.rotY, 0),
+              } as PlayerStatus
+              return blended
+            }
+            return p
+          })}
           playerChickenId={playerChicken?.id || ''}
           playerRef={playerRef}
           freezeUntilMs={freezeUntilRef.current}

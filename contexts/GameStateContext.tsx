@@ -12,6 +12,7 @@ export interface PlayerStatus {
   id: string;
   name?: string; // Add name to the player status interface
   isPlayer: boolean;
+  isAi?: boolean; // Distinguish AI vs human opponents for arena sync
   position: THREE.Vector3 | [number, number, number]; // Allow both Vector3 and tuple format
   rotation: THREE.Euler | [number, number, number]; // Allow both Euler and tuple format
   colors?: { [key: string]: string }; // Optional color overrides for customization
@@ -575,6 +576,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
           id,
           name: p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? id : id.slice(0, 8) + '...')),
           isPlayer: false,
+          isAi: Boolean(p.isAi),
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
           rotation: new THREE.Euler(0, 0, 0),
           colors,

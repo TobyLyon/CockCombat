@@ -280,35 +280,8 @@ preparePromise.then(() => {
               }
             } catch {}
             
-            // Tutorial: ensure AI backfill here too so secondary confirmation doesn't drop roster
-            try {
-              const isTutorial = lobby.matchType === 'tutorial';
-              // Consider any ready human from sockets as readiness signal
-              let hasReadyHuman = false;
-              for (const [, conn] of activeConnections.entries()) {
-                if (conn.currentLobby === lobbyId && conn.isReady && conn.walletAddress) {
-                  // If this wallet exists in the lobby or we are in tutorial, count as human ready
-                  const exists = (lobby.players || []).some(p => p.playerId === conn.walletAddress);
-                  if (exists || isTutorial) { hasReadyHuman = true; break; }
-                }
-              }
-              if (isTutorial && hasReadyHuman) {
-                const missing = Math.max(0, lobby.capacity - lobbyPlayers.length);
-                if (missing > 0) {
-                  const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
-                  for (let i = 0; i < missing; i++) {
-                    const name = aiNames[(Math.floor(Math.random() * aiNames.length))];
-                    lobbyPlayers.push({
-                      playerId: `ai-${Date.now()}-${i}`,
-                      username: name,
-                      chickenName: 'default-ai-chicken',
-                      isReady: true,
-                      isAi: true,
-                    });
-                  }
-                }
-              }
-            } catch {}
+            // Disabled tutorial AI backfill for now
+            try { /* no-op */ } catch {}
 
             // Broadcast updated lobby state to all players in the room (after any backfill)
             io.to(lobbyId).emit('lobby_updated', {
@@ -333,7 +306,7 @@ preparePromise.then(() => {
 
             // Tutorial self-heal: if lobby is tutorial and everyone is ready, ensure the joining client gets start signals
             try {
-              const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
+              const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
               const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
               const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
               const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
@@ -1013,6 +986,50 @@ preparePromise.then(() => {
       }
     });
 
+    // Realtime arena sync: receive local player transform and broadcast to lobby room
+    socket.on('player_state', (payload) => {
+      try {
+        // Allow ~20 Hz per minute cap
+        if (!checkRateLimit('player_state', 1200)) {
+          return;
+        }
+        const connection = activeConnections.get(socket.id);
+        if (!connection || !connection.currentLobby) return;
+        const lobbyId = connection.currentLobby;
+        const wallet = connection.walletAddress || socket.id;
+        // Sanitize payload
+        const pos = Array.isArray(payload?.position) && payload.position.length >= 3
+          ? payload.position
+          : [0, 0.85, 0];
+        const rotY = Number(payload?.rotationY);
+        const isPecking = Boolean(payload?.isPecking);
+        io.to(lobbyId).emit('player_state', {
+          playerId: wallet,
+          position: { x: Number(pos[0]) || 0, y: Number(pos[1]) || 0.85, z: Number(pos[2]) || 0 },
+          rotationY: isFinite(rotY) ? rotY : 0,
+          isPecking,
+          ts: Date.now(),
+        });
+      } catch {}
+    });
+
+    // Realtime arena sync: damage application (tutorial trust model)
+    socket.on('player_damage', (payload) => {
+      try {
+        if (!checkRateLimit('player_damage', 120)) {
+          return;
+        }
+        const connection = activeConnections.get(socket.id);
+        if (!connection || !connection.currentLobby) return;
+        const lobbyId = connection.currentLobby;
+        const wallet = connection.walletAddress || socket.id;
+        const targetId = String(payload?.targetId || '');
+        if (!targetId) return;
+        const amount = Math.max(0, Math.min(3, Number(payload?.amount) || 1));
+        io.to(lobbyId).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
+      } catch {}
+    });
+
     // Queue presence and assets acks
     socket.on('queue_presence', (payload) => {
       try {
@@ -1258,39 +1275,11 @@ preparePromise.then(() => {
           };
         });
 
-        // Tutorial AI backfill in socket layer to avoid API/serverless split
-        try {
-          const isTutorial = lobby.matchType === 'tutorial';
-          const hasReadyHuman = lobbyPlayers.some(p => !p.isAi && p.isReady);
-          if (isTutorial && hasReadyHuman) {
-            const missing = Math.max(0, lobby.capacity - lobbyPlayers.length);
-            if (missing > 0) {
-              const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
-              for (let i = 0; i < missing; i++) {
-                const name = aiNames[(Math.floor(Math.random() * aiNames.length))];
-                lobbyPlayers.push({
-                  playerId: `ai-${Date.now()}-${i}`,
-                  username: name,
-                  chickenName: 'default-ai-chicken',
-                  isReady: true,
-                  isAi: true,
-                });
-              }
-              // Notify clients of the AI-augmented roster immediately
-              io.to(lobbyId).emit('lobby_updated', {
-                id: lobbyId,
-                players: lobbyPlayers,
-                capacity: lobby.capacity,
-                amount: lobby.amount,
-                currency: lobby.currency,
-                matchType: lobby.matchType
-              });
-            }
-          }
-        } catch {}
+        // Disabled tutorial AI backfill for now
+        try { /* no-op */ } catch {}
         
         // Check if we have minimum players and all are ready
-        const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
         const readyPlayers = lobbyPlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = lobbyPlayers.length >= minPlayers && 
@@ -1483,7 +1472,7 @@ preparePromise.then(() => {
         }
         
         // Check if we have minimum players and all are ready
-        const minPlayers = lobbyId.includes('tutorial') ? 1 : 4;
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         const allReady = lobbyPlayers.length >= minPlayers && 
                          lobbyPlayers.every(p => p.isReady || p.isAi) && hasHumanReady;
@@ -1595,7 +1584,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: isTutorial ? 1 : 4,
+        minHumans: isTutorial ? 2 : 4,
         escrowId: escrowIdVal,
       });
 
@@ -1629,7 +1618,7 @@ preparePromise.then(() => {
       const presentHumans = requiredHumans.filter(w => presenceAcks.has(w) && assetsAcks.has(w));
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 1 : 4;
+      const minHumans = isTutorial ? 2 : 4;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort)

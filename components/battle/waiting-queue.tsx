@@ -52,7 +52,7 @@ export default function WaitingQueue({
   // For ranked: expect at least min humans or the current lobby size at entry.
   const expectedCountRef = useRef<number>(
     lobby.matchType === 'tutorial'
-      ? lobby.capacity
+      ? 2
       : Math.max(4, Array.isArray(lobby.players) ? lobby.players.length : 0)
   )
 

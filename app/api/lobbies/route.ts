@@ -531,34 +531,7 @@ export async function PUT(req: NextRequest) {
 
     // Ready-time AI policy
     if (lobby.matchType === 'tutorial') {
-      const hasReadyHuman = lobby.players.some(p => !p.isAi && Boolean(p.isReady));
-      if (hasReadyHuman) {
-        // Fill remaining slots with AI now for visibility, but let socket server manage countdown
-        ensureTutorialAIFilledToCapacity(lobby);
-        lobby.status = 'starting';
-        try {
-          const socketIo = await getSocketInstance();
-          if (socketIo) {
-            // Broadcast updated roster (with AI filled)
-            const lobbyPlayers = lobby.players.map(p => ({
-              playerId: p.playerId,
-              username: p.username || p.playerId.slice(0, 8) + '...',
-              chickenName: p.chickenId || 'Default',
-              isReady: p.isAi ? true : Boolean((p as any).isReady),
-              isAi: p.isAi || false,
-            }));
-            socketIo.to(lobbyId).emit('lobby_updated', {
-              id: lobbyId,
-              players: lobbyPlayers,
-              capacity: lobby.capacity,
-              amount: lobby.amount,
-              currency: lobby.currency,
-              matchType: lobby.matchType
-            });
-            // Do NOT emit countdown here; let server.js apply pre-countdown delay and handle cancellation
-          }
-        } catch {}
-      }
+      // Temporarily disable AI backfill for tutorial; don't change status here
     } else {
       // Ranked: start only when everyone ready and min humans met
       const minPlayers = 4;

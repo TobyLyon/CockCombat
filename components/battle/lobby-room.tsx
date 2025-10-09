@@ -464,7 +464,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const minRequired = lobby.matchType === 'tutorial' ? 1 : 4
+  const minRequired = lobby.matchType === 'tutorial' ? 2 : 4
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
   const currentPlayer = players.find(p => p.playerId === getCurrentPlayerId())
