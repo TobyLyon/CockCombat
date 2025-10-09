@@ -787,7 +787,9 @@ function SceneContent({
       const nowMs = Date.now()
       if (socket && nowMs - lastEmitAtRef.current > 50) {
         lastEmitAtRef.current = nowMs
+        const msid = (window as any)?.__last_match_session_id
         socket.emit('player_state', {
+          matchSessionId: msid,
           position: [selfPosition.x, selfPosition.y, selfPosition.z],
           rotationY: selfRotation.y,
           isPecking: selfIsPecking,

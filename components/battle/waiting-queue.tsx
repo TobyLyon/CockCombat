@@ -115,6 +115,7 @@ export default function WaitingQueue({
       // Track session id for subsequent acks/timing
       const prevMsid = matchSessionIdRef.current
       matchSessionIdRef.current = payload?.matchSessionId || null
+      try { (window as any).__last_match_session_id = matchSessionIdRef.current } catch {}
       if (matchSessionIdRef.current && matchSessionIdRef.current !== prevMsid) {
         // Reset asset readiness when a new session begins
         assetsReadyRef.current = false
@@ -208,8 +209,17 @@ export default function WaitingQueue({
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
     socket.on('match_started', onStarted)
+    // Join the match room for realtime sync using session id
+    const onQueueBeginJoin = (payload: any) => {
+      try {
+        const msid = payload?.matchSessionId
+        if (msid) socket.emit('join_match_room', { matchSessionId: msid })
+      } catch {}
+    }
+    socket.on('queue_begin', onQueueBeginJoin)
     return () => {
       socket.off('queue_begin', onQueueBegin)
+      socket.off('queue_begin', onQueueBeginJoin)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)

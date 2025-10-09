@@ -1001,6 +1001,33 @@ preparePromise.then(() => {
       }
     });
 
+    // Join/leave match room for realtime arena sync
+    socket.on('join_match_room', (payload) => {
+      try {
+        const matchSessionId = String(payload?.matchSessionId || '');
+        if (!matchSessionId) return;
+        if (!checkRateLimit('join_match_room', 20)) return;
+        const conn = activeConnections.get(socket.id);
+        if (!conn) return;
+        // leave prior
+        try { if (conn.currentMatch) socket.leave(conn.currentMatch); } catch {}
+        socket.join(matchSessionId);
+        conn.currentMatch = matchSessionId;
+        activeConnections.set(socket.id, conn);
+      } catch {}
+    });
+    socket.on('leave_match_room', () => {
+      try {
+        const conn = activeConnections.get(socket.id);
+        if (!conn) return;
+        if (conn.currentMatch) {
+          try { socket.leave(conn.currentMatch); } catch {}
+          delete conn.currentMatch;
+          activeConnections.set(socket.id, conn);
+        }
+      } catch {}
+    });
+
     // Realtime arena sync: receive local player transform and broadcast to lobby room
     socket.on('player_state', (payload) => {
       try {
@@ -1011,6 +1038,7 @@ preparePromise.then(() => {
         const connection = activeConnections.get(socket.id);
         if (!connection || !connection.currentLobby) return;
         const lobbyId = connection.currentLobby;
+        const matchId = connection.currentMatch || String(payload?.matchSessionId || '');
         const wallet = connection.walletAddress || socket.id;
         // Sanitize payload
         const pos = Array.isArray(payload?.position) && payload.position.length >= 3
@@ -1018,7 +1046,8 @@ preparePromise.then(() => {
           : [0, 0.85, 0];
         const rotY = Number(payload?.rotationY);
         const isPecking = Boolean(payload?.isPecking);
-        io.to(lobbyId).emit('player_state', {
+        const targetRoom = matchId ? matchId : lobbyId;
+        io.to(targetRoom).emit('player_state', {
           playerId: wallet,
           position: { x: Number(pos[0]) || 0, y: Number(pos[1]) || 0.85, z: Number(pos[2]) || 0 },
           rotationY: isFinite(rotY) ? rotY : 0,
@@ -1037,11 +1066,13 @@ preparePromise.then(() => {
         const connection = activeConnections.get(socket.id);
         if (!connection || !connection.currentLobby) return;
         const lobbyId = connection.currentLobby;
+        const matchId = connection.currentMatch || String(payload?.matchSessionId || '');
         const wallet = connection.walletAddress || socket.id;
         const targetId = String(payload?.targetId || '');
         if (!targetId) return;
         const amount = Math.max(0, Math.min(3, Number(payload?.amount) || 1));
-        io.to(lobbyId).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
+        const targetRoom = matchId ? matchId : lobbyId;
+        io.to(targetRoom).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
       } catch {}
     });
 
