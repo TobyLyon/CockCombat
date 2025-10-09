@@ -1232,9 +1232,12 @@ function ChickenInstances({
           const prevX2 = g.position.x
           const prevZ2 = g.position.z
           // Adapt smoothing based on local performance: if delta is large (low FPS), ease more aggressively
-    const ease = Math.max(0.15, Math.min(0.4, delta * 12))
-          g.position.x += (pos.x - g.position.x) * ease
-          g.position.z += (pos.z - g.position.z) * ease
+    // Double-buffer smoothing to keep others smooth while we're moving ourselves
+    const velMag = Math.hypot(selfVelocity.current.x, selfVelocity.current.z)
+    const easeBase = Math.max(0.15, Math.min(0.4, delta * 12))
+    const ease = velMag > 0.01 ? Math.min(0.5, easeBase + 0.08) : easeBase
+    g.position.x += (pos.x - g.position.x) * ease
+    g.position.z += (pos.z - g.position.z) * ease
           try {
             const ya = (net as any)?.yAnim
             if (ya && typeof ya.start === 'number' && typeof ya.end === 'number' && typeof ya.startAt === 'number' && typeof ya.endAt === 'number') {
@@ -1261,11 +1264,16 @@ function ChickenInstances({
             const dz = g.position.z - prevZ2
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try {
-              const peckEventAt = (net as any)?.peckAt
-              if (peckEventAt && Date.now() - peckEventAt < 250) {
-                lastPeckRef.current[chicken.id] = Date.now()
+              const nowMs = Date.now()
+              const last = lastPeckRef.current[chicken.id] || 0
+              if (net.isPecking) {
+                lastPeckRef.current[chicken.id] = nowMs
+              } else {
+                const peckEventAt = (net as any)?.peckAt
+                if (peckEventAt && nowMs - peckEventAt < 250 && (nowMs - last) > 260) {
+                  lastPeckRef.current[chicken.id] = nowMs
+                }
               }
-              if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now()
             } catch {}
           } else {
             try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
