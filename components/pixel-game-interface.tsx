@@ -251,14 +251,14 @@ export default function PixelGameInterface() {
       {/* Epic Title */}
       <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
         <div className="relative inline-block">
-          <h1 className="text-7xl md:text-8xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font pr-10">
+          <h1 className="text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font pr-14">
             COCK COMBAT
           </h1>
-          <span className="absolute -top-2 -right-1 md:-top-3 md:-right-2 bg-yellow-400 text-black border border-yellow-500 text-[10px] md:text-xs font-extrabold px-1.5 py-0.5 rounded leading-none shadow">
+          <span className="absolute -top-3 -right-1 md:-top-4 md:-right-3 bg-yellow-400 text-black border border-yellow-500 text-[11px] md:text-sm font-extrabold px-2 py-0.5 rounded leading-none shadow rotate-[-8deg]">
             BETA
           </span>
         </div>
-        <p className="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
+        <p className="text-lg md:text-xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
           Battle Royale on BNB Chain
         </p>
         </div>
@@ -317,13 +317,16 @@ export default function PixelGameInterface() {
         <WalletMultiButton />
         
         {/* Lobbies button */}
-                    <Button
-          className="h-12 px-6 text-base font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white"
-                      onClick={() => handleNavigation("/arena")}
-                      disabled={isNavigating}
-                    >
-          {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
-                    </Button>
+          <Button
+            className="h-12 px-6 text-base font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white active:scale-[0.985] touch-manipulation select-none"
+            onClick={() => handleNavigation("/arena")}
+            onPointerDown={(e) => { try { (e.currentTarget as any).style.transform = 'scale(0.985)' } catch {} }}
+            onPointerUp={(e) => { try { (e.currentTarget as any).style.transform = '' } catch {} }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/arena') }}
+            disabled={isNavigating}
+          >
+            {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
+          </Button>
                   </div>
 
     </div>
