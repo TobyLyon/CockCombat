@@ -523,6 +523,19 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()
 
   // Countdown is driven by server 'match_starting' events; no client auto-advance
+	// Safety nudge: if everyone is ready and no countdown yet, poke server to ensure queue begins
+	const lastEnsureRef = useRef<number>(0)
+	useEffect(() => {
+	  try {
+	    if (!socket) return
+	    if (!allPlayersReady) return
+	    if (countdown !== null) return
+	    const now = Date.now()
+	    if (now - lastEnsureRef.current < 2000) return // throttle to 2s
+	    lastEnsureRef.current = now
+	    socket.emit?.('ensure_queue_progress', lobby.id)
+	  } catch {}
+	}, [allPlayersReady, countdown, socket, lobby.id])
 
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
