@@ -66,7 +66,16 @@ async function handleWagerConfirmation(req: NextRequest) {
         }
       } catch {}
       if (!player) {
-        return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+        // Final self-heal: if not found in memory, add them authoritatively
+        try {
+          const username = (playerPublicKey || '').slice(0, 8) + '...';
+          const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
+          lobby.players.push(newP);
+          player = newP;
+        } catch {}
+        if (!player) {
+          return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+        }
       }
     }
 
@@ -167,13 +176,15 @@ async function handleWagerConfirmation(req: NextRequest) {
           isReady: p.isAi ? true : Boolean(p.isReady),
           isAi: p.isAi || false
         }));
+        const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         io.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
           players: lobbyPlayers,
           capacity: lobby.capacity,
           amount: lobby.amount,
           currency: lobby.currency,
-          matchType: lobby.matchType
+          matchType: lobby.matchType,
+          version: nextVersion
         });
       }
     } catch {}
