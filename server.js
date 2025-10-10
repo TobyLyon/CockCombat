@@ -137,16 +137,22 @@ preparePromise.then(() => {
   // Helper: compute live counts from activeConnections (authoritative)
   function getLobbyCounts(lobbyId) {
     try {
+      const seenWallets = new Set();
       let humans = 0;
       let total = 0;
       for (const [, conn] of activeConnections.entries()) {
-        if (conn && conn.currentLobby === lobbyId) {
-          // Ignore sockets without an identified wallet (haven't registered yet)
-          if (!conn.walletAddress || String(conn.walletAddress).trim().length === 0) continue;
-          total += 1;
-          const addr = String(conn.walletAddress || '');
-          if (!addr.startsWith('ai-')) humans += 1;
-        }
+        if (!conn) continue;
+        // Must be in the logical lobby and actually joined to the Socket.IO room
+        const inLobby = conn.currentLobby === lobbyId;
+        const inRoom = (() => { try { return conn.socket && conn.socket.rooms && conn.socket.rooms.has && conn.socket.rooms.has(lobbyId); } catch { return false; } })();
+        if (!inLobby || !inRoom) continue;
+        const addrRaw = String(conn.walletAddress || '').trim();
+        if (!addrRaw) continue;
+        const addr = addrRaw.toLowerCase();
+        if (seenWallets.has(addr)) continue; // dedupe multiple tabs for same wallet
+        seenWallets.add(addr);
+        total += 1;
+        if (!addr.startsWith('ai-')) humans += 1;
       }
       return { humans, total };
     } catch { return { humans: 0, total: 0 }; }
@@ -1661,6 +1667,11 @@ preparePromise.then(() => {
                     }
                   }
                 } catch {}
+                // Broadcast recomputed counts after clearing associations
+                try {
+                  const c = getLobbyCounts(lobbyId);
+                  io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
+                } catch {}
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
                 try { startQueuePhase(lobbyId, io, overrideRoster).catch(() => {}); } catch {}
@@ -1790,6 +1801,11 @@ preparePromise.then(() => {
                     connection.isReady = false;
                   }
                 }
+              } catch {}
+              // Broadcast recomputed counts
+              try {
+                const c = getLobbyCounts(lobbyId);
+                io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
               } catch {}
             }
           }, 1000);
