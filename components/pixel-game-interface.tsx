@@ -251,10 +251,10 @@ export default function PixelGameInterface() {
       {/* Epic Title */}
       <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
         <div className="relative inline-block">
-          <h1 className="text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font pr-28">
+          <h1 className="text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font">
             COCK COMBAT
           </h1>
-          <span className="absolute -top-2 -right-2 md:-top-3 md:-right-4 bg-yellow-400 text-black border-2 border-yellow-500 text-sm md:text-lg font-extrabold px-3 py-1 rounded-md leading-none shadow-lg rotate-[-6deg] pixel-font">
+          <span className="absolute -top-2 left-full ml-1 md:-top-3 md:ml-2 bg-yellow-400 text-black border-2 border-yellow-500 text-sm md:text-lg font-extrabold px-3 py-1 rounded-md leading-none shadow-lg rotate-[-6deg] pixel-font">
             BETA
           </span>
         </div>

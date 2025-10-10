@@ -180,13 +180,15 @@ preparePromise.then(() => {
 
     // Handle registration of wallet address to socket connection
     socket.on('register_wallet', (walletAddress) => {
-      console.log(`🔗 Linking wallet ${walletAddress} to socket ${socket.id}`);
+      // Normalize to lowercase for consistent identity matching
+      const normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
+      console.log(`🔗 Linking wallet ${normalized} to socket ${socket.id}`);
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
-        connection.walletAddress = walletAddress;
-        console.log(`✅ Wallet ${walletAddress} registered to socket ${socket.id}`);
-        try { socket.emit('wallet_registered', { walletAddress }); } catch {}
+        connection.walletAddress = normalized;
+        console.log(`✅ Wallet ${normalized} registered to socket ${socket.id}`);
+        try { socket.emit('wallet_registered', { walletAddress: normalized }); } catch {}
 
         // If this socket had already joined a lobby before registering wallet, refresh counts
         try {
@@ -199,9 +201,9 @@ preparePromise.then(() => {
         // Guard: if there is an older socket with the same wallet, clean it up to avoid ghost presence
         try {
           for (const [otherId, otherConn] of activeConnections.entries()) {
-            if (otherId !== socket.id && otherConn.walletAddress === walletAddress) {
+            if (otherId !== socket.id && (otherConn.walletAddress || '').toLowerCase() === normalized) {
               const oldLobby = otherConn.currentLobby;
-              console.log(`🧹 Cleaning prior socket ${otherId} for wallet ${walletAddress}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
+              console.log(`🧹 Cleaning prior socket ${otherId} for wallet ${normalized}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
               // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal
               try { otherConn.socket?.disconnect?.(true); } catch {}
               activeConnections.delete(otherId);
@@ -602,16 +604,35 @@ preparePromise.then(() => {
       }
       const { lobbyId, playerId, isReady } = data || {};
       if (!lobbyId || !playerId) return;
-      console.log(`🎯 Player ${playerId} ready status: ${isReady} in lobby ${lobbyId}`);
+      // Normalize identity values for consistent matching
+      const normalizedPlayerId = String(playerId).toLowerCase();
+      console.log(`🎯 Player ${normalizedPlayerId} ready status: ${isReady} in lobby ${lobbyId}`);
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
-        connection.isReady = isReady;
+        // Enforce ranked readiness: only allow ready=true if hasWagered for paid lobbies
+        let finalReady = !!isReady;
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const all = res ? await res.json().catch(() => []) : [];
+          const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+          if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
+            const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
+            const hasWagered = !!(me && me.hasWagered);
+            if (!hasWagered && finalReady) {
+              // Gate: cannot mark ready true without wager in paid lobbies
+              finalReady = false;
+            }
+          }
+        } catch {}
+
+        connection.isReady = finalReady;
         connection.lastLobbyActivity = Date.now();
         // Ensure wallet and lobby are linked immediately to avoid first-join races
         try {
           if (!connection.walletAddress && typeof playerId === 'string') {
-            connection.walletAddress = playerId;
+            connection.walletAddress = normalizedPlayerId;
           }
           if (!connection.currentLobby && typeof lobbyId === 'string') {
             connection.currentLobby = lobbyId;
@@ -625,8 +646,8 @@ preparePromise.then(() => {
         // Broadcast ready status and also send a lobby_synced snapshot for late joiners
         // Debounce room refresh to avoid thundering herd when multiple players toggle
         io.to(lobbyId).emit('player_ready_status', {
-          playerId,
-          isReady
+          playerId: normalizedPlayerId,
+          isReady: connection.isReady
         });
         try {
           if (!global.__refreshDebounce) global.__refreshDebounce = Object.create(null);
@@ -730,11 +751,17 @@ preparePromise.then(() => {
           // Merge API lobby players with socket ready status
           let lobbyPlayers = [];
           for (const player of lobby.players) {
+            const pid = String(player.playerId || '').toLowerCase();
             let isReady = false;
-            for (const [, connection] of activeConnections.entries()) {
-              if (connection.currentLobby === lobbyId && connection.walletAddress === player.playerId) {
-                isReady = !!connection.isReady;
-                break;
+            // Ranked authority: if paid lobby, derive readiness from hasWagered for humans; tutorial uses connection state
+            if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
+              isReady = !!player.hasWagered;
+            } else {
+              for (const [, connection] of activeConnections.entries()) {
+                if (connection.currentLobby === lobbyId && String(connection.walletAddress || '').toLowerCase() === pid) {
+                  isReady = !!connection.isReady;
+                  break;
+                }
               }
             }
             const displayName = player.username && player.username.trim().length > 0
@@ -757,7 +784,7 @@ preparePromise.then(() => {
               for (const addr of presence.values()) {
                 let ready = false;
                 for (const [, c] of activeConnections.entries()) {
-                  if (c.currentLobby === lobbyId && c.walletAddress === addr) { ready = !!c.isReady; break; }
+                  if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(addr).toLowerCase()) { ready = !!c.isReady; break; }
                 }
                 lobbyPlayers.push({
                   playerId: addr,
