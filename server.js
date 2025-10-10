@@ -1629,14 +1629,26 @@ preparePromise.then(() => {
         // Disabled tutorial AI backfill for now
         try { /* no-op */ } catch {}
         
+        // Filter out ghost humans (present in API but no live socket presence)
+        let presenceSet = new Set();
+        try {
+          for (const [, c] of activeConnections.entries()) {
+            if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSet.add(String(c.walletAddress).toLowerCase());
+          }
+        } catch {}
+        const eligiblePlayers = lobbyPlayers.filter(p => p.isAi || presenceSet.has(String(p.playerId || '').toLowerCase()));
+        if (eligiblePlayers.length !== lobbyPlayers.length) {
+          console.log(`🧹 Filtered ${lobbyPlayers.length - eligiblePlayers.length} ghost player(s) from ${lobbyId} for readiness check`);
+        }
+
         // Check if we have minimum players and all are ready
         // Special-case: allow quick testing for the lowest paid lobby (0.005) with 2 players
         const isLowPaidTestLobby = (lobby && lobby.id === 'lobby-0.005');
         const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
-        const readyPlayers = lobbyPlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
-        const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
-        let allReady = lobbyPlayers.length >= minPlayers && 
-                       readyPlayers.length === lobbyPlayers.length && hasHumanReady;
+        const readyPlayers = eligiblePlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
+        const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
+        let allReady = eligiblePlayers.length >= minPlayers && 
+                       readyPlayers.length === eligiblePlayers.length && hasHumanReady;
 
         // Ranked enforcement: all human players must have confirmed wagers to assigned escrow
         if (!lobbyId.includes('tutorial')) {
@@ -1647,14 +1659,14 @@ preparePromise.then(() => {
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);
             if (liveLobby && liveLobby.amount > 0) {
-            const humans = (liveLobby.players || []).filter(p => !p.isAi);
+            const humans = (liveLobby.players || []).filter(p => !p.isAi && presenceSet.has(String(p.playerId || '').toLowerCase()));
               const allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
               const hasEscrow = Boolean(liveLobby.escrowWalletId);
               if (!allWagered || !hasEscrow) {
                 allReady = false;
                 io.to(lobbyId).emit('lobby_updated', {
                   id: lobbyId,
-                  players: lobbyPlayers,
+                  players: eligiblePlayers,
                   capacity: liveLobby.capacity,
                   amount: liveLobby.amount,
                   currency: liveLobby.currency,
@@ -1669,7 +1681,7 @@ preparePromise.then(() => {
           }
         }
         
-        console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${lobbyPlayers.length} ready (min: ${minPlayers})`);
+        console.log(`🎯 Lobby ${lobbyId} status: ${readyPlayers.length}/${eligiblePlayers.length} ready (min: ${minPlayers})`);
         
         if (!allReady) {
           // If readiness dropped, cancel any scheduled pre-countdown
@@ -1682,12 +1694,14 @@ preparePromise.then(() => {
           } catch {}
           // Majority-ready grace logic
           try {
-            const humans = lobbyPlayers.filter(p => !p.isAi);
+            const humans = eligiblePlayers.filter(p => !p.isAi);
             const readyHumans = humans.filter(p => p.isReady);
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
-            // Only allow majority-ready flow for parties of 3 or more humans
-            const hasMajorityReady = totalHumans >= 3 && readyHumans.length >= majorityThreshold && lobbyPlayers.length >= minPlayers;
+            // Allow majority for 3+ humans; for the low paid 0.005 lobby with min 2, allow majority with 2 ready humans as a safety
+            const allowTwoHumanMajority = isLowPaidTestLobby && totalHumans >= 2;
+            const hasMajorityReady = (totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers)
+              || (allowTwoHumanMajority && readyHumans.length >= 2 && eligiblePlayers.length >= minPlayers);
 
             if (!global.majorityGrace) global.majorityGrace = Object.create(null);
 
@@ -1738,23 +1752,24 @@ preparePromise.then(() => {
                     clearInterval(intervalId);
                     try { delete global.majorityGrace[lobbyId]; } catch {}
 
-                    // Rebuild current roster and filter to ready humans (and AIs for tutorial)
+                    // Rebuild current roster and filter to ready humans (and AIs for tutorial), ignoring ghosts
                     try {
           const resNow = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
                       const allNow = resNow ? await resNow.json().catch(() => []) : [];
                       const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
                       if (!liveLobbyNow) return;
                       // Merge with socket readiness
-                      const mergedPlayers = (liveLobbyNow.players || []).map(player => {
+                      const mergedPlayers = (liveLobbyNow.players || []).reduce((acc, player) => {
+                        const pid = String(player.playerId || '').toLowerCase();
+                        const present = presenceSet.has(pid);
+                        if (!player.isAi && !present) return acc; // ignore ghost humans
                         let isReady = false;
-                        for (const [connectionId, connection] of activeConnections.entries()) {
-                          if (connection.currentLobby === lobbyId && connection.walletAddress === player.playerId) {
-                            isReady = connection.isReady || false;
-                            break;
-                          }
+                        for (const [, connection] of activeConnections.entries()) {
+                          if (connection.currentLobby === lobbyId && String(connection.walletAddress || '').toLowerCase() === pid) { isReady = !!connection.isReady; break; }
                         }
-                        return { playerId: player.playerId, username: player.username, chickenName: player.chickenId, isAi: !!player.isAi, isReady };
-                      });
+                        acc.push({ playerId: player.playerId, username: player.username, chickenName: player.chickenId, isAi: !!player.isAi, isReady });
+                        return acc;
+                      }, [] as any[]);
                       const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
                       const readyHumansNow = mergedPlayers.filter(p => !p.isAi && p.isReady);
                       let majorityRoster = readyHumansNow;
