@@ -1224,7 +1224,7 @@ preparePromise.then(() => {
                 const rankedLobby = Array.isArray(lobbies) ? lobbies.find(l => l.amount > 0 && (l.players || []).some(p => p.playerId === player1Wallet || p.playerId === player2Wallet)) : null;
                 if (rankedLobby && rankedLobby.amount > 0) {
                   const humans = (rankedLobby.players || []).filter(p => !p.isAi);
-                  const prizePoolLamports = Math.round(rankedLobby.amount * humans.length * 1_000_000_000);
+                  const prizePool = Number(rankedLobby.amount * humans.length);
 
                   // Create match_results row
                   const participants = humans.map((p) => ({ wallet: p.playerId, wager_amount: rankedLobby.amount }));
@@ -1234,7 +1234,7 @@ preparePromise.then(() => {
                     match_started_at: new Date(room.startTime || Date.now()).toISOString(),
                     match_ended_at: new Date().toISOString(),
                     winner_wallet: winnerWallet,
-                    total_prize_pool: (prizePoolLamports / 1_000_000_000),
+                    total_prize_pool: prizePool,
                     participants,
                     game_data: { roomId },
                     status: 'completed',
@@ -1253,7 +1253,7 @@ preparePromise.then(() => {
                         },
                         body: JSON.stringify({
                           winnerAddress: winnerWallet,
-                          prizePoolLamports,
+                          prizePool: prizePool,
                           matchId: mr.id,
                         }),
                       });
@@ -2187,8 +2187,10 @@ preparePromise.then(() => {
           try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
+          // Graceful teardown for back-to-back matches: clear queue state and countdown flags
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+          try { if (global.countdownActive && global.countdownActive[lobbyId]) delete global.countdownActive[lobbyId]; } catch {}
         }
       }, 1000);
     } catch (e) {
