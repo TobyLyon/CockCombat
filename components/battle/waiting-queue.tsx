@@ -457,10 +457,10 @@ export default function WaitingQueue({
             {lobby.matchType !== 'tutorial' && (
               <div className="bg-[#222222] p-3 rounded-lg mb-4">
                  <h4 className="text-sm lg:text-lg font-bold text-white pixel-font mb-2">Requirements</h4>
-                 <div className="flex items-center text-xs lg:text-sm text-gray-300">
-                  <AlertCircle className="h-3 w-3 lg:h-4 lg:w-4 mr-2 text-yellow-400 flex-shrink-0" />
-                  <span>2 players minimum to start.</span>
-                </div>
+                <div className="flex items-center text-xs lg:text-sm text-gray-300">
+                 <AlertCircle className="h-3 w-3 lg:h-4 lg:w-4 mr-2 text-yellow-400 flex-shrink-0" />
+                 <span>2 players minimum to start.</span>
+               </div>
               </div>
             )}
           </div>
