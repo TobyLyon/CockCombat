@@ -381,12 +381,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   // Majority grace seconds left (server-driven)
   const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
+  const [activeHumans, setActiveHumans] = useState<number>(0)
 
   useEffect(() => {
     if (!socket) return
     const onGrace = (payload: { seconds: number }) => setMajoritySeconds(payload.seconds)
     socket.on('majority_grace', onGrace)
-    return () => { socket.off('majority_grace', onGrace) }
+    const onActive = (p: any) => { try { setActiveHumans(Math.max(0, Number(p?.humans)||0)) } catch {} }
+    socket.on('active_players', onActive)
+    try { socket.emit('get_active_players') } catch {}
+    const id = window.setInterval(() => { try { socket.emit('get_active_players') } catch {} }, 5000)
+    return () => { socket.off('majority_grace', onGrace); socket.off('active_players', onActive); window.clearInterval(id) }
   }, [socket])
 
   const handleReadyToggle = async () => {
@@ -646,6 +651,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             <span className="font-bold text-yellow-400">
               {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
             </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Active players:</span>
+            <span className="font-bold text-emerald-400">{activeHumans}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Prize:</span>

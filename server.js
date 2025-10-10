@@ -157,6 +157,27 @@ preparePromise.then(() => {
       return { humans, total };
     } catch { return { humans: 0, total: 0 }; }
   }
+  // Helper: compute global active humans (browsing/queued/in lobbies)
+  function getGlobalActiveHumans() {
+    try {
+      const seenWallets = new Set();
+      let humans = 0;
+      for (const [, conn] of activeConnections.entries()) {
+        if (!conn) continue;
+        const addrRaw = String(conn.walletAddress || '').trim();
+        if (!addrRaw) continue;
+        const addr = addrRaw.toLowerCase();
+        if (addr.startsWith('ai-')) continue;
+        if (seenWallets.has(addr)) continue;
+        // Count anyone connected who is not spectating
+        if (conn.socket && conn.socket.connected && !conn.isSpectator) {
+          humans += 1;
+          seenWallets.add(addr);
+        }
+      }
+      return humans;
+    } catch { return 0; }
+  }
   // Queue session tracking: matchSessionId -> session data
   if (!global.queueSessions) {
     global.queueSessions = new Map();
@@ -917,6 +938,30 @@ preparePromise.then(() => {
         socket.emit('lobby_counts_snapshot', { counts: {} });
       }
     });
+
+    // Active players snapshot
+    socket.on('get_active_players', () => {
+      if (!checkRateLimit('get_active_players', 10)) return;
+      try { socket.emit('active_players', { humans: getGlobalActiveHumans(), ts: Date.now() }); } catch {}
+    });
+
+    // Broadcast active players to all clients on connect/disconnect churn (throttled)
+    try {
+      if (!global.__activePlayersBroadcast) global.__activePlayersBroadcast = { last: 0 };
+      const maybeBroadcast = () => {
+        try {
+          const now = Date.now();
+          if (now - global.__activePlayersBroadcast.last < 1000) return; // 1s throttle
+          global.__activePlayersBroadcast.last = now;
+          const humans = getGlobalActiveHumans();
+          io.emit('active_players', { humans, ts: now });
+        } catch {}
+      };
+      // initial
+      maybeBroadcast();
+      // after short delay to capture wallet registration
+      setTimeout(maybeBroadcast, 600);
+    } catch {}
 
     // Periodic idle-kick for unready players lingering in lobby rooms
     try {
