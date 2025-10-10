@@ -635,23 +635,8 @@ preparePromise.then(() => {
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
-        // Enforce ranked readiness: only allow ready=true if hasWagered for paid lobbies
-        let finalReady = !!isReady;
-        try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-          const all = res ? await res.json().catch(() => []) : [];
-          const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-          if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
-            const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
-            const hasWagered = !!(me && me.hasWagered);
-            if (!hasWagered && finalReady) {
-              // Gate: cannot mark ready true without wager in paid lobbies
-              finalReady = false;
-            }
-          }
-        } catch {}
-
+        // Soft-gate: allow ready UI immediately; actual match start still enforces wagers elsewhere
+        const finalReady = !!isReady;
         connection.isReady = finalReady;
         connection.lastLobbyActivity = Date.now();
         // Ensure wallet and lobby are linked immediately to avoid first-join races
