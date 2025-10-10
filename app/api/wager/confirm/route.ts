@@ -62,7 +62,14 @@ async function handleWagerConfirmation(req: NextRequest) {
     if (isBsc()) {
       // EVM: signature = txHash
       const provider = getEvmProvider();
-      const receipt = await provider.getTransactionReceipt(signature);
+      // Poll for receipt to avoid race when immediately confirming after send
+      let receipt = await provider.getTransactionReceipt(signature);
+      let attempts = 0;
+      while ((!receipt || receipt.status !== 1) && attempts < 8) {
+        await new Promise(r => setTimeout(r, 750));
+        receipt = await provider.getTransactionReceipt(signature);
+        attempts++;
+      }
       if (!receipt || receipt.status !== 1) {
         return NextResponse.json({ error: 'Transaction not found or failed' }, { status: 400 });
       }

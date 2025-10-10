@@ -255,6 +255,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       setPlayers(prev => prev.map(p => 
         p.playerId === data.playerId ? { ...p, isReady: data.isReady } : p
       ));
+      // If this client is the one who became ready because of wager confirmation, reflect locally
+      try {
+        const me = getCurrentPlayerId();
+        if (me && data.playerId === me && data.isReady) {
+          setHasWagered(true);
+          setIsReady(true);
+        }
+      } catch {}
     };
 
     const handleMatchStarting = (data: { countdown: number }) => {
@@ -460,14 +468,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           params: [{ from, to, value }],
         });
 
-        const confirmRes = await fetch('/api/wager/confirm', {
+        let confirmRes = await fetch('/api/wager/confirm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
         });
+        // Simple retry to avoid immediate race after execution
         if (!confirmRes.ok) {
-          const err = await confirmRes.json();
-          throw new Error(err.error || 'Wager confirmation failed');
+          await new Promise(r => setTimeout(r, 900));
+          confirmRes = await fetch('/api/wager/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
+          });
+          if (!confirmRes.ok) {
+            const err = await confirmRes.json().catch(() => ({} as any));
+            throw new Error(err.error || 'Wager confirmation failed');
+          }
         }
       } else {
         if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');

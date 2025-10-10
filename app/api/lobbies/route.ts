@@ -409,6 +409,47 @@ export async function DELETE(req: NextRequest) {
     }
 
     const leavingPlayer = lobby.players[idx];
+
+    // Best-effort refund if leaving before countdown/queue begins (ranked only)
+    try {
+      const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
+      const hasWagered = Boolean((leavingPlayer as any)?.hasWagered);
+      const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]); } catch { return false; } })();
+      const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)); } catch { return false; } })();
+      const eligibleForRefund = isPaidRanked && hasWagered && !isCountdownActive && !hasQueueSession;
+
+      if (eligibleForRefund && lobby.escrowWalletId) {
+        const [{ evmEscrowService }, { ethers }] = await Promise.all([
+          import('@/lib/evm-escrow-service'),
+          import('ethers'),
+        ]);
+
+        const fromWallet = evmEscrowService.getWallet(lobby.escrowWalletId as any);
+        if (fromWallet) {
+          const wei = ethers.parseUnits(String(lobby.amount), 18);
+          try {
+            const txHash = await evmEscrowService.transferNative(String(leavingPlayer.playerId), wei, fromWallet);
+            try {
+              await auditLogger.log({
+                eventType: 'wager_refund',
+                actorWallet: String(leavingPlayer.playerId),
+                endpoint: '/api/lobbies (leave)',
+                severity: 'info',
+                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown' },
+              });
+            } catch {}
+            // Reflect refund in memory for this player
+            try { (leavingPlayer as any).hasWagered = false; (leavingPlayer as any).isReady = false; } catch {}
+            console.log(`↩️ Refunded ${lobby.amount} to ${leavingPlayer.playerId} from escrow ${lobby.escrowWalletId} (tx ${txHash})`);
+          } catch (e) {
+            console.warn('Refund transfer failed (non-fatal):', (e as any)?.message || e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Refund check failed (non-fatal):', (e as any)?.message || e);
+    }
+
     lobby.players.splice(idx, 1);
 
     // If tutorial lobby has no humans left, purge all AI and reset state
