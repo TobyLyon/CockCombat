@@ -552,14 +552,21 @@ function SceneContent({
       if (e.code === 'Space') jumpRequestRef.current = true
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') peckRequestRef.current = true
     }
+    // Clear any stuck input on visibility/blur changes
+    const onBlur = () => { peckRequestRef.current = false }
+    const onVisibility = () => { if (document.hidden) peckRequestRef.current = false }
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) peckRequestRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
@@ -708,7 +715,8 @@ function SceneContent({
     if (playerChicken && !playerChicken.isAlive) return;
 
     const jumpPressed = Date.now() < freezeUntilRef.current ? false : (jumpKey || jumpRequestRef.current);
-    const peckPressed = Date.now() < freezeUntilRef.current ? false : (peckKey || peckRequestRef.current);
+    // Drive peck from discrete requests only to avoid stuck-state when keyup is missed
+    const peckPressed = Date.now() < freezeUntilRef.current ? false : Boolean(peckRequestRef.current);
     const isPeckingNow = selfIsPecking;
 
     if (isPeckingNow && peckPressed) {
@@ -733,6 +741,11 @@ function SceneContent({
 
     // Peck handling
     if (peckPressed && !selfIsPecking && !wasPecking.current) {
+      // Simple local cooldown to avoid rapid-fire and server throttling
+      const nowMs = Date.now()
+      if (nowMs - (lastPeckAtRef.current || 0) < 220) {
+        peckRequestRef.current = false
+      } else {
       setSelfIsPecking(true);
       wasPecking.current = true;
 
@@ -776,9 +789,10 @@ function SceneContent({
           }
         }
       }
-      lastPeckAtRef.current = Date.now()
+      lastPeckAtRef.current = nowMs
       peckRequestRef.current = false
-      setTimeout(() => setSelfIsPecking(false), 200);
+      setTimeout(() => { setSelfIsPecking(false); wasPecking.current = false }, 200);
+      }
     }
 
     if (!peckPressed && wasPecking.current) {

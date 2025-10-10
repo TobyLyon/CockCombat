@@ -1132,7 +1132,8 @@ preparePromise.then(() => {
     if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
     socket.on('player_damage', (payload) => {
       try {
-        if (!checkRateLimit('player_damage', 180)) {
+        // Allow more frequent peck hits without throttling legitimate gameplay
+        if (!checkRateLimit('player_damage', 420)) {
           return;
         }
         const connection = activeConnections.get(socket.id);
