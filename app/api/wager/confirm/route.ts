@@ -108,6 +108,29 @@ async function handleWagerConfirmation(req: NextRequest) {
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
 
+    // Broadcast updated readiness immediately so Match Room reflects it
+    try {
+      const io = (global as any).socketIo;
+      if (io) {
+        io.to(lobbyId).emit('player_ready_status', { playerId: playerPublicKey, isReady: true });
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: p.isAi || false
+        }));
+        io.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        });
+      }
+    } catch {}
+
     // Audit log the wager confirmation
     await auditLogger.log({
       eventType: 'wager_confirmed',

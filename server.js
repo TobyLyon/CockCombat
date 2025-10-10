@@ -268,7 +268,7 @@ preparePromise.then(() => {
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const response = await fetch(`${baseUrl}/api/lobbies`);
+          const response = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' });
           const lobbies = await response.json();
           const lobby = lobbies.find(l => l.id === lobbyId);
           
@@ -482,7 +482,7 @@ preparePromise.then(() => {
         // Emit an updated lobby roster immediately
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
           if (lobby) {
@@ -602,7 +602,7 @@ preparePromise.then(() => {
         } catch {}
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const resSnap = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const resSnap = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const allSnap = resSnap ? await resSnap.json().catch(() => []) : [];
           const lobbySnap = Array.isArray(allSnap) ? allSnap.find(l => l && l.id === lobbyId) : null;
           if (lobbySnap) {
@@ -1588,7 +1588,7 @@ preparePromise.then(() => {
 
                     // Rebuild current roster and filter to ready humans (and AIs for tutorial)
                     try {
-                      const resNow = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+          const resNow = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
                       const allNow = resNow ? await resNow.json().catch(() => []) : [];
                       const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
                       if (!liveLobbyNow) return;
