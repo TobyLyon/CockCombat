@@ -1310,6 +1310,8 @@ preparePromise.then(() => {
             for (const [id, conn] of activeConnections.entries()) {
               if (id !== socket.id && conn.walletAddress === walletAtDisconnect) {
                 console.log(`↩️ Handoff detected for ${walletAtDisconnect}; skipping removal from ${lobbyAtDisconnect}`);
+                // Still refresh presence-based snapshot so roster remains accurate across tabs
+                try { if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) global.lobbyPresence.get(lobbyAtDisconnect).add(walletAtDisconnect); } catch {}
                 return;
               }
             }
@@ -1348,6 +1350,7 @@ preparePromise.then(() => {
                     playerId: player.playerId,
                     username: player.username || player.playerId.slice(0, 8) + '...',
                     chickenName: player.chickenId || 'Default',
+                    // Apply tutorial-style caching to all lobbies: AI auto-ready in tutorial; otherwise preserve last known ready if present in presence map
                     isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
                     isAi: player.isAi || false
                   };
