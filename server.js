@@ -421,6 +421,30 @@ preparePromise.then(() => {
             // Handshake: confirm to the joiner that the lobby is synced
             try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version }); } catch {}
 
+            // Safety: re-fetch and emit one more authoritative snapshot shortly after join to avoid eventual consistency races
+            setTimeout(async () => {
+              try {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
+                const all = res ? await res.json().catch(() => []) : [];
+                const lob2 = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+                if (!lob2) return;
+                const withNames = [];
+                for (const p of (lob2.players || [])) {
+                  const name = p.username && p.username.trim().length > 0 ? p.username : await getUsernameForWallet(p.playerId);
+                  withNames.push({
+                    playerId: p.playerId,
+                    username: name,
+                    chickenName: p.chickenId || 'Default',
+                    isReady: (lob2.matchType === 'tutorial' && p.isAi) ? true : Boolean(p.hasWagered || p.isReady),
+                    isAi: !!p.isAi,
+                  });
+                }
+                const ver2 = nextLobbyVersion(lobbyId);
+                io.to(lobbyId).emit('lobby_updated', { id: lobbyId, players: withNames, capacity: lob2.capacity, amount: lob2.amount, currency: lob2.currency, matchType: lob2.matchType, version: ver2 });
+              } catch {}
+            }, 250);
+
         // Also send current counts snapshot for this lobby to the joiner
         try {
           const c = getLobbyCounts(lobbyId);
