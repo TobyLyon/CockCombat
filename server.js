@@ -1692,10 +1692,8 @@ preparePromise.then(() => {
             const readyHumans = humans.filter(p => p.isReady);
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
-            // Allow majority for 3+ humans; for the low paid 0.005 lobby with min 2, allow majority with 2 ready humans as a safety
-            const allowTwoHumanMajority = isLowPaidTestLobby && totalHumans >= 2;
-            const hasMajorityReady = (totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers)
-              || (allowTwoHumanMajority && readyHumans.length >= 2 && eligiblePlayers.length >= minPlayers);
+            // Only allow majority logic when there are 3 or more humans (remove 2-human special-case)
+            const hasMajorityReady = (totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers);
 
             if (!global.majorityGrace) global.majorityGrace = Object.create(null);
 
