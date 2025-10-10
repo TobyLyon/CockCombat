@@ -191,6 +191,10 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
           <div>
             <p className="text-white/60 text-[11px]">AI</p>
             <p className="font-semibold">{aiCount}</p>
+            {/* Info tab */}
+            <div className="mt-1 text-[11px] text-white/60">
+              <span className="inline-block px-1.5 py-0.5 rounded bg-white/10 border border-white/20">AI fill is only used in tutorials and never in ranked.</span>
+            </div>
           </div>
           <div>
             <p className="text-white/60 text-[11px]">Gross Pool</p>
