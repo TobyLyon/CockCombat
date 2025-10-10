@@ -5,7 +5,7 @@ import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
-import { isBsc, toNativeUnits } from '@/lib/chain';
+import { isBsc } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 
@@ -127,13 +127,12 @@ async function handleWagerConfirmation(req: NextRequest) {
       } catch {
         return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
       }
-        return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
-      }
       // Record exact funding wallet for deterministic refunds
       try { (player as any).__fundingWallet = tx.from; } catch {}
     } else {
       return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
     }
+    
 
     // Mark signature as used (database-backed)
     await authService.markSignatureUsed(
