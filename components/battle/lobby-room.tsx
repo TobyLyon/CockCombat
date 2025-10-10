@@ -200,6 +200,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
+      // Ignore snapshots not meant for this lobby (safety against cross-room races)
+      try { if (updatedLobby && updatedLobby.id && updatedLobby.id !== lobby.id) return } catch {}
       const incomingV = Number((updatedLobby as any)?.version || 0)
       if (incomingV && incomingV < latestVersionRef.v) {
         console.log('↪️ Ignoring stale lobby update version', incomingV, 'latest is', latestVersionRef.v)
@@ -258,10 +260,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       requestSnapshotDebounced()
     };
 
-    const handlePlayerReady = (data: { playerId: string, isReady: boolean }) => {
+    const handlePlayerReady = (data: any) => {
       console.log('✅ Player ready status (snapshot refresh):', data);
       // Reflect local state if it's about me, then request authoritative snapshot
       try {
+        // Guard by lobby
+        const eventLobbyId = String((data && (data as any).lobbyId) || '')
+        if (eventLobbyId && eventLobbyId !== lobby.id) return
         const me = getCurrentPlayerId();
         const meNorm = me ? String(me).toLowerCase() : ''
         const pid = String(data.playerId || '').toLowerCase()

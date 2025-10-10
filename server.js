@@ -672,6 +672,7 @@ preparePromise.then(() => {
         // Broadcast ready status and also send a lobby_synced snapshot for late joiners
         // Debounce room refresh to avoid thundering herd when multiple players toggle
         io.to(lobbyId).emit('player_ready_status', {
+          lobbyId,
           playerId: normalizedPlayerId,
           isReady: connection.isReady
         });
