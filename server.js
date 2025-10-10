@@ -1685,15 +1685,23 @@ preparePromise.then(() => {
               const hasEscrow = Boolean(liveLobby.escrowWalletId);
               if (!allWagered || !hasEscrow) {
                 allReady = false;
-            const version2 = nextLobbyVersion(lobbyId);
-            io.to(lobbyId).emit('lobby_updated', {
+                const version2 = nextLobbyVersion(lobbyId);
+                // Emit API roster with username and wager-derived readiness to avoid presence churn
+                const apiPlayers = (liveLobby.players || []).map((p) => ({
+                  playerId: p.playerId,
+                  username: p.username || (p.playerId ? String(p.playerId).slice(0,8)+'...' : 'Player'),
+                  chickenName: p.chickenId || 'Default',
+                  isReady: p.isAi ? true : Boolean(p.hasWagered),
+                  isAi: !!p.isAi,
+                }));
+                io.to(lobbyId).emit('lobby_updated', {
                   id: lobbyId,
-                  players: eligiblePlayers,
+                  players: apiPlayers,
                   capacity: liveLobby.capacity,
                   amount: liveLobby.amount,
                   currency: liveLobby.currency,
-              matchType: liveLobby.matchType,
-              version: version2
+                  matchType: liveLobby.matchType,
+                  version: version2
                 });
                 console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered} hasEscrow=${hasEscrow}`);
               }
