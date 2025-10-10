@@ -206,6 +206,7 @@ async function handleWagerConfirmation(req: NextRequest) {
             return acc;
           }, []);
           io.to(lobbyId).emit('lobby_updated', { id: lobbyId, players: playersOut, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version });
+          try { io.to(lobbyId).emit('refresh_lobby_state'); } catch {}
         } catch {}
       }
     } catch {}
