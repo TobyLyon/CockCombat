@@ -192,7 +192,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         chickenName: p.chickenId || p.chickenName || 'Default',
         isReady: p.isAi ? true : Boolean(p.isReady),
         isAi: !!p.isAi,
-      }))
+      })))
     };
 
     // Lightweight join/leave handlers (no snapshots)
