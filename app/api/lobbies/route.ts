@@ -482,17 +482,15 @@ export async function DELETE(req: NextRequest) {
         const fromWallet = evmEscrowService.getWallet(lobby.escrowWalletId as any);
         if (fromWallet) {
           const wei = ethers.parseUnits(String(lobby.amount), 18);
-          // Refund back to original funding wallet if recorded
-          const refundTo = String(((leavingPlayer as any)?.__fundingWallet || leavingPlayer.playerId) as string)
           try {
-            const txHash = await evmEscrowService.transferNative(refundTo, wei, fromWallet);
+            const txHash = await evmEscrowService.transferNative(String(leavingPlayer.playerId), wei, fromWallet);
             try {
               await auditLogger.log({
                 eventType: 'wager_refund',
                 actorWallet: String(leavingPlayer.playerId),
                 endpoint: '/api/lobbies (leave)',
                 severity: 'info',
-                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown', refundTo },
+                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown' },
               });
             } catch {}
             // Reflect refund in memory for this player
@@ -539,13 +537,15 @@ export async function DELETE(req: NextRequest) {
           isAi: p.isAi || false
         }));
 
+        const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
           players: lobbyPlayers,
           capacity: lobby.capacity,
           amount: lobby.amount,
           currency: lobby.currency,
-          matchType: lobby.matchType
+          matchType: lobby.matchType,
+          version: nextVersion
         });
 
         // Emit live counts for cards based on presence
@@ -612,13 +612,15 @@ export async function PUT(req: NextRequest) {
           isReady: p.isAi ? true : Boolean(p.isReady),
           isAi: p.isAi || false
         }));
+        const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
           players: lobbyPlayers,
           capacity: lobby.capacity,
           amount: lobby.amount,
           currency: lobby.currency,
-          matchType: lobby.matchType
+          matchType: lobby.matchType,
+          version: nextVersion
         });
       }
     } catch {}
