@@ -611,7 +611,7 @@ export default function BattleArena() {
                 <div className="flex-1 min-h-0 overflow-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
                   <LobbyRoom
                     lobby={joinedLobby}
-                    playerIdentifier={guestId || publicKey?.toBase58() || undefined}
+                    playerIdentifier={guestId || (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || undefined}
                     onLeaveLobby={leaveCurrentLobby}
                     onStartMatch={() => {
                       setInLobbyRoom(false);

@@ -152,10 +152,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         }
       };
       window.addEventListener('beforeunload', cleanup)
-      document.addEventListener('visibilitychange', () => { if (document.hidden) cleanup() })
       return () => {
         window.removeEventListener('beforeunload', cleanup)
-        document.removeEventListener('visibilitychange', () => { if (document.hidden) cleanup() })
         cleanup()
       };
     }
@@ -292,6 +290,48 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     };
 
     socket.on('lobby_updated', handleLobbyUpdate);
+    // New socket-only roster events
+    const onRosterFull = (payload: any) => {
+      try {
+        if (!payload || payload.lobbyId !== lobby.id) return
+        const players: LobbyPlayer[] = (payload.players || []).map((p: any) => ({
+          playerId: String(p.playerId || '').toLowerCase(),
+          username: p.username || (String(p.playerId||'').slice(0,8)+'...'),
+          chickenName: p.chickenName || 'Default',
+          isReady: !!p.isReady,
+          isAi: !!p.isAi,
+        }))
+        // Stable sort
+        players.sort((a,b)=> (a.isAi!==b.isAi? (a.isAi?1:-1) : a.playerId.localeCompare(b.playerId)))
+        setPlayers(players)
+      } catch {}
+    }
+    const onRosterDiff = (payload: any) => {
+      try {
+        if (!payload || payload.lobbyId !== lobby.id) return
+        const { action, player } = payload
+        const pid = String(player?.playerId || '').toLowerCase()
+        setPlayers(prev => {
+          const map = new Map(prev.map(p=>[p.playerId,p]))
+          if (action === 'remove') {
+            map.delete(pid)
+          } else {
+            map.set(pid, {
+              playerId: pid,
+              username: player?.username || (pid ? pid.slice(0,8)+'...' : 'Player'),
+              chickenName: player?.chickenName || 'Default',
+              isReady: !!player?.isReady,
+              isAi: !!player?.isAi,
+            })
+          }
+          const arr = Array.from(map.values())
+          arr.sort((a,b)=> (a.isAi!==b.isAi? (a.isAi?1:-1) : a.playerId.localeCompare(b.playerId)))
+          return arr
+        })
+      } catch {}
+    }
+    socket.on('roster_full', onRosterFull)
+    socket.on('roster_diff', onRosterDiff)
     socket.on('player_joined_lobby', handlePlayerJoined);
     socket.on('player_left_lobby', handlePlayerLeft);
     socket.on('player_ready_status', handlePlayerReady);
@@ -302,6 +342,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     return () => {
       socket.off('lobby_updated', handleLobbyUpdate);
+      socket.off('roster_full', onRosterFull)
+      socket.off('roster_diff', onRosterDiff)
       socket.off('player_joined_lobby', handlePlayerJoined);
       socket.off('player_left_lobby', handlePlayerLeft);
       socket.off('player_ready_status', handlePlayerReady);

@@ -185,28 +185,22 @@ async function handleWagerConfirmation(req: NextRequest) {
           }
         } catch {}
         io.to(lobbyId).emit('player_ready_status', { playerId: playerPublicKey, isReady: true });
-        const version = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
+        // Socket-only roster diff: mark hasWagered and readiness
         try {
-          const snapBuilder = (global as any).socketIo && (global as any).socketIo.buildLobbySnapshot; // not accessible; fallback below
-          // Rebuild snapshot inline (mirrors server helper policy for ranked)
-          const present = new Set<string>();
-          try {
-            const active = (global as any).activeConnections;
-            if (active && typeof active.entries === 'function') {
-              for (const [, c] of active.entries()) {
-                if (c && c.currentLobby === lobbyId && c.walletAddress) present.add(String(c.walletAddress).toLowerCase());
+          const entry = await (async () => {
+            try {
+              const map = (global as any).lobbyRoster && (global as any).lobbyRoster.get(lobbyId);
+              if (map) {
+                const key = String(playerPublicKey).toLowerCase();
+                const cur = map.get(key) || { playerId: playerPublicKey };
+                const next = { ...cur, hasWagered: true, isReady: true };
+                map.set(key, next);
+                return next;
               }
-            }
-          } catch {}
-          const playersOut = (lobby.players || []).reduce((acc: any[], p: any) => {
-            const id = String(p.playerId || ''); if (!id) return acc; const idn = id.toLowerCase();
-            const human = !p.isAi; const include = human ? (present.has(idn) || Boolean(p.hasWagered)) : true;
-            if (!include) return acc;
-            acc.push({ playerId: id, username: p.username || id.slice(0,8)+'...', chickenName: p.chickenId || 'Default', isReady: p.isAi ? true : Boolean(p.hasWagered), isAi: !!p.isAi });
-            return acc;
-          }, []);
-          io.to(lobbyId).emit('lobby_updated', { id: lobbyId, players: playersOut, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version });
-          try { io.to(lobbyId).emit('refresh_lobby_state'); } catch {}
+            } catch {}
+            return { playerId: playerPublicKey, hasWagered: true, isReady: true } as any;
+          })();
+          try { io.to(lobbyId).emit('roster_diff', { lobbyId, action: 'upsert', player: entry }); } catch {}
         } catch {}
       }
     } catch {}

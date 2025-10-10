@@ -84,15 +84,13 @@ export async function POST(req: NextRequest) {
             isReady: p.isAi ? true : Boolean(p.isReady),
             isAi: p.isAi || false
           }))
-          const version = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
           io.to(lobbyId).emit('lobby_updated', {
             id: lobbyId,
             players: lobbyPlayers,
             capacity: lobby.capacity,
             amount: lobby.amount,
             currency: lobby.currency,
-            matchType: lobby.matchType,
-            version
+            matchType: lobby.matchType
           })
         }
       } catch {}

@@ -190,6 +190,10 @@ preparePromise.then(() => {
   if (!global.lobbyVersions) {
     global.lobbyVersions = new Map();
   }
+  // Authoritative roster per lobby (socket-only)
+  if (!global.lobbyRoster) {
+    global.lobbyRoster = new Map(); // lobbyId -> Map<walletLower, entry>
+  }
   // Helper to consistently bump and retrieve lobby version for snapshots
   function nextLobbyVersion(lobbyId) {
     try {
@@ -270,6 +274,35 @@ preparePromise.then(() => {
     } catch {
       return null;
     }
+  }
+
+  function getRosterMap(lobbyId) {
+    let map = global.lobbyRoster.get(lobbyId);
+    if (!map) { map = new Map(); global.lobbyRoster.set(lobbyId, map); }
+    return map;
+  }
+  async function upsertRoster(lobbyId, wallet, patch) {
+    const map = getRosterMap(lobbyId);
+    const key = String(wallet || '').toLowerCase();
+    const current = map.get(key) || { playerId: wallet, username: (wallet ? String(wallet).slice(0,8)+'...' : 'Player'), chickenName: 'Default', isAi: false, hasWagered: false, isReady: false };
+    const entry = { ...current, ...patch, playerId: String(wallet) };
+    // Rank readiness policy: if ranked and human, prefer hasWagered
+    try {
+      const lobby = lobbies.find(l => l && l.id === lobbyId);
+      if (lobby && lobby.matchType !== 'tutorial' && !entry.isAi) {
+        entry.isReady = Boolean(entry.hasWagered);
+      }
+    } catch {}
+    map.set(key, entry);
+    return entry;
+  }
+  function removeFromRoster(lobbyId, wallet) {
+    const map = getRosterMap(lobbyId);
+    const key = String(wallet || '').toLowerCase();
+    map.delete(key);
+  }
+  function emitRosterDiff(io, lobbyId, action, entry) {
+    try { io.to(lobbyId).emit('roster_diff', { lobbyId, action, player: entry }); } catch {}
   }
   try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0p005'); } catch {}
   try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0p005'); } catch {}
@@ -410,169 +443,20 @@ preparePromise.then(() => {
           io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
         
-        // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
+        // Socket-only roster: upsert and emit diffs
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const response = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' });
-          const lobbies = await response.json();
-          const lobby = lobbies.find(l => l.id === lobbyId);
-          
-          if (lobby) {
-            // Check if any of the HTTP API players could be this socket connection
-            // This is a bit tricky since socket.id != wallet address, but we can try to match
-            console.log(`🔍 Checking if socket ${socket.id} matches any lobby players for ${lobbyId}`);
-            
-            // For now, if this socket joins a lobby room, we assume they're validly in that lobby
-            // The frontend should ensure this by only joining socket rooms after successful HTTP join
-            
-            // Don't broadcast a duplicate join if this socket represents an existing HTTP player
-            // Instead, just refresh the lobby state for everyone
-            console.log(`🔄 Refreshing lobby state for all players in ${lobbyId}`);
-            
-            let lobbyPlayers = [];
-            for (const player of lobby.players) {
-              let isReady = false;
-              for (const [, conn] of activeConnections.entries()) {
-                if (conn.currentLobby === lobbyId && conn.walletAddress === player.playerId) { isReady = !!conn.isReady; break; }
-              }
-              const displayName = player.username && player.username.trim().length > 0
-                ? player.username
-                : await getUsernameForWallet(player.playerId);
-              try { if (!player.username || player.username !== displayName) player.username = displayName } catch {}
-              lobbyPlayers.push({
-                playerId: player.playerId,
-                username: displayName,
-                chickenName: player.chickenId || 'Default',
-                isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
-                isAi: player.isAi || false
-              });
-            }
-
-            // Presence-based fallback is tutorial-only. For ranked, do not synthesize rosters.
-            try {
-              const presence = global.lobbyPresence?.get(lobbyId) || new Set();
-              if (lobby.matchType === 'tutorial' && lobbyPlayers.length === 0 && presence.size > 0) {
-                lobbyPlayers = [];
-                for (const addr of presence.values()) {
-                  let ready = false;
-                  for (const [, c] of activeConnections.entries()) {
-                    const w = String(c.walletAddress || '').toLowerCase();
-                    if (c.currentLobby === lobbyId && w === String(addr).toLowerCase()) { ready = !!c.isReady; break; }
-                  }
-                  const idStr = String(addr).toLowerCase();
-                  lobbyPlayers.push({
-                    playerId: idStr,
-                    username: idStr.slice(0, 8) + '...',
-                    chickenName: 'Default',
-                    isReady: ready,
-                    isAi: false,
-                  });
-                }
-              }
-            } catch {}
-            
-            // Disabled tutorial AI backfill for now
-            try { /* no-op */ } catch {}
-
-            // Bump version for this lobby snapshot to order events for late joiners
-            try { const cur = (global.lobbyVersions.get(lobbyId) || 0); global.lobbyVersions.set(lobbyId, cur + 1); } catch {}
-            const version = (() => { try { return global.lobbyVersions.get(lobbyId) || 1 } catch { return 1 } })();
-            // Broadcast updated lobby state to all players in the room (after any backfill)
-            try {
-              const snap = await buildLobbySnapshot(lobbyId);
-              if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version });
-              // Also send the same state directly to the joining socket to avoid race conditions
-              try { if (snap) socket.emit('lobby_updated', { ...snap, version }); } catch {}
-              // Handshake: confirm to the joiner that the lobby is synced
-              try { if (snap) socket.emit('lobby_synced', { ...snap, version }); } catch {}
-            } catch {}
-
-            // Safety: re-fetch and emit one more authoritative snapshot shortly after join to avoid eventual consistency races
-            setTimeout(async () => {
-              try {
-                const snap2 = await buildLobbySnapshot(lobbyId);
-                if (!snap2) return;
-                const ver2 = nextLobbyVersion(lobbyId);
-                io.to(lobbyId).emit('lobby_updated', { ...snap2, version: ver2 });
-              } catch {}
-            }, 250);
-
-        // Also send current counts snapshot for this lobby to the joiner
-        try {
-          const c = getLobbyCounts(lobbyId);
-          socket.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
+          const wallet = (activeConnections.get(socket.id)?.walletAddress) || socket.id;
+          const name = await getUsernameForWallet(wallet);
+          const entry = await upsertRoster(lobbyId, wallet, { username: name });
+          // Send full roster to the joiner only
+          try {
+            const map = getRosterMap(lobbyId);
+            const players = Array.from(map.values());
+            socket.emit('roster_full', { lobbyId, players });
+          } catch {}
+          // Notify others with a diff
+          emitRosterDiff(io, lobbyId, 'upsert', entry);
         } catch {}
-
-            // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
-            try {
-              const isLowPaidTestLobby = String(lobbyId) === 'lobby-0.005';
-              const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 2);
-              const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
-              const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
-              const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
-              if (allReady && lobbyId.includes('tutorial')) {
-                if (global.countdownActive && global.countdownActive[lobbyId]) {
-                  // already counting down
-                } else {
-                  if (!global.countdownActive) global.countdownActive = Object.create(null);
-                  global.countdownActive[lobbyId] = true;
-                  let c = 5;
-                  const interval = setInterval(() => {
-                    try { io.to(lobbyId).emit('match_starting', { countdown: c }); } catch {}
-                    c--;
-                    if (c < 0) {
-                      clearInterval(interval);
-                      try { io.to(lobbyId).emit('match_started'); } catch {}
-                      try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
-                      // Build presence-based roster
-                      try {
-                        const presence = global.lobbyPresence?.get(lobbyId) || new Set();
-                        const humans = Array.from(presence.values()).map((addr) => ({
-                          wallet: String(addr), isAi: false,
-                          username: String(addr).slice(0,8)+'...', chickenName: 'Default'
-                        }));
-                        startQueuePhase(lobbyId, io, humans).catch(() => {});
-                      } catch {}
-                    }
-                  }, 1000);
-                }
-              }
-            } catch {}
-            
-          } else {
-            // Fallback for lobbies not in HTTP API (shouldn't happen for tutorial)
-            console.log(`⚠️ Lobby ${lobbyId} not found in API, using socket-only mode`);
-            
-            // Generate random chicken for display
-            const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-            const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-            
-            // Broadcast to lobby that someone joined (socket-only mode)
-            socket.to(lobbyId).emit('player_joined_lobby', {
-              playerId: socket.id,
-              username: `Player_${socket.id.slice(0, 6)}`,
-              chickenName: randomChicken,
-              isReady: false,
-              isAi: false,
-              timestamp: Date.now()
-            });
-          }
-        } catch (error) {
-          console.error('❌ Error checking lobby API during socket join:', error);
-          
-          // Fallback to old socket-only behavior
-          const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-          const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-          
-          socket.to(lobbyId).emit('player_joined_lobby', {
-            playerId: socket.id,
-            username: `Player_${socket.id.slice(0, 6)}`,
-            chickenName: randomChicken,
-            isReady: false,
-            isAi: false,
-            timestamp: Date.now()
-          });
-        }
       }
     });
 
@@ -615,13 +499,11 @@ preparePromise.then(() => {
           }
         }
         
-        // Broadcast to lobby that someone left (use wallet if known to avoid ghost entries)
+        // Socket-only roster removal and diff
         try {
           const leftPlayerId = connection?.walletAddress || socket.id;
-          socket.to(lobbyId).emit('player_left_lobby', {
-            playerId: leftPlayerId,
-            timestamp: Date.now()
-          });
+          removeFromRoster(lobbyId, leftPlayerId);
+          emitRosterDiff(io, lobbyId, 'remove', { playerId: leftPlayerId });
         } catch {}
 
         // Also broadcast updated live counts for the lobby (global)
