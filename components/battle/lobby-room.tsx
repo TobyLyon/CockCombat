@@ -186,10 +186,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     if (!socket) return;
 
     const getDisplayUsername = (p: { playerId?: string; username?: string; isAi?: boolean }) => {
-      const idStr = String(p.playerId || '')
-      const isGuest = idStr.startsWith('guest_')
+      // Always prefer server-provided username; do not fallback to wallet when a username exists
       if (p.isAi) return (p.username && p.username.trim()) || 'AI'
       if (p.username && p.username.trim()) return p.username
+      const idStr = String(p.playerId || '')
+      const isGuest = idStr.startsWith('guest_')
       return isGuest ? idStr : (idStr ? idStr.slice(0, 8) + '...' : 'Player')
     }
 

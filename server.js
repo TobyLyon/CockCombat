@@ -367,6 +367,7 @@ preparePromise.then(() => {
               const displayName = player.username && player.username.trim().length > 0
                 ? player.username
                 : await getUsernameForWallet(player.playerId);
+              try { if (!player.username || player.username !== displayName) player.username = displayName } catch {}
               lobbyPlayers.push({
                 playerId: player.playerId,
                 username: displayName,
@@ -569,6 +570,7 @@ preparePromise.then(() => {
               const displayName = player.username && player.username.trim().length > 0
                 ? player.username
                 : await getUsernameForWallet(player.playerId);
+              try { if (!player.username || player.username !== displayName) player.username = displayName } catch {}
               lobbyPlayers.push({
                 playerId: player.playerId,
                 username: displayName,
@@ -804,6 +806,7 @@ preparePromise.then(() => {
             const displayName = player.username && player.username.trim().length > 0
               ? player.username
               : await getUsernameForWallet(player.playerId);
+            try { if (!player.username || player.username !== displayName) player.username = displayName } catch {}
             lobbyPlayers.push({
               playerId: player.playerId,
               username: displayName,
