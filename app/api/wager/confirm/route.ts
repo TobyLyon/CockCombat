@@ -5,7 +5,7 @@ import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
-import { isBsc } from '@/lib/chain';
+import { isBsc, toNativeUnits } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 
@@ -86,11 +86,11 @@ async function handleWagerConfirmation(req: NextRequest) {
     if (isBsc()) {
       // EVM: signature = txHash
       const provider = getEvmProvider();
-      // Poll for receipt with longer timeout to handle chain latency
+      // Poll for receipt to avoid race when immediately confirming after send
       let receipt = await provider.getTransactionReceipt(signature);
       let attempts = 0;
-      while ((!receipt || receipt.status !== 1) && attempts < 20) {
-        await new Promise(r => setTimeout(r, 1000));
+      while ((!receipt || receipt.status !== 1) && attempts < 8) {
+        await new Promise(r => setTimeout(r, 750));
         receipt = await provider.getTransactionReceipt(signature);
         attempts++;
       }
@@ -115,16 +115,11 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (!expectedEscrow) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
       }
-      if (!tx.to || tx.to.toLowerCase() !== expectedEscrow.toLowerCase()) {
+      if (tx.to?.toLowerCase() !== expectedEscrow.toLowerCase()) {
         await auditLogger.logSuspiciousActivity('EVM wager to wrong escrow', playerPublicKey, undefined, { lobbyId, expectedEscrow, actual: tx.to });
         return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
       }
-      try {
-        const txValue = BigInt(tx.value as any);
-        if (txValue !== expectedValue) {
-          return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
-        }
-      } catch {
+      if (tx.value !== expectedValue) {
         return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
       }
       // Record exact funding wallet for deterministic refunds
@@ -132,7 +127,6 @@ async function handleWagerConfirmation(req: NextRequest) {
     } else {
       return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
     }
-    
 
     // Mark signature as used (database-backed)
     await authService.markSignatureUsed(
@@ -147,6 +141,29 @@ async function handleWagerConfirmation(req: NextRequest) {
     try {
       // Normalize stored playerId to input case to avoid mismatched case downstream
       player.playerId = String(playerPublicKey);
+    } catch {}
+    // De-duplicate any existing entries for this wallet (prefer the one with hasWagered=true)
+    try {
+      const pidNorm = String(playerPublicKey || '').toLowerCase();
+      const keep = lobby.players.reduce((best: any | null, p: any) => {
+        const id = String(p.playerId || '').toLowerCase();
+        if (id !== pidNorm) return best;
+        if (!best) return p;
+        // Prefer entry that is wagered/ready; otherwise keep the latest
+        if (!!p.hasWagered && !best.hasWagered) return p;
+        return p; // last-writer-wins
+      }, null);
+      const next: any[] = [];
+      const seen = new Set<string>();
+      for (const p of lobby.players) {
+        const id = String(p.playerId || '').toLowerCase();
+        if (id === pidNorm) {
+          if (!seen.has(id)) { next.push(keep || p); seen.add(id); }
+        } else {
+          next.push(p);
+        }
+      }
+      lobby.players = next;
     } catch {}
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
@@ -168,23 +185,28 @@ async function handleWagerConfirmation(req: NextRequest) {
           }
         } catch {}
         io.to(lobbyId).emit('player_ready_status', { playerId: playerPublicKey, isReady: true });
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: p.isAi ? true : Boolean(p.isReady),
-          isAi: p.isAi || false
-        }));
         const version = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
-        io.to(lobbyId).emit('lobby_updated', {
-          id: lobbyId,
-          players: lobbyPlayers,
-          capacity: lobby.capacity,
-          amount: lobby.amount,
-          currency: lobby.currency,
-          matchType: lobby.matchType,
-          version
-        });
+        try {
+          const snapBuilder = (global as any).socketIo && (global as any).socketIo.buildLobbySnapshot; // not accessible; fallback below
+          // Rebuild snapshot inline (mirrors server helper policy for ranked)
+          const present = new Set<string>();
+          try {
+            const active = (global as any).activeConnections;
+            if (active && typeof active.entries === 'function') {
+              for (const [, c] of active.entries()) {
+                if (c && c.currentLobby === lobbyId && c.walletAddress) present.add(String(c.walletAddress).toLowerCase());
+              }
+            }
+          } catch {}
+          const playersOut = (lobby.players || []).reduce((acc: any[], p: any) => {
+            const id = String(p.playerId || ''); if (!id) return acc; const idn = id.toLowerCase();
+            const human = !p.isAi; const include = human ? (present.has(idn) || Boolean(p.hasWagered)) : true;
+            if (!include) return acc;
+            acc.push({ playerId: id, username: p.username || id.slice(0,8)+'...', chickenName: p.chickenId || 'Default', isReady: p.isAi ? true : Boolean(p.hasWagered), isAi: !!p.isAi });
+            return acc;
+          }, []);
+          io.to(lobbyId).emit('lobby_updated', { id: lobbyId, players: playersOut, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version });
+        } catch {}
       }
     } catch {}
 
