@@ -561,10 +561,21 @@ preparePromise.then(() => {
         } catch {}
         
         // Broadcast ready status and also send a lobby_synced snapshot for late joiners
+        // Debounce room refresh to avoid thundering herd when multiple players toggle
         io.to(lobbyId).emit('player_ready_status', {
           playerId,
           isReady
         });
+        try {
+          if (!global.__refreshDebounce) global.__refreshDebounce = Object.create(null);
+          if (!global.__refreshDebounce[lobbyId]) {
+            global.__refreshDebounce[lobbyId] = true;
+            setTimeout(() => {
+              try { io.to(lobbyId).emit('refresh_lobby_state'); } catch {}
+              try { delete global.__refreshDebounce[lobbyId]; } catch {}
+            }, 120);
+          }
+        } catch {}
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           const resSnap = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
@@ -631,16 +642,26 @@ preparePromise.then(() => {
     });
 
     // Handle get lobby state request
+    // Coalesce get_lobby_state bursts to one in-flight request per lobby
+    if (!global.__lobbyStateInflight) global.__lobbyStateInflight = Object.create(null);
     socket.on('get_lobby_state', async (lobbyId) => {
       if (!checkRateLimit('get_lobby_state', 20)) {
         console.warn(`⚠️ Rate limit exceeded for get_lobby_state: ${socket.id}`);
         return;
       }
       try {
+        // If a fetch is already in-flight for this lobby, attach to its completion
+        if (global.__lobbyStateInflight[lobbyId]) {
+          await global.__lobbyStateInflight[lobbyId];
+          return;
+        }
+      } catch {}
+      try {
         // Fetch lobby data from API to get real usernames and player list
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-        const response = await fetch(`${baseUrl}/api/lobbies`);
-        const lobbies = await response.json();
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const inflight = fetch(`${baseUrl}/api/lobbies`).then(r => r.json()).finally(() => { try { delete global.__lobbyStateInflight[lobbyId] } catch {} });
+        global.__lobbyStateInflight[lobbyId] = inflight;
+        const lobbies = await inflight;
         const lobby = lobbies.find(l => l.id === lobbyId);
         
         if (lobby) {
