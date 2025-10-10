@@ -265,10 +265,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const me = getCurrentPlayerId();
         const meNorm = me ? String(me).toLowerCase() : ''
         const pid = String(data.playerId || '').toLowerCase()
-        if (me && pid === meNorm && data.isReady) {
-          setHasWagered(true);
-          setIsReady(true);
+        if (me && pid === meNorm) {
+          setIsReady(Boolean(data.isReady));
         }
+        // Apply immediate badge update for the affected player while waiting for full snapshot
+        setPlayers(prev => prev.map(p => p.playerId === pid ? { ...p, isReady: Boolean(data.isReady) } : p))
       } catch {}
       requestSnapshotDebounced()
     };
@@ -290,6 +291,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     };
 
     socket.on('lobby_updated', handleLobbyUpdate);
+    // Also accept explicit server sync snapshots
+    socket.on('lobby_synced', handleLobbyUpdate);
     // New socket-only roster events
     const onRosterFull = (payload: any) => {
       try {
@@ -342,6 +345,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     return () => {
       socket.off('lobby_updated', handleLobbyUpdate);
+      socket.off('lobby_synced', handleLobbyUpdate);
       socket.off('roster_full', onRosterFull)
       socket.off('roster_diff', onRosterDiff)
       socket.off('player_joined_lobby', handlePlayerJoined);
@@ -435,6 +439,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     playersRef.current = players
   }, [players])
 
+  // Derive my local ready state from authoritative server snapshot
+  useEffect(() => {
+    try {
+      const id = getCurrentPlayerId()
+      if (!id) return
+      const meNorm = String(id).toLowerCase()
+      const mine = players.find(p => p.playerId === meNorm)
+      setIsReady(Boolean(mine?.isReady))
+    } catch {}
+  }, [players])
+
   useEffect(() => {
     if (!socket) return
     const onGrace = (payload: { seconds: number }) => setMajoritySeconds(payload.seconds)
@@ -479,13 +494,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       return;
     }
 
-    // Toggle ready state
+    // Desired ready state; server remains authoritative (no optimistic flip)
     const newReadyState = !isReady;
-    console.log(`🎯 Setting ready state to ${newReadyState} for player ${id}`);
-    setIsReady(newReadyState);
-    // Optimistic update current player in UI list
-    const idNorm = String(id).toLowerCase()
-    setPlayers(prev => prev.map(p => p.playerId === idNorm ? { ...p, isReady: newReadyState } : p));
+    console.log(`🎯 Requesting ready state ${newReadyState} for player ${id}`);
 
     // Try socket first; if not connected, fallback to HTTP PUT
     if (isConnected) {
