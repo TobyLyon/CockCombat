@@ -134,6 +134,21 @@ preparePromise.then(() => {
   if (!global.lobbyPresence) {
     global.lobbyPresence = new Map();
   }
+  // Helper: compute live counts from activeConnections (authoritative)
+  function getLobbyCounts(lobbyId) {
+    try {
+      let humans = 0;
+      let total = 0;
+      for (const [, conn] of activeConnections.entries()) {
+        if (conn && conn.currentLobby === lobbyId) {
+          total += 1;
+          const addr = String(conn.walletAddress || '');
+          if (!addr.startsWith('ai-')) humans += 1;
+        }
+      }
+      return { humans, total };
+    } catch { return { humans: 0, total: 0 }; }
+  }
   // Queue session tracking: matchSessionId -> session data
   if (!global.queueSessions) {
     global.queueSessions = new Map();
@@ -258,11 +273,10 @@ preparePromise.then(() => {
           }
         }
 
-        // Broadcast updated counts derived from presence (per-lobby room only)
+        // Broadcast updated counts (global) derived from active connections
         try {
-          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          const c = getLobbyCounts(lobbyId);
+          io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
@@ -344,11 +358,10 @@ preparePromise.then(() => {
             // Handshake: confirm to the joiner that the lobby is synced
             try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version }); } catch {}
 
-        // Also send current counts snapshot for this lobby to the joiner and the room
+        // Also send current counts snapshot for this lobby to the joiner
         try {
-          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          const c = getLobbyCounts(lobbyId);
+          socket.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
 
             // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
@@ -472,11 +485,10 @@ preparePromise.then(() => {
           });
         } catch {}
 
-        // Also broadcast updated live counts for the lobby (per room)
+        // Also broadcast updated live counts for the lobby (global)
         try {
-          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          const c = getLobbyCounts(lobbyId);
+          io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
 
         // Emit an updated lobby roster immediately
@@ -842,9 +854,8 @@ preparePromise.then(() => {
         for (const l of Array.isArray(all) ? all : []) {
           const lid = l && l.id ? l.id : null;
           if (!lid) continue;
-          const presence = (global.lobbyPresence && global.lobbyPresence.get(lid)) || new Set();
-          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          counts[lid] = { liveHumans: humans.length, liveTotal: presence.size };
+          const c = getLobbyCounts(lid);
+          counts[lid] = { liveHumans: c.humans, liveTotal: c.total };
         }
         socket.emit('lobby_counts_snapshot', { counts });
       } catch (e) {
