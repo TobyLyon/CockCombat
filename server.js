@@ -273,9 +273,10 @@ preparePromise.then(() => {
           }
         }
 
-        // Broadcast updated counts (global) derived from active connections
+        // Broadcast updated counts (room + global) derived from active connections
         try {
           const c = getLobbyCounts(lobbyId);
+          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
           io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
         
