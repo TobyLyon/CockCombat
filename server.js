@@ -1089,6 +1089,10 @@ preparePromise.then(() => {
         // Killstreak: when the same attacker kills 3 in a row, trigger lobby-wide sound
         try {
           if (result.battleOver) {
+            // Idempotency guard: avoid duplicate winner emissions and payouts
+            if (room._endEmitted) return;
+            room._endEmitted = true;
+            room._winner = result.winner;
             room.killLog = room.killLog || [];
             room.killLog.push({ killer: socket.id, ts: Date.now() });
             const recent = room.killLog.slice(-3);
@@ -1184,8 +1188,12 @@ preparePromise.then(() => {
             console.warn('Tutorial lobby cleanup failed (non-fatal):', e?.message || e);
           }
 
-          // Record match (best-effort) in Supabase for auditing/payout flows
+          // Record match (best-effort) in Supabase for auditing/payout flows (idempotent)
           try {
+            if (room._payoutTriggered) {
+              // Already recorded/triggered payout for this room
+              return;
+            }
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
             const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
             if (supabaseUrl && supabaseServiceKey) {
@@ -1224,7 +1232,7 @@ preparePromise.then(() => {
                 const rankedLobby = Array.isArray(lobbies) ? lobbies.find(l => l.amount > 0 && (l.players || []).some(p => p.playerId === player1Wallet || p.playerId === player2Wallet)) : null;
                 if (rankedLobby && rankedLobby.amount > 0) {
                   const humans = (rankedLobby.players || []).filter(p => !p.isAi);
-                  const prizePool = Number(rankedLobby.amount * humans.length);
+                  const prizePoolLamports = Math.round(rankedLobby.amount * humans.length * 1_000_000_000);
 
                   // Create match_results row
                   const participants = humans.map((p) => ({ wallet: p.playerId, wager_amount: rankedLobby.amount }));
@@ -1234,7 +1242,7 @@ preparePromise.then(() => {
                     match_started_at: new Date(room.startTime || Date.now()).toISOString(),
                     match_ended_at: new Date().toISOString(),
                     winner_wallet: winnerWallet,
-                    total_prize_pool: prizePool,
+                    total_prize_pool: (prizePoolLamports / 1_000_000_000),
                     participants,
                     game_data: { roomId },
                     status: 'completed',
@@ -1253,14 +1261,15 @@ preparePromise.then(() => {
                         },
                         body: JSON.stringify({
                           winnerAddress: winnerWallet,
-                          prizePool: prizePool,
+                          prizePoolLamports,
                           matchId: mr.id,
                         }),
                       });
-                      if (!res.ok) {
+                  if (!res.ok) {
                         console.error('❌ Ranked payout failed:', await res.text().catch(() => ''));
                       } else {
                         console.log('💸 Ranked payout initiated for match_result:', mr.id);
+                        try { room._payoutTriggered = true; } catch {}
                       }
                     } else {
                       console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot trigger ranked payout');
@@ -2187,10 +2196,8 @@ preparePromise.then(() => {
           try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
-          // Graceful teardown for back-to-back matches: clear queue state and countdown flags
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
-          try { if (global.countdownActive && global.countdownActive[lobbyId]) delete global.countdownActive[lobbyId]; } catch {}
         }
       }, 1000);
     } catch (e) {
