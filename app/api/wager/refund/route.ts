@@ -49,9 +49,11 @@ export async function POST(req: NextRequest) {
       if (!escrow) return NextResponse.json({ error: 'Escrow wallet unavailable' }, { status: 500 })
 
       const wei = ethers.parseUnits(String(lobby.amount), 18)
+      // Determine the exact funding wallet for this player to ensure refunds return to sender
+      const refundTo = String(((player as any)?.__fundingWallet || playerPublicKey) as string)
       let txHash: string | null = null
       try {
-        txHash = await evmEscrowService.transferNative(playerPublicKey, wei, escrow)
+        txHash = await evmEscrowService.transferNative(refundTo, wei, escrow)
       } catch (e: any) {
         // Non-fatal: surface to client
         return NextResponse.json({ error: 'Refund transfer failed', details: e?.message || String(e) }, { status: 502 })
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
           actorWallet: playerPublicKey,
           endpoint: '/api/wager/refund',
           severity: 'info',
-          metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason },
+          metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
         })
       } catch {}
 

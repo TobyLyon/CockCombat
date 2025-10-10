@@ -49,11 +49,23 @@ export async function POST(request: Request) {
       const provider = getEvmProvider();
       const valueWei = ethers.parseUnits(lobby.amount.toString(), 18);
       const valueHex = ethers.toBeHex(valueWei); // MetaMask expects hex-encoded wei
-      // Client will sign and send this transaction; we just return target + value
+      // Provide suggested gas and gasPrice to avoid client-side estimation flakiness
+      let gasHex: string | undefined = undefined;
+      let gasPriceHex: string | undefined = undefined;
+      try {
+        const est = await provider.estimateGas({ from: playerPublicKey, to: w.address, value: valueWei });
+        gasHex = ethers.toBeHex(est);
+      } catch {}
+      try {
+        const fees = await provider.getFeeData();
+        if (fees.gasPrice) gasPriceHex = ethers.toBeHex(fees.gasPrice);
+      } catch {}
       return NextResponse.json({
         chain: 'bsc',
         to: w.address,
         value: valueHex,
+        gas: gasHex,
+        gasPrice: gasPriceHex,
         lobbyId: lobbyId,
       });
     }
