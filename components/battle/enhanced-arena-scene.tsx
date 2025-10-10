@@ -544,6 +544,9 @@ function SceneContent({
   const peckRequestRef = useRef<boolean>(false)
   const lastJumpAtRef = useRef<number>(0)
   const lastPeckAtRef = useRef<number>(0)
+  // Time-window peck control (like jump hold window): avoids setTimeout edge cases
+  const selfPeckUntilRef = useRef<number>(0)
+  const lastPeckEdgeAtRef = useRef<number>(0)
 
   // Capture rising-edge inputs at the DOM level for responsiveness
   useEffect(() => {
@@ -714,9 +717,10 @@ function SceneContent({
     // Skip if player is not alive
     if (playerChicken && !playerChicken.isAlive) return;
 
-    const jumpPressed = Date.now() < freezeUntilRef.current ? false : (jumpKey || jumpRequestRef.current);
-    // Drive peck from discrete requests only to avoid stuck-state when keyup is missed
-    const peckPressed = Date.now() < freezeUntilRef.current ? false : Boolean(peckRequestRef.current);
+    const nowMs = Date.now()
+    const jumpPressed = nowMs < freezeUntilRef.current ? false : (jumpKey || jumpRequestRef.current);
+    // Drive peck from discrete requests only; then hold via time window
+    const peckPressed = nowMs < freezeUntilRef.current ? false : Boolean(peckRequestRef.current);
     const isPeckingNow = selfIsPecking;
 
     if (isPeckingNow && peckPressed) {
@@ -740,14 +744,16 @@ function SceneContent({
     }
 
     // Peck handling
-    if (peckPressed && !selfIsPecking && !wasPecking.current) {
-      // Simple local cooldown to avoid rapid-fire and server throttling
-      const nowMs = Date.now()
+    // Peck handling (edge -> fixed-duration window), mirrors jump reliability
+    const peckActive = nowMs < selfPeckUntilRef.current
+    if (peckPressed && !peckActive) {
+      // Local cooldown to avoid rapid-fire and server throttling
       if (nowMs - (lastPeckAtRef.current || 0) < 220) {
         peckRequestRef.current = false
       } else {
-      setSelfIsPecking(true);
-      wasPecking.current = true;
+        lastPeckEdgeAtRef.current = nowMs
+        selfPeckUntilRef.current = nowMs + 220
+        if (!selfIsPecking) setSelfIsPecking(true)
 
           // Improved hit detection: use horizontal (XZ) distance and slightly larger reach
       if (playerRef.current) {
@@ -789,15 +795,12 @@ function SceneContent({
           }
         }
       }
-      lastPeckAtRef.current = nowMs
-      peckRequestRef.current = false
-      setTimeout(() => { setSelfIsPecking(false); wasPecking.current = false }, 200);
+        lastPeckAtRef.current = nowMs
+        peckRequestRef.current = false
       }
     }
-
-    if (!peckPressed && wasPecking.current) {
-      wasPecking.current = false;
-    }
+    // Time-window driven peck state maintenance and release
+    if (selfIsPecking && !peckActive) setSelfIsPecking(false)
 
     // Apply gravity (slightly lower for smoother arc at low frame rates)
     selfVelocity.current.y -= 13.5 * deltaTime; // Gravity strength
@@ -1502,3 +1505,4 @@ export default React.memo(function EnhancedArenaScene({
     </div>
   );
 });
+

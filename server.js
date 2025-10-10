@@ -1144,6 +1144,8 @@ preparePromise.then(() => {
           : [0, 0.85, 0];
         const rotY = Number(payload?.rotationY);
         const isPecking = Boolean(payload?.isPecking);
+        // For remote smoothing like jump, include peckAt when peck is active
+        const peckAt = isPecking ? Date.now() : undefined;
         const isJumping = Boolean(payload?.isJumping);
         const targetRoom = matchId ? matchId : lobbyId;
         io.to(targetRoom).emit('player_state', {
@@ -1152,6 +1154,7 @@ preparePromise.then(() => {
           rotationY: isFinite(rotY) ? rotY : 0,
           isPecking,
           isJumping,
+          peckAt,
           ts: Date.now(),
         });
       } catch {}
