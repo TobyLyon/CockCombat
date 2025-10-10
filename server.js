@@ -1650,11 +1650,20 @@ preparePromise.then(() => {
                         try { io.to(lobbyId).emit('match_starting', { countdown }); } catch {}
                         countdown--;
                         if (countdown < 0) {
-                          clearInterval(countdownInterval);
-                          try { io.to(lobbyId).emit('match_started'); } catch {}
-                          try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
-                          const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
-                          try { startQueuePhase(lobbyId, io, overrideRoster).catch(() => {}); } catch {}
+                clearInterval(countdownInterval);
+                try { io.to(lobbyId).emit('match_started'); } catch {}
+                // Clear lobby association on all sockets so lobby counts drop immediately
+                try {
+                  for (const [, conn] of activeConnections.entries()) {
+                    if (conn.currentLobby === lobbyId) {
+                      delete conn.currentLobby;
+                      conn.isReady = false;
+                    }
+                  }
+                } catch {}
+                try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+                const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
+                try { startQueuePhase(lobbyId, io, overrideRoster).catch(() => {}); } catch {}
                         }
                       }, 1000);
                     } catch (e) {
@@ -1703,7 +1712,15 @@ preparePromise.then(() => {
               if (countdown < 0) {
                 clearInterval(countdownInterval);
                 try { io.to(lobbyId).emit('match_started'); } catch {}
-                // Do not reset readiness here; keep it through transition
+                // Clear lobby association on all sockets so lobby counts drop immediately
+                try {
+                  for (const [, conn] of activeConnections.entries()) {
+                    if (conn.currentLobby === lobbyId) {
+                      delete conn.currentLobby;
+                      conn.isReady = false;
+                    }
+                  }
+                } catch {}
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
@@ -1765,14 +1782,15 @@ preparePromise.then(() => {
             if (countdown < 0) {
               clearInterval(countdownInterval);
               io.to(lobbyId).emit('match_started');
-              
-              // Clean up lobby connections
-              for (const [id, connection] of activeConnections.entries()) {
-                if (connection.currentLobby === lobbyId) {
-                  delete connection.currentLobby;
-                  connection.isReady = false;
+              // Clean up lobby connections (drop lobby association)
+              try {
+                for (const [id, connection] of activeConnections.entries()) {
+                  if (connection.currentLobby === lobbyId) {
+                    delete connection.currentLobby;
+                    connection.isReady = false;
+                  }
                 }
-              }
+              } catch {}
             }
           }, 1000);
         }
