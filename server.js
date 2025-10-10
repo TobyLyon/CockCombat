@@ -174,7 +174,8 @@ preparePromise.then(() => {
     activeConnections.set(socket.id, { 
       socket, 
       status: 'idle',
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
+      lastLobbyActivity: Date.now()
     });
 
     // Handle registration of wallet address to socket connection
@@ -267,6 +268,7 @@ preparePromise.then(() => {
         
         // Update connection data for this lobby
         if (connection) {
+          connection.lastLobbyActivity = Date.now();
           // If this wallet was in a different lobby, proactively remove from that room and presence
           if (connection.currentLobby && connection.currentLobby !== lobbyId && connection.walletAddress) {
             try {
@@ -605,6 +607,7 @@ preparePromise.then(() => {
       const connection = activeConnections.get(socket.id);
       if (connection) {
         connection.isReady = isReady;
+        connection.lastLobbyActivity = Date.now();
         // Ensure wallet and lobby are linked immediately to avoid first-join races
         try {
           if (!connection.walletAddress && typeof playerId === 'string') {
@@ -885,6 +888,41 @@ preparePromise.then(() => {
         socket.emit('lobby_counts_snapshot', { counts: {} });
       }
     });
+
+    // Periodic idle-kick for unready players lingering in lobby rooms
+    try {
+      if (!global.__idleKickInterval) {
+        global.__idleKickInterval = setInterval(async () => {
+          try {
+            const now = Date.now();
+            const idleMs = 3 * 60 * 1000; // 3 minutes
+            for (const [id, conn] of activeConnections.entries()) {
+              try {
+                const lobbyId = conn.currentLobby;
+                if (!lobbyId) continue;
+                const last = Number(conn.lastLobbyActivity || 0);
+                const isReady = Boolean(conn.isReady);
+                if (!isReady && last > 0 && (now - last) > idleMs) {
+                  // Boot: remove from lobby via API and from socket room
+                  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                  try {
+                    await fetch(`${baseUrl}/api/lobbies`, {
+                      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ lobbyId, playerId: conn.walletAddress || id })
+                    }).catch(() => {});
+                  } catch {}
+                  try { conn.socket?.leave?.(lobbyId); } catch {}
+                  delete conn.currentLobby;
+                  conn.isReady = false;
+                  // Broadcast latest counts
+                  try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
+                }
+              } catch {}
+            }
+          } catch {}
+        }, 30000); // scan every 30s
+      }
+    } catch {}
 
     // Debug: dump queue state for a lobby to the requesting client
     socket.on('debug_queue_state', (lobbyId) => {
