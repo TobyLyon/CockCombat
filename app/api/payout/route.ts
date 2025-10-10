@@ -156,7 +156,7 @@ export async function POST(request: Request) {
       }
 
       // Require match validation for non-zero payouts
-      if (!matchWinnerFromDb && prizePoolLamports > 0) {
+      if (!matchWinnerFromDb && prizePool > 0) {
         await auditLogger.logSuspiciousActivity(
           'Payout without match record',
           winnerAddress,
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
         );
         return NextResponse.json({ error: 'Match winner not recorded in database' }, { status: 400 });
       }
-    } else if (prizePoolLamports > 0) {
+    } else if (prizePool > 0) {
       // Require matchId for all non-zero payouts
       await auditLogger.logSuspiciousActivity(
         'Payout without match ID',
@@ -179,20 +179,41 @@ export async function POST(request: Request) {
     // --- TRANSACTION LOGIC (Solana or BSC) ---
     let winnerSignature = '';
     let houseSignature = '';
-    if (isBsc()) {
-      const poolBnb = prizePool;
-      const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
-      const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
-      const walletId = matchResult?.escrow_wallet_id as any | undefined;
-      const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
-      // Fallback to next wallet if not found
-      const from = wallet || evmEscrowService.getNextWallet();
-      winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
-      houseSignature = await evmEscrowService.transferNative(houseWalletAddress, houseCutWei, from);
-      console.log(`✅ EVM payout successful`, { winnerSignature, houseSignature });
-    } else {
+    if (!isBsc()) {
       return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
     }
+
+    // Strictly require escrow wallet from match results for ranked payouts
+    const walletId = matchResult?.escrow_wallet_id as any | undefined;
+    if (!walletId) {
+      await auditLogger.logSuspiciousActivity('Payout without recorded escrow', winnerAddress, undefined, { matchId, prizePool });
+      return NextResponse.json({ error: 'Escrow wallet not recorded for match' }, { status: 500 });
+    }
+
+    const escrowWallet = evmEscrowService.getWallet(walletId);
+    if (!escrowWallet) {
+      await auditLogger.logSuspiciousActivity('Escrow wallet unavailable at payout', winnerAddress, undefined, { matchId, walletId });
+      return NextResponse.json({ error: 'Escrow wallet unavailable' }, { status: 500 });
+    }
+
+    const poolBnb = prizePool;
+    const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
+    const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
+
+    try {
+      winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, escrowWallet);
+    } catch (e: any) {
+      await auditLogger.log({ eventType: 'payout_failed', targetWallet: winnerAddress, severity: 'error', metadata: { matchId, stage: 'winner_transfer', error: e?.message || String(e) } });
+      return NextResponse.json({ error: 'Winner payout transfer failed' }, { status: 502 });
+    }
+
+    try {
+      houseSignature = await evmEscrowService.transferNative(houseWalletAddress, houseCutWei, escrowWallet);
+    } catch (e: any) {
+      // Winner already paid; record house failure but do not fail entire request
+      await auditLogger.log({ eventType: 'house_cut_failed', targetWallet: houseWalletAddress, severity: 'warn', metadata: { matchId, error: e?.message || String(e), winnerSignature } });
+    }
+    console.log(`✅ EVM payout processed`, { winnerSignature, houseSignature });
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
