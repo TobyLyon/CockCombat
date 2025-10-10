@@ -99,7 +99,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
             <span>{connecting ? 'Connecting...' : 'Connect Wallet'}</span>
           </motion.button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[200px]">
+        <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[220px]">
           <div className="px-2 py-1.5 text-xs text-gray-400 border-b border-[#555555]">Choose Wallet</div>
           {wallets.map((w) => (
             <DropdownMenuItem
@@ -128,7 +128,7 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
           <span className="truncate min-w-0 max-w-[120px] sm:max-w-[160px]">{profile?.username?.trim() || `${publicKey?.toString().slice(0, 4)}...${publicKey?.toString().slice(-4)}`}</span>
         </motion.button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[200px]">
+      <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[220px]">
         <div className="px-2 py-1.5 text-xs text-gray-400 border-b border-[#555555]">
           {selectedWallet?.adapter.name || "Connected"}
         </div>
@@ -141,6 +141,18 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
           My Profile
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-[#555555]" />
+        {/* Allow brand re-selection even when connected */}
+        {Array.isArray(wallets) && wallets.length > 1 && (
+          <>
+            <div className="px-2 py-1.5 text-xs text-gray-400 border-b border-[#555555]">Switch Wallet</div>
+            {wallets.map((w) => (
+              <DropdownMenuItem key={`switch-${w.key}`} onClick={async () => { try { await select?.(w.key); } catch {} }} className="cursor-pointer hover:bg-[#444444]">
+                {w.adapter.name}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator className="bg-[#555555]" />
+          </>
+        )}
         <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer hover:bg-[#444444] flex items-center text-red-400 hover:!text-red-400">
           <LogOut className="mr-2 h-4 w-4" />
           Disconnect

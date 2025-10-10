@@ -129,7 +129,7 @@ export function useWallet() {
   }, [getInjectedProvider])
 
   // EVM connect helper
-  const evmConnect = useCallback(async (key?: string) => {
+  const evmConnect = useCallback(async (key?: string, opts?: { forceChoose?: boolean }) => {
     if (key) {
       setProviderKey(key)
       try { localStorage.setItem('wallet_provider_key', key) } catch {}
@@ -141,12 +141,31 @@ export function useWallet() {
     if (!eth) return null
     try {
       setEvmConnecting(true)
+      // Prompt account selection even if previously authorized (best-effort)
+      try { await eth.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] }) } catch {}
       const accounts: string[] = await eth.request({ method: 'eth_requestAccounts' })
       const addr = accounts && accounts[0] ? String(accounts[0]) : null
       if (addr) setAddressShared(addr)
       return addr
     } finally {
       setEvmConnecting(false)
+    }
+  }, [ensureBscChain, getInjectedProvider, setAddressShared])
+
+  // Explicitly re-prompt account selection for the current provider
+  const chooseAccount = useCallback(async () => {
+    if (typeof window === 'undefined') return null
+    const eth = getInjectedProvider()
+    if (!eth) return null
+    try {
+      await ensureBscChain()
+      try { await eth.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] }) } catch {}
+      const accounts: string[] = await eth.request({ method: 'eth_requestAccounts' })
+      const addr = accounts && accounts[0] ? String(accounts[0]) : null
+      setAddressShared(addr || null)
+      return addr
+    } catch {
+      return null
     }
   }, [ensureBscChain, getInjectedProvider, setAddressShared])
 
@@ -229,6 +248,7 @@ export function useWallet() {
       wallet: evmAddress ? { adapter: { name: (injectedWallets.find(w => w.key === (providerKey || 'metamask'))?.adapter.name) || 'BSC (Injected)' } } : null,
       wallets: injectedWallets,
       select: evmConnect as AnyFn,
+      chooseAccount: chooseAccount as AnyFn,
       sendTransaction: null,
       signTransaction: null,
       signMessage: evmSignMessage as AnyFn,
