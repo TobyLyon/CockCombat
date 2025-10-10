@@ -1497,7 +1497,8 @@ preparePromise.then(() => {
             const readyHumans = humans.filter(p => p.isReady);
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
-            const hasMajorityReady = totalHumans > 0 && readyHumans.length >= majorityThreshold && lobbyPlayers.length >= minPlayers;
+            // Only allow majority-ready flow for parties of 3 or more humans
+            const hasMajorityReady = totalHumans >= 3 && readyHumans.length >= majorityThreshold && lobbyPlayers.length >= minPlayers;
 
             if (!global.majorityGrace) global.majorityGrace = Object.create(null);
 
