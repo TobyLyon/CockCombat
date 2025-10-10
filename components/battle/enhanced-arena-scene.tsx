@@ -536,6 +536,8 @@ function SceneContent({
 
   // Maintain a brief decay window for remote jump flags to avoid flicker
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
+  // Maintain a brief window for remote hit flash to guarantee visibility even if context lags
+  const remoteHitUntilRef = useRef<Record<string, number>>({})
 
   // Discrete input request flags to guarantee 1 key press => 1 action locally
   const jumpRequestRef = useRef<boolean>(false)
@@ -609,6 +611,8 @@ function SceneContent({
         const now = Date.now()
         if ((lastAppliedDamageRef[targetId]||0) && now - (lastAppliedDamageRef[targetId]||0) < 150) return
         lastAppliedDamageRef[targetId] = now
+        // Ensure a guaranteed flash window for remote target
+        try { remoteHitUntilRef.current[targetId] = now + 400 } catch {}
         onPlayerDamage(targetId, amount, byId)
       } catch {}
     }
@@ -1371,7 +1375,7 @@ function ChickenInstances({
                 isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
                 isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
                 isJumping={Boolean((chicken as any).isJumping)}
-                isHitFlashing={chicken.isHitFlashing || false}
+                isHitFlashing={Boolean(chicken.isHitFlashing) || ((remoteHitUntilRef.current[chicken.id]||0) > Date.now())}
                 isDying={!chicken.isAlive} 
                 health={chicken.hp}
                 maxHealth={chicken.maxHp}
