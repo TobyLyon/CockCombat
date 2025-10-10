@@ -263,6 +263,35 @@ preparePromise.then(() => {
         });
       }
 
+      // Merge presence extras not yet reflected in API list (prevents empty UI when API lags)
+      try {
+        const existing = new Set(result.map(r => String(r.playerId || '').toLowerCase()));
+        for (const addrRaw of present.values()) {
+          const addr = String(addrRaw || '').toLowerCase();
+          if (!addr || existing.has(addr)) continue;
+          let name = await getUsernameForWallet(addr).catch(() => null);
+          if (!name || !String(name).trim()) name = addr.slice(0, 8) + '...';
+          let ready = false;
+          if (isTutorial) {
+            try {
+              for (const [, c] of activeConnections.entries()) {
+                if (c && c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === addr) { ready = !!c.isReady; break }
+              }
+            } catch {}
+          } else {
+            // Non-tutorial: include present humans as not-ready until API marks wagered
+            ready = false;
+          }
+          result.push({
+            playerId: addr,
+            username: name,
+            chickenName: 'Default',
+            isReady: ready,
+            isAi: false,
+          });
+        }
+      } catch {}
+
       return {
         id: lobbyId,
         players: result,
