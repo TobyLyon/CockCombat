@@ -33,6 +33,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const { socket, isConnected } = useSocket()
   const { publicKey, sendTransaction } = useWallet()
   const [players, setPlayers] = useState<LobbyPlayer[]>([])
+  const playersRef = useRef<LobbyPlayer[]>([])
   const [isReady, setIsReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [lobbyData, setLobbyData] = useState<Lobby>(lobby)
@@ -383,11 +384,25 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
   const [activeHumans, setActiveHumans] = useState<number>(0)
 
+  // Keep a ref of latest players for cross-effect consistency
+  useEffect(() => {
+    playersRef.current = players
+  }, [players])
+
   useEffect(() => {
     if (!socket) return
     const onGrace = (payload: { seconds: number }) => setMajoritySeconds(payload.seconds)
     socket.on('majority_grace', onGrace)
-    const onActive = (p: any) => { try { setActiveHumans(Math.max(0, Number(p?.humans)||0)) } catch {} }
+    const onActive = (p: any) => {
+      try {
+        const count = Math.max(0, Number(p?.humans) || 0)
+        setActiveHumans(count)
+        // If we detect more active humans than currently rendered players, request a fresh lobby snapshot
+        if (count > (playersRef.current?.length || 0)) {
+          try { socket.emit('get_lobby_state', lobby.id) } catch {}
+        }
+      } catch {}
+    }
     socket.on('active_players', onActive)
     try { socket.emit('get_active_players') } catch {}
     const id = window.setInterval(() => { try { socket.emit('get_active_players') } catch {} }, 5000)
