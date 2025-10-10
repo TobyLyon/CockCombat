@@ -384,6 +384,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const isPaidLobby = lobby.amount > 0 && lobby.matchType !== 'tutorial';
     
     if (!isReady && isPaidLobby && !hasWagered) {
+      // Proactively ensure wallet connected on BSC
+      try {
+        const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
+        if (!eth) throw new Error('No EVM provider');
+        // Ensure an account is available
+        const accts: string[] = await eth.request({ method: 'eth_requestAccounts' });
+        if (!accts || !accts[0]) throw new Error('Wallet not connected');
+      } catch (e: any) {
+        toast.error('Connect your wallet (MetaMask) to ready in ranked');
+        return;
+      }
       await handleWagerTransaction();
       return;
     }

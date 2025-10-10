@@ -201,23 +201,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Require authentication for non-tutorial lobbies
-    if (lobby.matchType !== 'tutorial' && lobby.amount > 0) {
-      if (!sessionId) {
-        return NextResponse.json({ 
-          error: 'Authentication required',
-          message: 'Please sign in to join this lobby'
-        }, { status: 401 });
-      }
-
-      const isValidSession = await authService.validateSession(sessionId, playerId);
-      if (!isValidSession) {
-        return NextResponse.json({ 
-          error: 'Invalid or expired session',
-          message: 'Please sign in again'
-        }, { status: 401 });
-      }
-    }
+    // Allow ranked lobby joins without full auth; enforce wager/auth at ready-up/confirmation time
+    // (Previously required session validation here.)
 
     // Check if player is already in the lobby
     const existingPlayer = lobby.players.find(p => p.playerId === playerId);
@@ -272,7 +257,9 @@ export async function POST(req: NextRequest) {
     const player = { 
       playerId: playerId, 
       chickenId: actualChickenId, 
-      username: username 
+      username: username,
+      hasWagered: lobby.amount === 0 ? true : false,
+      isReady: lobby.amount === 0 ? true : false,
     };
     // Ensure humans are prioritized: insert the human, then trim excess AI if over capacity (tutorial only)
     lobby.players.push(player);
