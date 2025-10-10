@@ -495,10 +495,36 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
         if (!eth) throw new Error('No EVM provider');
-        const from = publicKey.toString();
+        // Ensure wallet connected and on BSC
+        try { await eth.request({ method: 'eth_requestAccounts' }); } catch {}
+        let chainId: string | undefined;
+        try { chainId = await eth.request({ method: 'eth_chainId' }); } catch {}
+        if (chainId && chainId.toLowerCase() !== '0x38') {
+          try {
+            await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+          } catch (e: any) {
+            if (e && (e.code === 4902 || e.code === -32603)) {
+              try {
+                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com'] }] });
+              } catch {}
+            }
+          }
+        }
+        const accts: string[] = await eth.request({ method: 'eth_requestAccounts' });
+        const from = (accts && accts[0]) ? accts[0] : publicKey.toString();
         const txParams: Record<string, string> = { from, to, value };
-        if (gas) txParams.gas = gas;
-        if (gasPrice) txParams.gasPrice = gasPrice;
+        // Gas/gasPrice fallbacks for wallets that require explicit fields
+        let gasToUse = gas;
+        let gasPriceToUse = gasPrice;
+        if (!gasToUse) {
+          try { gasToUse = await eth.request({ method: 'eth_estimateGas', params: [{ from, to, value }] }); } catch {}
+        }
+        if (!gasPriceToUse) {
+          try { gasPriceToUse = await eth.request({ method: 'eth_gasPrice' }); } catch {}
+        }
+        if (!gasToUse) gasToUse = '0x5208'; // 21000 fallback for simple transfer
+        if (gasToUse) txParams.gas = gasToUse;
+        if (gasPriceToUse) txParams.gasPrice = gasPriceToUse;
         const txHash: string = await eth.request({
           method: 'eth_sendTransaction',
           params: [txParams],
