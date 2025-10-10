@@ -892,12 +892,15 @@ function SceneContent({
       selfVelocity.current.z = 0;
     }
 
-    // Player-opponent collision
+    // Player-opponent collision (reduced radius + short grace after round start)
     if (opponents.length > 0) {
-      const playerBoundingRadius = 1.5;
+      const playerBoundingRadius = 0.9; // smaller to avoid "invisible wall" feel
       const minimumDistance = playerBoundingRadius * 2;
       const originalX = selfPosition.x; // Store before collision adjustments
       const originalZ = selfPosition.z;
+
+      // Skip collision pushes for a short grace after the round begins
+      const collisionsEnabled = Date.now() > (freezeUntilRef.current + 300);
 
       for (const opponent of opponents) {
         if (!opponent.position || !opponent.isAlive) continue;
@@ -906,10 +909,12 @@ function SceneContent({
         const dz = selfPosition.z - opponentPos.z;
         const distance = Math.sqrt(dx * dx + dz * dz);
 
-        if (distance < minimumDistance) {
+        if (collisionsEnabled && distance < minimumDistance) {
           const pushDirection = new THREE.Vector3(dx, 0, dz).normalize();
-          selfPosition.x = opponentPos.x + pushDirection.x * minimumDistance;
-          selfPosition.z = opponentPos.z + pushDirection.z * minimumDistance;
+          // Nudge outward instead of snapping exactly to min distance for smoother passage
+          const targetDist = Math.max(distance, minimumDistance * 0.96);
+          selfPosition.x = opponentPos.x + pushDirection.x * targetDist;
+          selfPosition.z = opponentPos.z + pushDirection.z * targetDist;
           selfVelocity.current.x *= 0.8; // Dampen velocity
           selfVelocity.current.z *= 0.8;
 
