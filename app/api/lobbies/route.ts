@@ -360,9 +360,18 @@ export async function POST(req: NextRequest) {
 
       // Emit live counts for cards based on presence
       try {
-        const presence = ((global as any).lobbyPresence && (global as any).lobbyPresence.get(lobbyId)) || new Set();
-        const humans = Array.from(presence.values()).filter((w: any) => !(String(w).startsWith('ai-')));
-        socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+        const ac = (global as any).activeConnections;
+        let humans = 0, total = 0;
+        if (ac && typeof ac.entries === 'function') {
+          for (const [, conn] of ac.entries()) {
+            if (conn && conn.currentLobby === lobbyId && conn.walletAddress) {
+              total += 1;
+              const addr = String(conn.walletAddress || '');
+              if (!addr.startsWith('ai-')) humans += 1;
+            }
+          }
+        }
+        socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans, liveTotal: total });
       } catch {}
 
       console.log(`🔄 Broadcasted player join to lobby room ${lobbyId}`);
@@ -493,9 +502,18 @@ export async function DELETE(req: NextRequest) {
 
         // Emit live counts for cards based on presence
         try {
-          const presence = ((global as any).lobbyPresence && (global as any).lobbyPresence.get(lobbyId)) || new Set();
-          const humans = Array.from(presence.values()).filter((w: any) => !(String(w).startsWith('ai-')));
-          socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          const ac = (global as any).activeConnections;
+          let humans = 0, total = 0;
+          if (ac && typeof ac.entries === 'function') {
+            for (const [, conn] of ac.entries()) {
+              if (conn && conn.currentLobby === lobbyId && conn.walletAddress) {
+                total += 1;
+                const addr = String(conn.walletAddress || '');
+                if (!addr.startsWith('ai-')) humans += 1;
+              }
+            }
+          }
+          socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans, liveTotal: total });
         } catch {}
       }
     } catch (e) {
