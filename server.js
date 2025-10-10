@@ -329,7 +329,8 @@ preparePromise.then(() => {
 
             // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
             try {
-              const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
+              const isLowPaidTestLobby = String(lobbyId) === 'lobby-0.005';
+              const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
               const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
               const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
               const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;

@@ -534,7 +534,8 @@ export async function PUT(req: NextRequest) {
       // Temporarily disable AI backfill for tutorial; don't change status here
     } else {
       // Ranked: start only when everyone ready and min humans met
-      const minPlayers = 4;
+      const isLowPaidTestLobby = lobby.id === 'lobby-0.005';
+      const minPlayers = isLowPaidTestLobby ? 2 : 4;
       const allReady = lobby.players.length >= minPlayers && lobby.players.every(p => (p.isAi ? true : Boolean(p.isReady)));
       if (allReady) {
         lobby.status = 'starting';
