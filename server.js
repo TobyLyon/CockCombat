@@ -1495,7 +1495,7 @@ preparePromise.then(() => {
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);
             if (liveLobby && liveLobby.amount > 0) {
-              const humans = (liveLobby.players || []).filter(p => !p.isAi);
+            const humans = (liveLobby.players || []).filter(p => !p.isAi);
               const allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
               const hasEscrow = Boolean(liveLobby.escrowWalletId);
               if (!allWagered || !hasEscrow) {
@@ -1833,7 +1833,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: isTutorial ? 2 : 4,
+        minHumans: isTutorial ? 2 : (lobbyMeta && lobbyMeta.id === 'lobby-0.005' ? 2 : 4),
         escrowId: escrowIdVal,
       };
       io.to(lobbyId).emit('queue_begin', qbPayload);
@@ -1874,7 +1874,7 @@ preparePromise.then(() => {
       const presentHumans = requiredHumans.filter(w => presenceAcks.has(w) && assetsAcks.has(w));
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 2 : 4;
+      const minHumans = isTutorial ? 2 : (lobby && lobby.id === 'lobby-0.005' ? 2 : 4);
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort)

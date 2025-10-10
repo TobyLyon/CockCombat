@@ -119,6 +119,18 @@ async function handleWagerConfirmation(req: NextRequest) {
     try {
       const io = (global as any).socketIo;
       if (io) {
+        // Also mark any active socket connection for this wallet as ready so server-side checks pick it up
+        try {
+          const active = (global as any).activeConnections;
+          if (active && typeof active.entries === 'function') {
+            for (const [, conn] of active.entries()) {
+              if (conn && conn.walletAddress && conn.walletAddress.toLowerCase?.() === playerPublicKey.toLowerCase()) {
+                conn.isReady = true;
+                if (!conn.currentLobby) conn.currentLobby = lobbyId;
+              }
+            }
+          }
+        } catch {}
         io.to(lobbyId).emit('player_ready_status', { playerId: playerPublicKey, isReady: true });
         const lobbyPlayers = lobby.players.map(p => ({
           playerId: p.playerId,
