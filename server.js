@@ -798,8 +798,8 @@ preparePromise.then(() => {
           } catch {}
           
           // Increment version for this on-demand snapshot
-          try { const cur = (global.lobbyVersions.get(lobbyId) || 0); global.lobbyVersions.set(lobbyId, cur + 1); } catch {}
-          const version = (() => { try { return global.lobbyVersions.get(lobbyId) || 1 } catch { return 1 } })();
+          let version = 1;
+          try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
           console.log(`📋 Sending lobby state for ${lobbyId} v${version}:`, lobbyPlayers);
           
           socket.emit('lobby_updated', {
@@ -814,6 +814,7 @@ preparePromise.then(() => {
         } else {
           console.log(`⚠️ Lobby ${lobbyId} not found in API, using fallback`);
           // Fallback to socket-only method
+          let version = 1; try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
           const lobbyPlayers = [];
           
           for (const [id, connection] of activeConnections.entries()) {
@@ -844,6 +845,7 @@ preparePromise.then(() => {
       } catch (error) {
         console.error('❌ Error fetching lobby state:', error);
         // Fallback to socket-only method
+        let version = 1; try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
         const lobbyPlayers = [];
         
         for (const [id, connection] of activeConnections.entries()) {
@@ -1970,13 +1972,20 @@ preparePromise.then(() => {
         });
       } catch {}
 
-      // Deadline to finalize the roster
-      session.deadlineTimer = setTimeout(() => finalizeQueueSession(matchSessionId, io), ackDeadlineMs);
+      // Deadline to finalize the roster (single-shot guard)
+      session.__finalized = false;
+      const safeFinalize = () => {
+        if (session.__finalized) return;
+        session.__finalized = true;
+        try { finalizeQueueSession(matchSessionId, io); } catch {}
+      }
+      // Primary deadline
+      session.deadlineTimer = setTimeout(safeFinalize, ackDeadlineMs);
       // Safety: also finalize a bit later if 'match_started' was emitted but finalize didn't run due to timing
       setTimeout(() => {
         try {
           const s = global.queueSessions && global.queueSessions.get(matchSessionId);
-          if (s) finalizeQueueSession(matchSessionId, io);
+          if (s && !s.__finalized) safeFinalize();
         } catch {}
       }, ackDeadlineMs + 1500);
     } catch (e) {
@@ -2055,6 +2064,7 @@ preparePromise.then(() => {
           clearInterval(interval);
           try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
+          try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
         }
