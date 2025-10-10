@@ -134,6 +134,8 @@ preparePromise.then(() => {
   if (!global.lobbyPresence) {
     global.lobbyPresence = new Map();
   }
+  // Proactively clear any stale caches for the low-paid lobby on boot
+  try { global.lobbyPresence.delete && global.lobbyPresence.delete('lobby-0.005'); } catch {}
   // Helper: compute live counts from activeConnections (authoritative)
   function getLobbyCounts(lobbyId) {
     try {
@@ -188,6 +190,8 @@ preparePromise.then(() => {
   if (!global.lobbyVersions) {
     global.lobbyVersions = new Map();
   }
+  try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); } catch {}
+  try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); } catch {}
 
   // Socket.io connection handling
   io.on('connection', (socket) => {
