@@ -258,11 +258,11 @@ preparePromise.then(() => {
           }
         }
 
-        // Broadcast updated counts derived from presence
+        // Broadcast updated counts derived from presence (per-lobby room only)
         try {
           const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
           const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          io.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
         } catch {}
         
         // Try to fetch lobby data from API to see if this socket represents a player who joined via HTTP
@@ -344,12 +344,12 @@ preparePromise.then(() => {
             // Handshake: confirm to the joiner that the lobby is synced
             try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version }); } catch {}
 
-            // Also send current counts snapshot for this lobby to the joiner
-            try {
-              const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-              const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-              socket.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
-            } catch {}
+        // Also send current counts snapshot for this lobby to the joiner and the room
+        try {
+          const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+          const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+        } catch {}
 
             // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
             try {
@@ -472,11 +472,11 @@ preparePromise.then(() => {
           });
         } catch {}
 
-        // Also broadcast updated live counts for the lobby
+        // Also broadcast updated live counts for the lobby (per room)
         try {
           const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
           const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-          io.emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
+          io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: humans.length, liveTotal: presence.size });
         } catch {}
 
         // Emit an updated lobby roster immediately

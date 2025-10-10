@@ -503,7 +503,7 @@ export default function BattleArena() {
                           {(() => {
                             const rawCount = (Array.isArray(lobby.players) ? lobby.players.length : (lobby.players as unknown as number)) || 0
                             const live = liveCounts[lobby.id]
-                            const playerCount = live ? Math.max(rawCount, live.liveHumans) : rawCount
+                            const playerCount = live ? live.liveHumans : rawCount
                             const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
                             return (
                               <>
