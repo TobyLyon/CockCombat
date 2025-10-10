@@ -469,9 +469,10 @@ export async function DELETE(req: NextRequest) {
     try {
       const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
       const hasWagered = Boolean((leavingPlayer as any)?.hasWagered);
+      const alreadyRefunded = Boolean((leavingPlayer as any)?.__refunded);
       const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]); } catch { return false; } })();
       const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)); } catch { return false; } })();
-      const eligibleForRefund = isPaidRanked && hasWagered && !isCountdownActive && !hasQueueSession;
+      const eligibleForRefund = isPaidRanked && hasWagered && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
 
       if (eligibleForRefund && lobby.escrowWalletId) {
         const [{ evmEscrowService }, { ethers }] = await Promise.all([
@@ -494,7 +495,7 @@ export async function DELETE(req: NextRequest) {
               });
             } catch {}
             // Reflect refund in memory for this player
-            try { (leavingPlayer as any).hasWagered = false; (leavingPlayer as any).isReady = false; } catch {}
+            try { (leavingPlayer as any).__refunded = true; (leavingPlayer as any).hasWagered = false; (leavingPlayer as any).isReady = false; } catch {}
             console.log(`↩️ Refunded ${lobby.amount} to ${leavingPlayer.playerId} from escrow ${lobby.escrowWalletId} (tx ${txHash})`);
           } catch (e) {
             console.warn('Refund transfer failed (non-fatal):', (e as any)?.message || e);

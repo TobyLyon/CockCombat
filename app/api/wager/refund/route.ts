@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Refund window closed' }, { status: 409 })
       }
 
-      // Require that the player previously paid
-      if (!player.hasWagered) {
-        return NextResponse.json({ error: 'No recorded wager' }, { status: 409 })
+      // Idempotent: require that the player previously paid and wasn't already refunded
+      if (!player.hasWagered || (player as any).__refunded) {
+        return NextResponse.json({ ok: true, message: 'Already refunded or no recorded wager' })
       }
 
       if (!isBsc()) return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 })
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Update in-memory flags
-      try { player.hasWagered = false; player.isReady = false } catch {}
+      try { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } catch {}
 
       try {
         await auditLogger.log({
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       try {
         const io = (global as any).socketIo
         if (io) {
-          io.to(lobbyId).emit('player_ready_status', { playerId: playerPublicKey, isReady: false })
+          io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: false })
           const lobbyPlayers = lobby.players.map(p => ({
             playerId: p.playerId,
             username: p.username || p.playerId.slice(0, 8) + '...',
