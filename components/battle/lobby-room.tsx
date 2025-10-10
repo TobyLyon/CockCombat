@@ -205,6 +205,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         console.log('↪️ Ignoring stale lobby update version', incomingV, 'latest is', latestVersionRef.v)
         return
       }
+      if (!incomingV && latestVersionRef.v > 0) {
+        console.log('↪️ Ignoring unversioned lobby update after versioned snapshots exist')
+        return
+      }
       if (incomingV) latestVersionRef.v = incomingV
       setLobbyData(updatedLobby);
       
@@ -215,7 +219,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const seen = new Set<string>()
         const mapped: LobbyPlayer[] = []
         for (const p of updatedLobby.players as any[]) {
-          const pid = String(p.playerId || '')
+          const pid = String(p.playerId || '').toLowerCase()
           if (seen.has(pid)) continue
           seen.add(pid)
           mapped.push({
@@ -252,13 +256,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const handlePlayerReady = (data: { playerId: string, isReady: boolean }) => {
       console.log('✅ Player ready status:', data);
+      const pid = String(data.playerId || '').toLowerCase()
       setPlayers(prev => prev.map(p => 
-        p.playerId === data.playerId ? { ...p, isReady: data.isReady } : p
+        p.playerId === pid ? { ...p, isReady: data.isReady } : p
       ));
       // If this client is the one who became ready because of wager confirmation, reflect locally
       try {
         const me = getCurrentPlayerId();
-        if (me && data.playerId === me && data.isReady) {
+        const meNorm = me ? String(me).toLowerCase() : ''
+        if (me && pid === meNorm && data.isReady) {
           setHasWagered(true);
           setIsReady(true);
         }
@@ -343,7 +349,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         // Convert and deduplicate
         const seen = new Set<string>();
         const displayPlayers = lobbyData.players.reduce((acc: LobbyPlayer[], player: any) => {
-          const pid = String(player.playerId);
+          const pid = String(player.playerId || '').toLowerCase();
           if (!seen.has(pid)) {
             seen.add(pid);
             acc.push({
@@ -412,7 +418,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     console.log(`🎯 Setting ready state to ${newReadyState} for player ${id}`);
     setIsReady(newReadyState);
     // Optimistic update current player in UI list
-    setPlayers(prev => prev.map(p => p.playerId === id ? { ...p, isReady: newReadyState } : p));
+    const idNorm = String(id).toLowerCase()
+    setPlayers(prev => prev.map(p => p.playerId === idNorm ? { ...p, isReady: newReadyState } : p));
 
     // Try socket first; if not connected, fallback to HTTP PUT
     if (isConnected) {
@@ -530,7 +537,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const minRequired = lobby.matchType === 'tutorial' ? 2 : (lobby.id === 'lobby-0.005' ? 2 : 4)
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
-  const currentPlayer = players.find(p => p.playerId === getCurrentPlayerId())
+  const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()
 
   // Countdown is driven by server 'match_starting' events; no client auto-advance
 
