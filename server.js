@@ -1262,8 +1262,9 @@ preparePromise.then(() => {
     });
 
     // Realtime arena sync: damage application (tutorial trust model)
-    // Simple de-dupe window per attacker->target to avoid double application
+    // Simple de-dupe window per attacker->target and global per-attacker throttle (max 2 hits/sec)
     if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
+    if (!global.__lastAttackerHitTs) global.__lastAttackerHitTs = Object.create(null);
     socket.on('player_damage', (payload) => {
       try {
         // Allow more frequent peck hits without throttling legitimate gameplay
@@ -1279,12 +1280,18 @@ preparePromise.then(() => {
         const targetId = String(payload?.targetId || '');
         if (!targetId) return;
         const amount = Math.max(0, Math.min(3, Number(payload?.amount) || 1));
-        // dedupe: attacker-target key
+        // Global per-attacker throttle: <= 2 hits per second across all targets
+        const now = Date.now();
+        try {
+          const lastGlobal = global.__lastAttackerHitTs[wallet] || 0;
+          if (now - lastGlobal < 500) return; // enforce 500ms gap between any two hits by same attacker
+          global.__lastAttackerHitTs[wallet] = now;
+        } catch {}
+        // Per attacker-target dedupe window (500ms)
         try {
           const key = wallet + '->' + targetId;
-          const now = Date.now();
           const last = global.__lastDamageMap[key] || 0;
-          if (now - last < 300) return; // 300ms de-dupe to align with client recovery
+          if (now - last < 500) return; // 500ms window caps at 2/s per target
           global.__lastDamageMap[key] = now;
         } catch {}
         const targetRoom = matchId ? matchId : lobbyId;
