@@ -508,6 +508,15 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Join queue
   const joinQueue = useCallback(() => {
+    // Reset per-match state to avoid carryover between back-to-back games
+    setLastDefeatedChickenId(null);
+    setLastKillerId(null);
+    setPrizeAmount(0);
+    setBattleStartAt(null);
+    setBattleEndAt(null);
+    // Clear any stale players and rebuild from latest synced lobby list
+    setPlayers([]);
+    // Proceed to queue state
     setInQueue(true);
     setGameState('queue');
     playSound('button');
@@ -639,6 +648,15 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   
   // Exit battle
   const exitBattle = useCallback(() => {
+    // Hard reset of per-match state to ensure smooth back-to-back games
+    setInQueue(false);
+    setLastDefeatedChickenId(null);
+    setLastKillerId(null);
+    setPrizeAmount(0);
+    setBattleStartAt(null);
+    setBattleEndAt(null);
+    setLobbyPlayers([]);
+    setPlayers(initialPlayers);
     setGameState('lobby');
     playSound('button');
   }, [playSound]);
