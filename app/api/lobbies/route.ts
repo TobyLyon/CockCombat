@@ -121,13 +121,15 @@ function addAiPlayer(lobbyId: string) {
           isAi: p.isAi || false
         }));
         
+        const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
           players: lobbyPlayers,
           capacity: lobby.capacity,
           amount: lobby.amount,
           currency: lobby.currency,
-          matchType: lobby.matchType
+          matchType: lobby.matchType,
+          version: nextVersion
         });
 
         console.log(`🤖 Broadcasted AI player join to lobby room ${lobbyId}`);
