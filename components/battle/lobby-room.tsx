@@ -36,7 +36,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const playersRef = useRef<LobbyPlayer[]>([])
   const [isReady, setIsReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
-  const [lobbyData, setLobbyData] = useState<Lobby>(lobby)
+  // Client no longer maintains its own lobby snapshot; rely on server events only
   const [isProcessingWager, setIsProcessingWager] = useState(false)
   const [hasWagered, setHasWagered] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -125,24 +125,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }, 500)
       }
       
-      // Request current lobby state after joining
-      const requestLobbyState = () => {
-        console.log(`📋 Requesting lobby state for: ${lobby.id}`);
-        socket.emit('get_lobby_state', lobby.id);
-      };
-      
-      // Request immediately and after small delays to ensure join is complete
-      requestLobbyState();
-      const stateTimer = setTimeout(requestLobbyState, 300);
-      const stateTimer2 = setTimeout(requestLobbyState, 900);
-      
-      // Also set a periodic refresh every 5 seconds to keep lobby in sync
-      const refreshInterval = setInterval(requestLobbyState, 5000);
+      // No client snapshots; rely on server-driven roster_full/roster_diff events
 
       const cleanup = () => {
-        clearTimeout(stateTimer);
-        clearTimeout(stateTimer2);
-        clearInterval(refreshInterval);
+        // no snapshot timers to clear
         // If we already transitioned to queue (second check), keep room membership during handoff
         if (!transitionedToQueueRef.current) {
           console.log(`🚪 Leaving lobby room: ${lobby.id}`);
@@ -194,75 +180,33 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const getChickenName = (p: any) => p.chickenId || p.chickenName || 'Default'
 
-    // Track latest version to ignore out-of-order snapshots
-    const latestVersionRef = (window as any).__lobby_version_ref || { v: 0 };
-    ;(window as any).__lobby_version_ref = latestVersionRef;
+    // Removed snapshot-based lobby update handling; server events are authoritative
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
       // Ignore snapshots not meant for this lobby (safety against cross-room races)
       try { if (updatedLobby && updatedLobby.id && updatedLobby.id !== lobby.id) return } catch {}
-      const incomingV = Number((updatedLobby as any)?.version || 0)
-      if (incomingV && incomingV < latestVersionRef.v) {
-        console.log('↪️ Ignoring stale lobby update version', incomingV, 'latest is', latestVersionRef.v)
-        return
-      }
-      if (!incomingV && latestVersionRef.v > 0) {
-        console.log('↪️ Ignoring unversioned lobby update after versioned snapshots exist')
-        return
-      }
-      if (incomingV) latestVersionRef.v = incomingV
-      setLobbyData(updatedLobby);
-      
-      // Update players list with the lobby data
-      if (updatedLobby.players) {
-        console.log('Setting players:', updatedLobby.players);
-        // Map and dedupe to display format (consistent across sources)
-        const seen = new Set<string>()
-        const mapped: LobbyPlayer[] = []
-        for (const p of updatedLobby.players as any[]) {
-          const pid = String(p.playerId || '').toLowerCase()
-          if (seen.has(pid)) continue
-          seen.add(pid)
-          mapped.push({
-            playerId: pid,
-            username: getDisplayUsername(p),
-            chickenName: getChickenName(p),
-            isReady: p.isAi ? true : Boolean(p.isReady),
-            isAi: !!p.isAi,
-          })
-        }
-        // Stable sort: humans first, then AIs; then by playerId for determinism
-        mapped.sort((a, b) => {
-          if (a.isAi !== b.isAi) return a.isAi ? 1 : -1
-          return a.playerId.localeCompare(b.playerId)
-        })
-        setPlayers(mapped)
-      }
+      setPlayers((updatedLobby?.players || []).map((p: any) => ({
+        playerId: String(p.playerId || '').toLowerCase(),
+        username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
+        chickenName: p.chickenId || p.chickenName || 'Default',
+        isReady: p.isAi ? true : Boolean(p.isReady),
+        isAi: !!p.isAi,
+      }))
     };
 
-    // Debounced snapshot refresh to avoid roster races
-    let refreshTimer: number | null = null
-    const requestSnapshotDebounced = () => {
-      if (refreshTimer) window.clearTimeout(refreshTimer)
-      refreshTimer = window.setTimeout(() => {
-        try { socket.emit('get_lobby_state', lobby.id) } catch {}
-      }, 200)
-    }
-
+    // Lightweight join/leave handlers (no snapshots)
     const handlePlayerJoined = (_data: { playerId: string }) => {
-      console.log('👋 Player joined (snapshot refresh)');
-      requestSnapshotDebounced()
+      console.log('👋 Player joined');
     };
 
     const handlePlayerLeft = (_data: { playerId: string }) => {
-      console.log('👋 Player left (snapshot refresh)');
-      requestSnapshotDebounced()
+      console.log('👋 Player left');
     };
 
     const handlePlayerReady = (data: any) => {
-      console.log('✅ Player ready status (snapshot refresh):', data);
-      // Reflect local state if it's about me, then request authoritative snapshot
+      console.log('✅ Player ready status:', data);
+      // Reflect local state if it's about me
       try {
         // Guard by lobby
         const eventLobbyId = String((data && (data as any).lobbyId) || '')
@@ -276,7 +220,6 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         // Apply immediate badge update for the affected player while waiting for full snapshot
         setPlayers(prev => prev.map(p => p.playerId === pid ? { ...p, isReady: Boolean(data.isReady) } : p))
       } catch {}
-      requestSnapshotDebounced()
     };
 
     const handleMatchStarting = (data: { countdown: number }) => {
@@ -290,15 +233,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       onStartMatch();
     };
 
-    const handleRefreshLobbyState = () => {
-      console.log('🔄 Refreshing lobby state...');
-      socket.emit('get_lobby_state', lobby.id);
-    };
-
-    socket.on('lobby_updated', handleLobbyUpdate);
-    // Also accept explicit server sync snapshots
-    socket.on('lobby_synced', handleLobbyUpdate);
-    // New socket-only roster events
+    // No snapshot listeners; server roster events are authoritative
     const onRosterFull = (payload: any) => {
       try {
         if (!payload || payload.lobbyId !== lobby.id) return
@@ -346,11 +281,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     socket.on('match_starting', handleMatchStarting);
     socket.on('match_started', handleMatchStarted);
     socket.on('round_start', handleMatchStarted);
-    socket.on('refresh_lobby_state', handleRefreshLobbyState);
+    // no refresh_lobby_state listener
 
     return () => {
-      socket.off('lobby_updated', handleLobbyUpdate);
-      socket.off('lobby_synced', handleLobbyUpdate);
+      // no snapshot handlers to remove
       socket.off('roster_full', onRosterFull)
       socket.off('roster_diff', onRosterDiff)
       socket.off('player_joined_lobby', handlePlayerJoined);
@@ -359,71 +293,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('match_starting', handleMatchStarting);
       socket.off('match_started', handleMatchStarted);
       socket.off('round_start', handleMatchStarted);
-      socket.off('refresh_lobby_state', handleRefreshLobbyState);
-      if (refreshTimer) window.clearTimeout(refreshTimer)
+      // no refresh timer
     };
   }, [socket, onStartMatch]);
 
-  // HTTP fallback polling when sockets are unavailable (dev/CORS etc.)
-  useEffect(() => {
-    const fetchLobbyHttp = async () => {
-      try {
-        const res = await fetch('/api/lobbies')
-        if (!res.ok) return
-        const data = await res.json()
-        const lobbyFromApi = Array.isArray(data) ? data.find((l: any) => l.id === lobby.id) : null
-        if (lobbyFromApi) {
-          setLobbyData(lobbyFromApi)
-          const mapped = (lobbyFromApi.players || []).map((p: any) => ({
-            playerId: p.playerId,
-            username: p.username || p.playerId.slice(0, 8) + '...',
-            chickenName: p.chickenId || 'Default',
-            isReady: p.isAi ? true : false,
-            isAi: !!p.isAi,
-          }))
-          setPlayers(mapped)
-        }
-      } catch {}
-    }
-
-    if (!isConnected) {
-      // Start HTTP polling
-      fetchLobbyHttp()
-      httpPollRef.current = window.setInterval(fetchLobbyHttp, 3000)
-      return () => { if (httpPollRef.current) window.clearInterval(httpPollRef.current) }
-    } else {
-      // If connected, stop fallback polling
-      if (httpPollRef.current) window.clearInterval(httpPollRef.current)
-    }
-  }, [isConnected, lobby.id])
-
-  // Initial lobby data setup - trust server list and dedupe by playerId
-  useEffect(() => {
-    const id = getCurrentPlayerId();
-    if (id && lobbyData.players) {
-      if (lobbyData.players.length) {
-        // Convert and deduplicate
-        const seen = new Set<string>();
-        const displayPlayers = lobbyData.players.reduce((acc: LobbyPlayer[], player: any) => {
-          const pid = String(player.playerId || '').toLowerCase();
-          if (!seen.has(pid)) {
-            seen.add(pid);
-            acc.push({
-              playerId: pid,
-              username: player.username || pid.slice(0, 8) + '...',
-              chickenName: player.chickenId || 'Default',
-              isReady: player.isAi ? true : Boolean((player as any).isReady),
-              isAi: !!player.isAi,
-            });
-          }
-          return acc;
-        }, []);
-
-        setPlayers(displayPlayers);
-        console.log('🎯 Set initial players from lobby data (deduped):', displayPlayers);
-      }
-    }
-  }, [publicKey, lobbyData, playerIdentifier]);
+  // Removed snapshot-based HTTP fallbacks and initial snapshot; server events are authoritative
 
   // Countdown effect
   useEffect(() => {
