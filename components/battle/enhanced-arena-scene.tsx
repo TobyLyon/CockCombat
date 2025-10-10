@@ -544,8 +544,9 @@ function SceneContent({
   const peckRequestRef = useRef<boolean>(false)
   const lastJumpAtRef = useRef<number>(0)
   const lastPeckAtRef = useRef<number>(0)
-  // Time-window peck control (like jump hold window): avoids setTimeout edge cases
+  // Peck timing windows: active swing + recovery, to prevent spam between animations
   const selfPeckUntilRef = useRef<number>(0)
+  const selfPeckRecoverUntilRef = useRef<number>(0)
   const lastPeckEdgeAtRef = useRef<number>(0)
 
   // Capture rising-edge inputs at the DOM level for responsiveness
@@ -746,13 +747,18 @@ function SceneContent({
     // Peck handling
     // Peck handling (edge -> fixed-duration window), mirrors jump reliability
     const peckActive = nowMs < selfPeckUntilRef.current
-    if (peckPressed && !peckActive) {
+    const inRecovery = nowMs < selfPeckRecoverUntilRef.current
+    if (peckPressed && !peckActive && !inRecovery) {
       // Local cooldown to avoid rapid-fire and server throttling
       if (nowMs - (lastPeckAtRef.current || 0) < 220) {
         peckRequestRef.current = false
       } else {
         lastPeckEdgeAtRef.current = nowMs
-        selfPeckUntilRef.current = nowMs + 220
+        // Active swing duration, then recovery
+        const swingMs = 200
+        const recoverMs = 120
+        selfPeckUntilRef.current = nowMs + swingMs
+        selfPeckRecoverUntilRef.current = nowMs + swingMs + recoverMs
         if (!selfIsPecking) setSelfIsPecking(true)
 
           // Improved hit detection: use horizontal (XZ) distance and slightly larger reach

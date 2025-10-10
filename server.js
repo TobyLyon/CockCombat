@@ -1183,7 +1183,7 @@ preparePromise.then(() => {
           const key = wallet + '->' + targetId;
           const now = Date.now();
           const last = global.__lastDamageMap[key] || 0;
-          if (now - last < 200) return; // 200ms de-dupe
+          if (now - last < 300) return; // 300ms de-dupe to align with client recovery
           global.__lastDamageMap[key] = now;
         } catch {}
         const targetRoom = matchId ? matchId : lobbyId;
