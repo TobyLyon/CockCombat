@@ -211,6 +211,36 @@ export async function POST(req: NextRequest) {
     try {
       const socketIo = await getSocketInstance();
       if (socketIo) {
+        // Helper: compute authoritative player map with readiness and versioning
+        const computeLobbyPlayers = (lob: any) => {
+          return lob.players.map((p: any) => {
+            const pid = String(p.playerId || '');
+            let isReady = false;
+            try {
+              if (lob.matchType !== 'tutorial' && (lob.amount || 0) > 0 && !p.isAi) {
+                // Ranked: authoritative readiness comes from hasWagered
+                isReady = Boolean(p.hasWagered);
+              } else {
+                // Tutorial/free: prefer connection ready state when present
+                const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined;
+                if (presence && presence.has(pid)) {
+                  for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+                    if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
+                  }
+                }
+              }
+            } catch {}
+            if (lob.matchType === 'tutorial' && p.isAi) isReady = true;
+            return {
+              playerId: pid,
+              username: p.username || pid.slice(0, 8) + '...',
+              chickenName: p.chickenId || 'Default',
+              isReady,
+              isAi: p.isAi || false
+            }
+          })
+        };
+        const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         try {
           if ((global as any).lobbyPresence) {
             const set = (global as any).lobbyPresence.get(lobbyId) || new Set();
@@ -218,14 +248,7 @@ export async function POST(req: NextRequest) {
             (global as any).lobbyPresence.set(lobbyId, set);
           }
         } catch {}
-        // Convert lobby players to socket format with usernames
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: false,
-          isAi: p.isAi || false
-        }));
+        const lobbyPlayers = computeLobbyPlayers(lobby);
         
         // Broadcast current state to the lobby room
         socketIo.to(lobbyId).emit('lobby_updated', {
@@ -234,7 +257,8 @@ export async function POST(req: NextRequest) {
           capacity: lobby.capacity,
           amount: lobby.amount,
           currency: lobby.currency,
-          matchType: lobby.matchType
+          matchType: lobby.matchType,
+          version: nextVersion
         });
       }
     } catch (error) {
@@ -326,28 +350,36 @@ export async function POST(req: NextRequest) {
         timestamp: Date.now()
       });
 
-      // Also broadcast the full lobby update (ensure current ready states are preserved for humans and AIs always ready in tutorial)
-      const lobbyPlayers = lobby.players.map(p => {
-        // Preserve socket-known readiness if available; fall back to stored flag; AI auto-ready in tutorial
-        let isReady = Boolean(p.isReady)
+      // Also broadcast the full lobby update (ensure current ready states are preserved; authoritative in ranked)
+      const lobbyPlayers = (() => {
         try {
-          const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
-          if (presence && presence.has(p.playerId)) {
-            // Probe activeConnections to read current isReady
-            for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
-              if (conn.currentLobby === lobbyId && conn.walletAddress === p.playerId) { isReady = !!conn.isReady; break }
+          return lobby.players.map((p: any) => {
+            const pid = String(p.playerId || '');
+            let isReady = false;
+            if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
+              isReady = Boolean(p.hasWagered)
+            } else {
+              try {
+                const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
+                if (presence && presence.has(pid)) {
+                  for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+                    if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
+                  }
+                }
+              } catch {}
             }
-          }
-        } catch {}
-        if (lobby.matchType === 'tutorial' && p.isAi) isReady = true
-        return {
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady,
-          isAi: p.isAi || false
-        }
-      });
+            if (lobby.matchType === 'tutorial' && p.isAi) isReady = true
+            return {
+              playerId: pid,
+              username: p.username || pid.slice(0, 8) + '...',
+              chickenName: p.chickenId || 'Default',
+              isReady,
+              isAi: p.isAi || false
+            }
+          })
+        } catch { return [] as any[] }
+      })();
+      const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
       
       socketIo.to(lobbyId).emit('lobby_updated', {
         id: lobbyId,
@@ -355,7 +387,8 @@ export async function POST(req: NextRequest) {
         capacity: lobby.capacity,
         amount: lobby.amount,
         currency: lobby.currency,
-        matchType: lobby.matchType
+        matchType: lobby.matchType,
+        version: nextVersion
       });
       // Emit live counts snapshot immediately after join
       try {
