@@ -1067,6 +1067,7 @@ function SceneContent({
           freezeUntilMs={freezeUntilRef.current}
           invulnerableUntilMs={invulnerableUntilRef.current}
           remoteHumans={remoteHumansRef.current}
+          remoteHitUntil={remoteHitUntilRef.current}
           onAiDamagePlayer={() => { if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1) }}
         />
       )}
@@ -1186,6 +1187,7 @@ function ChickenInstances({
     freezeUntilMs,
     invulnerableUntilMs,
     remoteHumans,
+    remoteHitUntil,
     onAiDamagePlayer
   }: {
     chickens: PlayerStatus[],
@@ -1194,6 +1196,7 @@ function ChickenInstances({
     freezeUntilMs?: number,
     invulnerableUntilMs?: number,
     remoteHumans?: Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>,
+    remoteHitUntil?: Record<string, number>,
     onAiDamagePlayer?: () => void
   }) {
     const groupsRef = useRef<Record<string, THREE.Group | null>>({})
@@ -1375,7 +1378,7 @@ function ChickenInstances({
                 isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
                 isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
                 isJumping={Boolean((chicken as any).isJumping)}
-                isHitFlashing={Boolean(chicken.isHitFlashing) || ((remoteHitUntilRef.current[chicken.id]||0) > Date.now())}
+                isHitFlashing={Boolean(chicken.isHitFlashing) || (((remoteHitUntil||{})[chicken.id]||0) > Date.now())}
                 isDying={!chicken.isAlive} 
                 health={chicken.hp}
                 maxHealth={chicken.maxHp}
