@@ -41,13 +41,33 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    const player = lobby.players.find(p => {
+    let player = lobby.players.find(p => {
       const a = String(p.playerId || '').toLowerCase();
       const b = String(playerPublicKey || '').toLowerCase();
       return a === b;
     });
     if (!player) {
-      return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+      // Self-heal: if counts show this wallet is in the lobby room, add them into the API roster
+      try {
+        const present = (global as any).activeConnections;
+        let foundInRoom = false;
+        if (present && typeof present.entries === 'function') {
+          for (const [, conn] of present.entries()) {
+            const w = String(conn.walletAddress || '').toLowerCase();
+            const inRoom = conn.currentLobby === lobbyId;
+            if (inRoom && w === String(playerPublicKey).toLowerCase()) { foundInRoom = true; break; }
+          }
+        }
+        if (foundInRoom) {
+          const username = (playerPublicKey || '').slice(0, 8) + '...';
+          const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
+          lobby.players.push(newP);
+          player = newP;
+        }
+      } catch {}
+      if (!player) {
+        return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+      }
     }
 
     // Verify the transaction moved the exact wager to the escrow wallet

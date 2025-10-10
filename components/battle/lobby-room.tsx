@@ -468,37 +468,25 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           params: [{ from, to, value }],
         });
 
-        let confirmRes = await fetch('/api/wager/confirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
-        });
-        // Simple retry to avoid immediate race after execution
+        const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: from };
+        const tryConfirm = async (url: string) => {
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(confirmPayload) });
+          return res;
+        };
+        let confirmRes = await tryConfirm('/api/wager/confirm');
         if (!confirmRes.ok) {
+          // Retry once after short delay (chain receipt race)
           await new Promise(r => setTimeout(r, 900));
-          confirmRes = await fetch('/api/wager/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
-          });
-          if (!confirmRes.ok) {
-            const err = await confirmRes.json().catch(() => ({} as any));
-            throw new Error(err.error || 'Wager confirmation failed');
-          }
+          confirmRes = await tryConfirm('/api/wager/confirm');
         }
-        // If origin blocked /api, try absolute URL fallback
-        if (confirmRes.status === 404 || confirmRes.status === 403) {
-          const origin = (typeof window !== 'undefined' ? window.location.origin : '') || ''
-          if (origin && origin.includes('cockcombat.xyz')) {
-            const abs = await fetch('https://www.cockcombat.xyz/api/wager/confirm', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
-            })
-            if (!abs.ok) {
-              const err = await abs.json().catch(() => ({} as any));
-              throw new Error(err.error || 'Wager confirmation failed');
-            }
-          }
+        if (!confirmRes.ok) {
+          // Absolute URL fallback in case relative /api path is misrouted by CDN
+          const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
+          confirmRes = await tryConfirm(absUrl);
+        }
+        if (!confirmRes.ok) {
+          const err = await confirmRes.json().catch(() => ({} as any));
+          throw new Error(err.error || 'Wager confirmation failed');
         }
       } else {
         if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');

@@ -357,6 +357,17 @@ export async function POST(req: NextRequest) {
         currency: lobby.currency,
         matchType: lobby.matchType
       });
+      // Emit live counts snapshot immediately after join
+      try {
+        const ac = (global as any).activeConnections;
+        let humans = 0, total = 0;
+        for (const [, conn] of (ac && ac.entries && ac.entries()) || []) {
+          if (conn && conn.currentLobby === lobbyId && conn.walletAddress) {
+            total += 1; const addr = String(conn.walletAddress || ''); if (!addr.startsWith('ai-')) humans += 1;
+          }
+        }
+        socketIo.emit('lobby_counts', { id: lobbyId, liveHumans: humans, liveTotal: total });
+      } catch {}
 
       // Emit live counts for cards based on presence
       try {
