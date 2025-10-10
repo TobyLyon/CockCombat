@@ -459,7 +459,7 @@ export default function BattleArena() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5 sm:gap-6">
                     {displayedLobbies.map((lobby) => (
                       <motion.div
                         key={lobby.id}
@@ -468,10 +468,10 @@ export default function BattleArena() {
                         transition={{ duration: 0.25, ease: 'easeOut' }}
                         whileHover={{ y: -3, scale: 1.01 }}
                         whileTap={{ scale: 0.995 }}
-                        className={`relative overflow-hidden rounded-2xl p-5 cursor-pointer transition-all duration-300 group h-full flex flex-col
+                        className={`relative overflow-hidden rounded-2xl p-6 md:p-7 cursor-pointer transition-all duration-300 group h-full flex flex-col
                           bg-white/6 backdrop-blur-md border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]
                           ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
-                        min-h-[240px]
+                        min-h-[280px]
                         `}
                         onClick={() => !isJoining && handleJoinLobby(lobby)}
                       >
@@ -490,11 +490,11 @@ export default function BattleArena() {
                         
                         <div className="relative z-10">
                           {/* Entry Amount */}
-                          <div className="mb-2 lg:mb-2">
-                            <div className={`text-lg lg:text-xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
+                          <div className="mb-3 lg:mb-3">
+                            <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
                               {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
                             </div>
-                            <div className="text-[9px] lg:text-[11px] text-white/70 uppercase tracking-wide">
+                            <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
                               {lobby.amount === 0 ? 'Tutorial Match' : 'Entry Fee'}
                             </div>
                           </div>
@@ -506,15 +506,15 @@ export default function BattleArena() {
                             const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
                             return (
                               <>
-                                <div className="flex items-center justify-between mb-2 lg:mb-2">
-                                  <div className="flex items-center gap-1.5 text-white/85">
-                                    <Users className="h-3.5 w-3.5" />
-                                    <span className="font-semibold text-xs lg:text-sm">
+                                <div className="flex items-center justify-between mb-3 lg:mb-3">
+                                  <div className="flex items-center gap-2 text-white/85">
+                                    <Users className="h-4 w-4" />
+                                    <span className="font-semibold text-sm lg:text-base">
                                       {playerCount} / {lobby.capacity}
                                     </span>
                                   </div>
                                   {/* Status Indicator */}
-                                  <div className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  <div className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
                                     playerCount >= lobby.capacity
                                       ? 'bg-red-500/15 text-red-300 border-red-400/30'
                                       : playerCount > 0
@@ -529,11 +529,11 @@ export default function BattleArena() {
                                   </div>
                                 </div>
                                 {/* Capacity Progress */}
-                                <div className="mb-2 lg:mb-3">
-                                  <div className="h-1.5 rounded bg-white/10 overflow-hidden">
+                                <div className="mb-3 lg:mb-4">
+                                  <div className="h-2 rounded bg-white/10 overflow-hidden">
                                     <div className={`${lobby.highRoller ? 'bg-red-400' : 'bg-white/80'} h-full`} style={{ width: `${fillPercent}%` }} />
                                   </div>
-                                  <div className="mt-1 text-[10px] text-white/70 text-right">{fillPercent}% filled</div>
+                                  <div className="mt-1 text-[11px] text-white/70 text-right">{fillPercent}% filled</div>
                                 </div>
                                 {lobby.matchType === 'tutorial' && (
                                   <div className="mt-1 text-[10px] text-white/60">
@@ -548,16 +548,16 @@ export default function BattleArena() {
                         {!lobby.isComingSoon && (
                           <div className="mt-auto grid grid-cols-1 gap-2">
                             <Button
-                              className={`w-full font-bold py-1.5 px-2 lg:px-3 rounded-lg transition-all duration-300 border text-xs md:text-sm flex items-center justify-center gap-2
+                              className={`w-full font-bold py-2.5 px-3 lg:px-4 rounded-lg transition-all duration-300 border text-sm md:text-base flex items-center justify-center gap-2
                                 bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
                               onClick={(e) => { e.stopPropagation(); !isJoining && handleJoinLobby(lobby); }}
                               disabled={isJoining === lobby.id || ((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial')}
                             >
                               {isJoining === lobby.id 
-                                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin"/> Joining...</>
+                                  ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
                                   : joinedLobby?.id === lobby.id
                                   ? '✓ JOINED'
-                                  : (((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial') ? 'FULL' : <>JOIN <ChevronRight className="h-4 w-4"/></>)}
+                                  : (((Array.isArray(lobby.players) ? lobby.players.length : lobby.players) >= lobby.capacity && lobby.matchType !== 'tutorial') ? 'FULL' : <>JOIN <ChevronRight className="h-5 w-5"/></>)}
                             </Button>
                           </div>
                         )}
