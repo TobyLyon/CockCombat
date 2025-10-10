@@ -141,6 +141,9 @@ preparePromise.then(() => {
   if (!global.activeQueueForLobby) {
     global.activeQueueForLobby = new Map();
   }
+  if (!global.lobbyVersions) {
+    global.lobbyVersions = new Map();
+  }
 
   // Socket.io connection handling
   io.on('connection', (socket) => {
@@ -211,6 +214,23 @@ preparePromise.then(() => {
             clearTimeout(global.preCountdownTimers[lobbyId]);
             delete global.preCountdownTimers[lobbyId];
             console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} due to new join`);
+          }
+          if (global.countdownActive && global.countdownActive[lobbyId]) {
+            // Do not fully cancel active countdown; but re-emit a fresh 'lobby_updated' snapshot immediately for the joiner
+            setTimeout(async () => {
+              try {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null)
+                const all = response ? await response.json().catch(() => []) : []
+                const lob = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null
+                if (lob) {
+                  const mapped = (lob.players || []).map(p => ({ playerId: p.playerId, username: p.username || String(p.playerId).slice(0,8)+'...', chickenName: p.chickenId || 'Default', isReady: !!p.isReady, isAi: !!p.isAi }))
+                  const cur = (global.lobbyVersions.get(lobbyId) || 0); global.lobbyVersions.set(lobbyId, cur + 1);
+                  const version = global.lobbyVersions.get(lobbyId) || 1
+                  socket.emit('lobby_updated', { id: lobbyId, players: mapped, capacity: lob.capacity, amount: lob.amount, currency: lob.currency, matchType: lob.matchType, version })
+                }
+              } catch {}
+            }, 50)
           }
         } catch {}
         
@@ -306,6 +326,9 @@ preparePromise.then(() => {
             // Disabled tutorial AI backfill for now
             try { /* no-op */ } catch {}
 
+            // Bump version for this lobby snapshot to order events for late joiners
+            try { const cur = (global.lobbyVersions.get(lobbyId) || 0); global.lobbyVersions.set(lobbyId, cur + 1); } catch {}
+            const version = (() => { try { return global.lobbyVersions.get(lobbyId) || 1 } catch { return 1 } })();
             // Broadcast updated lobby state to all players in the room (after any backfill)
             io.to(lobbyId).emit('lobby_updated', {
               id: lobbyId,
@@ -313,12 +336,13 @@ preparePromise.then(() => {
               capacity: lobby.capacity,
               amount: lobby.amount,
               currency: lobby.currency,
-              matchType: lobby.matchType
+              matchType: lobby.matchType,
+              version
             });
             // Also send the same state directly to the joining socket to avoid race conditions
-            try { socket.emit('lobby_updated', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
+            try { socket.emit('lobby_updated', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version }); } catch {}
             // Handshake: confirm to the joiner that the lobby is synced
-            try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType }); } catch {}
+            try { socket.emit('lobby_synced', { id: lobbyId, players: lobbyPlayers, capacity: lobby.capacity, amount: lobby.amount, currency: lobby.currency, matchType: lobby.matchType, version }); } catch {}
 
             // Also send current counts snapshot for this lobby to the joiner
             try {
@@ -708,7 +732,10 @@ preparePromise.then(() => {
             }
           } catch {}
           
-          console.log(`📋 Sending lobby state for ${lobbyId}:`, lobbyPlayers);
+          // Increment version for this on-demand snapshot
+          try { const cur = (global.lobbyVersions.get(lobbyId) || 0); global.lobbyVersions.set(lobbyId, cur + 1); } catch {}
+          const version = (() => { try { return global.lobbyVersions.get(lobbyId) || 1 } catch { return 1 } })();
+          console.log(`📋 Sending lobby state for ${lobbyId} v${version}:`, lobbyPlayers);
           
           socket.emit('lobby_updated', {
             id: lobbyId,
@@ -716,7 +743,8 @@ preparePromise.then(() => {
             capacity: lobby.capacity,
             amount: lobby.amount,
             currency: lobby.currency,
-            matchType: lobby.matchType
+            matchType: lobby.matchType,
+            version
           });
         } else {
           console.log(`⚠️ Lobby ${lobbyId} not found in API, using fallback`);
@@ -744,7 +772,8 @@ preparePromise.then(() => {
             capacity: 8,
             amount: 0,
             currency: 'FREE',
-            matchType: 'tutorial'
+            matchType: 'tutorial',
+            version
           });
         }
       } catch (error) {
@@ -773,7 +802,8 @@ preparePromise.then(() => {
           capacity: 8,
           amount: 0,
           currency: 'FREE',
-          matchType: 'tutorial'
+          matchType: 'tutorial',
+          version
         });
       }
     });

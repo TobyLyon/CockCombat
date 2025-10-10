@@ -194,9 +194,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const getChickenName = (p: any) => p.chickenId || p.chickenName || 'Default'
 
+    // Track latest version to ignore out-of-order snapshots
+    const latestVersionRef = (window as any).__lobby_version_ref || { v: 0 };
+    ;(window as any).__lobby_version_ref = latestVersionRef;
     const handleLobbyUpdate = (updatedLobby: any) => {
       console.log('🔄 Lobby updated:', updatedLobby);
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
+      const incomingV = Number((updatedLobby as any)?.version || 0)
+      if (incomingV && incomingV < latestVersionRef.v) {
+        console.log('↪️ Ignoring stale lobby update version', incomingV, 'latest is', latestVersionRef.v)
+        return
+      }
+      if (incomingV) latestVersionRef.v = incomingV
       setLobbyData(updatedLobby);
       
       // Update players list with the lobby data
