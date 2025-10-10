@@ -279,7 +279,9 @@ preparePromise.then(() => {
             if (!global.lobbyPresence.has(lobbyId)) {
               global.lobbyPresence.set(lobbyId, new Set());
             }
-            global.lobbyPresence.get(lobbyId).add(connection.walletAddress);
+            // Ensure wallet string is lowercase to avoid duplicate variants
+            const addr = String(connection.walletAddress).toLowerCase();
+            global.lobbyPresence.get(lobbyId).add(addr);
           }
         }
 
@@ -335,11 +337,13 @@ preparePromise.then(() => {
                 for (const addr of presence.values()) {
                   let ready = false;
                   for (const [, c] of activeConnections.entries()) {
-                    if (c.currentLobby === lobbyId && c.walletAddress === addr) { ready = !!c.isReady; break; }
+                    const w = String(c.walletAddress || '').toLowerCase();
+                    if (c.currentLobby === lobbyId && w === String(addr).toLowerCase()) { ready = !!c.isReady; break; }
                   }
+                  const idStr = String(addr).toLowerCase();
                   lobbyPlayers.push({
-                    playerId: addr,
-                    username: addr.slice(0, 8) + '...',
+                    playerId: idStr,
+                    username: idStr.slice(0, 8) + '...',
                     chickenName: 'Default',
                     isReady: ready,
                     isAi: false,
@@ -603,7 +607,7 @@ preparePromise.then(() => {
           }
           if (connection.walletAddress && typeof lobbyId === 'string') {
             if (!global.lobbyPresence.has(lobbyId)) global.lobbyPresence.set(lobbyId, new Set());
-            global.lobbyPresence.get(lobbyId).add(connection.walletAddress);
+            global.lobbyPresence.get(lobbyId).add(String(connection.walletAddress).toLowerCase());
           }
         } catch {}
         

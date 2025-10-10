@@ -41,7 +41,11 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    const player = lobby.players.find(p => p.playerId === playerPublicKey);
+    const player = lobby.players.find(p => {
+      const a = String(p.playerId || '').toLowerCase();
+      const b = String(playerPublicKey || '').toLowerCase();
+      return a === b;
+    });
     if (!player) {
       return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
     }
