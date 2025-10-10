@@ -1419,7 +1419,9 @@ preparePromise.then(() => {
         try { /* no-op */ } catch {}
         
         // Check if we have minimum players and all are ready
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
+        // Special-case: allow quick testing for the lowest paid lobby (0.005) with 2 players
+        const isLowPaidTestLobby = (lobby && lobby.id === 'lobby-0.005');
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
         const readyPlayers = lobbyPlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = lobbyPlayers.length >= minPlayers && 
