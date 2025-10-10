@@ -106,16 +106,16 @@ export default function NavBar() {
           step={1}
           value={volume * 100}
           onChange={handleVolumeChange}
-          className="w-20 sm:w-28 md:w-32 accent-yellow-400 border-2 border-yellow-600 rounded pixel-font"
+          className="w-16 sm:w-20 md:w-24 accent-yellow-400 border-2 border-yellow-600 rounded pixel-font"
           style={{ boxShadow: '2px 2px 0 #000', background: '#222' }}
           aria-label="Music volume"
         />
-        <span className="hidden sm:block text-sm text-yellow-100 w-10 md:w-12 text-right select-none font-medium">{Math.round(volume * 100)}%</span>
+        <span className="hidden sm:block text-sm text-yellow-100 w-8 md:w-10 text-right select-none font-medium">{Math.round(volume * 100)}%</span>
 
         {/* Copy Token - moved to left group after music controls */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
-          className={`hidden sm:inline-flex items-center gap-2 px-4 py-1 rounded-full border transition-colors duration-150 min-w-[180px] ${
+          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[140px] ${
             copied
               ? 'border-green-400/40 bg-green-500/10 text-green-300'
               : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:border-yellow-500/40'
