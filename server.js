@@ -1769,7 +1769,7 @@ preparePromise.then(() => {
                         }
                         acc.push({ playerId: player.playerId, username: player.username, chickenName: player.chickenId, isAi: !!player.isAi, isReady });
                         return acc;
-                      }, [] as any[]);
+                      }, []);
                       const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
                       const readyHumansNow = mergedPlayers.filter(p => !p.isAi && p.isReady);
                       let majorityRoster = readyHumansNow;
