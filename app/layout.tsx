@@ -13,6 +13,28 @@ export const metadata = {
     shortcut: "/images/logo%202.png",
     apple: "/images/logo%202.png",
   },
+  // Ensure social share URLs resolve correctly
+  metadataBase: new URL('https://www.cockcombat.xyz'),
+  openGraph: {
+    type: 'website',
+    url: 'https://www.cockcombat.xyz',
+    title: 'COCK COMBAT - 8-Bit Fighting Arena',
+    description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
+    images: [
+      {
+        url: '/images/cock-combat-banner.png',
+        width: 1200,
+        height: 630,
+        alt: 'Cock Combat Banner'
+      }
+    ]
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'COCK COMBAT - 8-Bit Fighting Arena',
+    description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
+    images: ['/images/cock-combat-banner.png']
+  }
 }
 
 // Disable static prerender globally to avoid SSR of R3F/Canvas during build
