@@ -159,7 +159,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         cleanup()
       };
     }
-  }, [socket, isConnected, lobby.id, publicKey, playerIdentifier]);
+  }, [socket, isConnected, lobby.id]);
 
   // Ensure scroll area never hides the bottom actions and fits viewport
   useEffect(() => {
