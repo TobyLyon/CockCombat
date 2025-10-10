@@ -1111,7 +1111,7 @@ preparePromise.then(() => {
     if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
     socket.on('player_damage', (payload) => {
       try {
-        if (!checkRateLimit('player_damage', 120)) {
+        if (!checkRateLimit('player_damage', 180)) {
           return;
         }
         const connection = activeConnections.get(socket.id);

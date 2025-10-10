@@ -756,7 +756,7 @@ function SceneContent({
           const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
 
           // Slightly increase reach to improve corner-angle registration
-          const peckReach = 3.2;
+          const peckReach = 3.6;
           if (horizontalDistance <= peckReach) {
             // Respect invulnerability window at round start for opponents
             const isInvulnerable = Date.now() < invulnerableUntilRef.current
@@ -778,7 +778,7 @@ function SceneContent({
       }
       lastPeckAtRef.current = Date.now()
       peckRequestRef.current = false
-      setTimeout(() => setSelfIsPecking(false), 250);
+      setTimeout(() => setSelfIsPecking(false), 200);
     }
 
     if (!peckPressed && wasPecking.current) {
@@ -959,8 +959,9 @@ function SceneContent({
         const yDelta = Math.abs(selfPosition.y - sent.y)
         const rotDelta = Math.abs(selfRotation.y - sent.ry)
         // Only send peck when it flips from false->true to avoid multi-peck
+        // More responsive peck: allow sending peck state as long as active, but still edge-preferential
         const peckEdge = (!sent.pk && selfIsPecking)
-        const stateChanged = peckEdge || (selfIsJumping !== sent.jp)
+        const stateChanged = peckEdge || (selfIsJumping !== sent.jp) || (selfIsPecking && !sent.pk)
         if (posDelta > 0.02 || yDelta > 0.015 || rotDelta > 0.02 || stateChanged) {
           lastEmitAtRef.current = nowMs
           // Quantize to 2 decimals to reduce bandwidth while keeping smoothness
@@ -971,7 +972,7 @@ function SceneContent({
             matchSessionId: msid,
             position: [q(selfPosition.x), q(selfPosition.y), q(selfPosition.z)],
             rotationY: q(selfRotation.y),
-            isPecking: peckEdge ? true : false,
+            isPecking: selfIsPecking,
             isJumping: selfIsJumping,
           })
         }
