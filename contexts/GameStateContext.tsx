@@ -453,7 +453,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         if (!prevPlayers.some(p => p.isHitFlashing)) return prevPlayers;
         
         return prevPlayers.map(player => {
-          if (player.isHitFlashing && player.lastHitTime && (Date.now() - player.lastHitTime > 300)) {
+          if (player.isHitFlashing && player.lastHitTime && (Date.now() - player.lastHitTime > 400)) {
             return { ...player, isHitFlashing: false };
           }
           return player;

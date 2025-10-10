@@ -175,13 +175,15 @@ export function PixelChicken({
         if (isHitFlashing) {
           material.color.set('#FF0000');
           material.emissive.set('#FF3333');
-          material.emissiveIntensity = 0.5;
+          material.emissiveIntensity = 1.0;
+          material.needsUpdate = true;
         } else {
           const partName = material.userData.partName;
           if (partName && originalColorsRef.current[partName]) {
             material.color.set(originalColorsRef.current[partName]);
             material.emissive.set('#000000');
             material.emissiveIntensity = 0;
+            material.needsUpdate = true;
           }
         }
       });
