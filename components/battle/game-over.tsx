@@ -93,7 +93,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
       const title = isHumanWinner ? 'I just won a Cock Combat match!' : 'I just finished a Cock Combat match!';
       const prizeText = `Prize: ${netWinner.toFixed(2)} ${currency}`;
       const typeText = `Mode: ${isTutorial ? 'Tutorial' : 'Ranked'}`;
-      const rosterText = `Players: ${humanCount} human${humanCount===1?'':'s'}${aiCount>0?` + ${aiCount} AI`:''}`;
+      const rosterText = `Players: ${totalPlayers}`;
       const durText = durationSec !== null ? `Duration: ${durationSec}s` : '';
       const text = encodeURIComponent([title, prizeText, typeText, rosterText, durText, '#CockCombat #BNB'].filter(Boolean).join(' | '));
       const url = encodeURIComponent(origin);
@@ -184,18 +184,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             <p className="text-white/60 text-[11px]">Entry (per player)</p>
             <p className="font-semibold">{entryPerPlayer.toFixed(2)} {currency}</p>
           </div>
-          <div>
-            <p className="text-white/60 text-[11px]">Humans</p>
-            <p className="font-semibold">{humanCount}</p>
-          </div>
-          <div>
-            <p className="text-white/60 text-[11px]">AI</p>
-            <p className="font-semibold">{aiCount}</p>
-            {/* Info tab */}
-            <div className="mt-1 text-[11px] text-white/60">
-              <span className="inline-block px-1.5 py-0.5 rounded bg-white/10 border border-white/20">AI fill is only used in tutorials and never in ranked.</span>
-            </div>
-          </div>
+          {/* Removed Humans vs AI breakdown per request */}
           <div>
             <p className="text-white/60 text-[11px]">Gross Pool</p>
             <p className="font-semibold">{grossPool.toFixed(2)} {currency}</p>
