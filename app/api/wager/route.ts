@@ -48,11 +48,12 @@ export async function POST(request: Request) {
       }
       const provider = getEvmProvider();
       const valueWei = ethers.parseUnits(lobby.amount.toString(), 18);
+      const valueHex = ethers.toBeHex(valueWei); // MetaMask expects hex-encoded wei
       // Client will sign and send this transaction; we just return target + value
       return NextResponse.json({
         chain: 'bsc',
         to: w.address,
-        value: valueWei.toString(),
+        value: valueHex,
         lobbyId: lobbyId,
       });
     }

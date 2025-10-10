@@ -450,7 +450,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       if (isBsc()) {
         const data = await wagerResponse.json();
         const to: string = data.to;
-        const value: string = data.value; // wei string
+        const value: string = data.value; // hex-encoded wei
 
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
         if (!eth) throw new Error('No EVM provider');
