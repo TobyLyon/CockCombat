@@ -288,7 +288,9 @@ preparePromise.then(() => {
         // Broadcast updated counts (room + global) derived from active connections
         try {
           const c = getLobbyCounts(lobbyId);
+          // Per room
           io.to(lobbyId).emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
+          // Global snapshot for lobby cards
           io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
         } catch {}
         
@@ -1404,18 +1406,17 @@ preparePromise.then(() => {
         setTimeout(tryRemoveAfterGrace, 800);
       } catch {}
 
-      // Remove this socket from active connections immediately; but if this wallet still has another live socket, keep the connection as a handoff
+      // Always remove this socket from active connections immediately to avoid ghost counts
       try {
         const conn = activeConnections.get(socket.id);
-        const walletAtDisconnect = conn?.walletAddress;
-        let hasOtherLive = false;
-        if (walletAtDisconnect) {
-          for (const [id, c] of activeConnections.entries()) {
-            if (id !== socket.id && c.walletAddress === walletAtDisconnect) { hasOtherLive = true; break; }
-          }
-        }
-        if (!hasOtherLive) {
-          activeConnections.delete(socket.id);
+        const lastLobby = conn?.currentLobby;
+        activeConnections.delete(socket.id);
+        // After removal, recompute counts for the last lobby this socket was in
+        if (lastLobby) {
+          try {
+            const c = getLobbyCounts(lastLobby);
+            io.emit('lobby_counts', { id: lastLobby, liveHumans: c.humans, liveTotal: c.total });
+          } catch {}
         }
       } catch { activeConnections.delete(socket.id); }
 
