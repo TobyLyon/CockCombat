@@ -337,10 +337,6 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       try {
         const count = Math.max(0, Number(p?.humans) || 0)
         setActiveHumans(count)
-        // If we detect more active humans than currently rendered players, request a fresh lobby snapshot
-        if (count > (playersRef.current?.length || 0)) {
-          try { socket.emit('get_lobby_state', lobby.id) } catch {}
-        }
       } catch {}
     }
     socket.on('active_players', onActive)
