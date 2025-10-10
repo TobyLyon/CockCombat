@@ -481,30 +481,25 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         });
 
         const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: from };
-        const tryConfirm = async (url: string) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(confirmPayload) });
-        const ensureRoster = async () => {
-          try {
-            await fetch('/api/lobbies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId: lobby.id, playerId: from, chickenId: 'default-chicken' }) });
-          } catch {}
+        const tryConfirm = async (url: string) => {
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(confirmPayload) });
+          return res;
         };
-        const endpoints = [
-          '/api/wager/confirm',
-          '/api/wager/confirm/',
-          'https://www.cockcombat.xyz/api/wager/confirm',
-          'https://www.cockcombat.xyz/api/wager/confirm/'
-        ];
-        let confirmOk = false; let lastErr: any = null;
-        for (let attempt = 0; attempt < 4 && !confirmOk; attempt++) {
-          const url = endpoints[attempt] || endpoints[0];
-          let res = await tryConfirm(url);
-          if (!res.ok) {
-            // If player not found, self-heal by re-adding to lobby and retry
-            try { const je = await res.json(); lastErr = je; if (je && je.error && /player not found/i.test(String(je.error))) { await ensureRoster(); await new Promise(r => setTimeout(r, 300)); res = await tryConfirm(url); } } catch {}
-          }
-          if (!res.ok && attempt === 0) { await new Promise(r => setTimeout(r, 900)); res = await tryConfirm(url); }
-          if (res.ok) { confirmOk = true; break; }
+        let confirmRes = await tryConfirm('/api/wager/confirm');
+        if (!confirmRes.ok) {
+          // Retry once after short delay (chain receipt race)
+          await new Promise(r => setTimeout(r, 900));
+          confirmRes = await tryConfirm('/api/wager/confirm');
         }
-        if (!confirmOk) { throw new Error((lastErr && lastErr.error) || 'Wager confirmation failed'); }
+        if (!confirmRes.ok) {
+          // Absolute URL fallback in case relative /api path is misrouted by CDN
+          const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
+          confirmRes = await tryConfirm(absUrl);
+        }
+        if (!confirmRes.ok) {
+          const err = await confirmRes.json().catch(() => ({} as any));
+          throw new Error(err.error || 'Wager confirmation failed');
+        }
       } else {
         if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');
         const { transaction: serializedTransaction } = await wagerResponse.json();
@@ -544,7 +539,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const minRequired = lobby.matchType === 'tutorial' ? 2 : (lobby.id === 'lobby-0.005' ? 2 : 4)
+  const minRequired = lobby.matchType === 'tutorial' ? 2 : ((lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005') ? 2 : 4)
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()

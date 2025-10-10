@@ -135,7 +135,7 @@ preparePromise.then(() => {
     global.lobbyPresence = new Map();
   }
   // Proactively clear any stale caches for the low-paid lobby on boot
-  try { global.lobbyPresence.delete && global.lobbyPresence.delete('lobby-0.005'); } catch {}
+  try { global.lobbyPresence.delete && global.lobbyPresence.delete('lobby-0.005'); global.lobbyPresence.delete && global.lobbyPresence.delete('lobby-0p005'); } catch {}
   // Helper: compute live counts from activeConnections (authoritative)
   function getLobbyCounts(lobbyId) {
     try {
@@ -190,8 +190,8 @@ preparePromise.then(() => {
   if (!global.lobbyVersions) {
     global.lobbyVersions = new Map();
   }
-  try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); } catch {}
-  try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); } catch {}
+  try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0p005'); } catch {}
+  try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0p005'); } catch {}
 
   // Socket.io connection handling
   io.on('connection', (socket) => {
@@ -1647,7 +1647,8 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready
         // Special-case: allow quick testing for the lowest paid lobby (0.005) with 2 players
-        const isLowPaidTestLobby = (lobby && lobby.id === 'lobby-0.005');
+        const isLowPaidTestLobby = (lobby && (lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005'));
+        const isLowPaidTestLobby = (lobby && (lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005'));
         const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
         const readyPlayers = eligiblePlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
