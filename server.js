@@ -190,6 +190,16 @@ preparePromise.then(() => {
   if (!global.lobbyVersions) {
     global.lobbyVersions = new Map();
   }
+  // Helper to consistently bump and retrieve lobby version for snapshots
+  function nextLobbyVersion(lobbyId) {
+    try {
+      const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1;
+      global.lobbyVersions.set(lobbyId, cur);
+      return cur;
+    } catch {
+      return 1;
+    }
+  }
   try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0p005'); } catch {}
   try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0p005'); } catch {}
 
@@ -567,13 +577,15 @@ preparePromise.then(() => {
                 isAi: player.isAi || false
               });
             }
+            const version = nextLobbyVersion(lobbyId);
             io.to(lobbyId).emit('lobby_updated', {
               id: lobbyId,
               players: lobbyPlayers,
               capacity: lobby.capacity,
               amount: lobby.amount,
               currency: lobby.currency,
-              matchType: lobby.matchType
+              matchType: lobby.matchType,
+              version
             });
           }
         } catch {}
@@ -1512,13 +1524,15 @@ preparePromise.then(() => {
                     isAi: player.isAi || false
                   };
                 });
+            const version = nextLobbyVersion(lobbyAtDisconnect);
             io.to(lobbyAtDisconnect).emit('lobby_updated', {
                   id: lobbyAtDisconnect,
                   players: lobbyPlayers,
                   capacity: lobby.capacity,
                   amount: lobby.amount,
                   currency: lobby.currency,
-                  matchType: lobby.matchType
+                  matchType: lobby.matchType,
+                  version
                 });
             // Broadcast updated counts derived from presence
             try {
@@ -1668,13 +1682,15 @@ preparePromise.then(() => {
               const hasEscrow = Boolean(liveLobby.escrowWalletId);
               if (!allWagered || !hasEscrow) {
                 allReady = false;
-                io.to(lobbyId).emit('lobby_updated', {
+            const version2 = nextLobbyVersion(lobbyId);
+            io.to(lobbyId).emit('lobby_updated', {
                   id: lobbyId,
                   players: eligiblePlayers,
                   capacity: liveLobby.capacity,
                   amount: liveLobby.amount,
                   currency: liveLobby.currency,
-                  matchType: liveLobby.matchType
+              matchType: liveLobby.matchType,
+              version: version2
                 });
                 console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered} hasEscrow=${hasEscrow}`);
               }

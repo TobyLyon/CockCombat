@@ -231,45 +231,47 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             isAi: !!p.isAi,
           })
         }
+        // Stable sort: humans first, then AIs; then by playerId for determinism
+        mapped.sort((a, b) => {
+          if (a.isAi !== b.isAi) return a.isAi ? 1 : -1
+          return a.playerId.localeCompare(b.playerId)
+        })
         setPlayers(mapped)
       }
     };
 
-    const handlePlayerJoined = (data: { playerId: string, username?: string, chickenName?: string, isReady?: boolean, isAi?: boolean }) => {
-      console.log('👋 Player joined:', data);
-      setPlayers(prev => {
-        // Remove existing player if any, then add new one
-        const filtered = prev.filter(p => p.playerId !== data.playerId);
-        return [...filtered, {
-          playerId: data.playerId,
-          username: getDisplayUsername(data),
-          chickenName: data.chickenName || 'Default',
-          isReady: data.isAi ? true : Boolean(data.isReady),
-          isAi: !!data.isAi
-        }];
-      });
+    // Debounced snapshot refresh to avoid roster races
+    let refreshTimer: number | null = null
+    const requestSnapshotDebounced = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(() => {
+        try { socket.emit('get_lobby_state', lobby.id) } catch {}
+      }, 200)
+    }
+
+    const handlePlayerJoined = (_data: { playerId: string }) => {
+      console.log('👋 Player joined (snapshot refresh)');
+      requestSnapshotDebounced()
     };
 
-    const handlePlayerLeft = (data: { playerId: string }) => {
-      console.log('👋 Player left:', data.playerId);
-      setPlayers(prev => prev.filter(p => p.playerId !== data.playerId));
+    const handlePlayerLeft = (_data: { playerId: string }) => {
+      console.log('👋 Player left (snapshot refresh)');
+      requestSnapshotDebounced()
     };
 
     const handlePlayerReady = (data: { playerId: string, isReady: boolean }) => {
-      console.log('✅ Player ready status:', data);
-      const pid = String(data.playerId || '').toLowerCase()
-      setPlayers(prev => prev.map(p => 
-        p.playerId === pid ? { ...p, isReady: data.isReady } : p
-      ));
-      // If this client is the one who became ready because of wager confirmation, reflect locally
+      console.log('✅ Player ready status (snapshot refresh):', data);
+      // Reflect local state if it's about me, then request authoritative snapshot
       try {
         const me = getCurrentPlayerId();
         const meNorm = me ? String(me).toLowerCase() : ''
+        const pid = String(data.playerId || '').toLowerCase()
         if (me && pid === meNorm && data.isReady) {
           setHasWagered(true);
           setIsReady(true);
         }
       } catch {}
+      requestSnapshotDebounced()
     };
 
     const handleMatchStarting = (data: { countdown: number }) => {
@@ -306,6 +308,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('match_started', handleMatchStarted);
       socket.off('round_start', handleMatchStarted);
       socket.off('refresh_lobby_state', handleRefreshLobbyState);
+      if (refreshTimer) window.clearTimeout(refreshTimer)
     };
   }, [socket, onStartMatch]);
 
