@@ -1506,6 +1506,41 @@ preparePromise.then(() => {
               if (!global.majorityGrace[lobbyId]) {
                 const endsAt = Date.now() + 15000;
                 console.log(`⏱️ Majority ready in ${lobbyId}. Starting 15s grace.`);
+              // Immediately normalize readiness to avoid glitches:
+              // - Tutorial: mark every player ready
+              // - Ranked: mark paid humans ready; remove unpaid humans
+              ;(async () => {
+                try {
+                  const baseUrlLocal = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                  const resLive = await fetch(`${baseUrlLocal}/api/lobbies`).catch(() => null);
+                  const allLive = resLive ? await resLive.json().catch(() => []) : [];
+                  const liveLobby = Array.isArray(allLive) ? allLive.find(l => l && l.id === lobbyId) : null;
+                  if (!liveLobby) return;
+                  const isTutorial = liveLobby.matchType === 'tutorial';
+                  const roster = Array.isArray(liveLobby.players) ? liveLobby.players : [];
+                  for (const p of roster) {
+                    const playerId = String(p.playerId || '');
+                    if (!playerId) continue;
+                    if (isTutorial) {
+                      // Push everyone ready
+                      try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
+                    } else {
+                      if (!p.isAi) {
+                        const hasWagered = Boolean(p.hasWagered);
+                        if (hasWagered) {
+                          // Mark as ready
+                          try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
+                        } else {
+                          // Remove unpaid human from lobby to avoid bugs during start
+                          try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId }) }).catch(() => {}); } catch {}
+                        }
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.warn('majority readiness normalize failed:', e?.message || e);
+                }
+              })();
                 const intervalId = setInterval(async () => {
                   const seconds = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
                   try { io.to(lobbyId).emit('majority_grace', { seconds }); } catch {}
