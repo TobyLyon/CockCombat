@@ -141,6 +141,8 @@ preparePromise.then(() => {
       let total = 0;
       for (const [, conn] of activeConnections.entries()) {
         if (conn && conn.currentLobby === lobbyId) {
+          // Ignore sockets without an identified wallet (haven't registered yet)
+          if (!conn.walletAddress || String(conn.walletAddress).trim().length === 0) continue;
           total += 1;
           const addr = String(conn.walletAddress || '');
           if (!addr.startsWith('ai-')) humans += 1;
@@ -178,6 +180,14 @@ preparePromise.then(() => {
         connection.walletAddress = walletAddress;
         console.log(`✅ Wallet ${walletAddress} registered to socket ${socket.id}`);
         try { socket.emit('wallet_registered', { walletAddress }); } catch {}
+
+        // If this socket had already joined a lobby before registering wallet, refresh counts
+        try {
+          if (connection.currentLobby) {
+            const c = getLobbyCounts(connection.currentLobby);
+            io.emit('lobby_counts', { id: connection.currentLobby, liveHumans: c.humans, liveTotal: c.total });
+          }
+        } catch {}
 
         // Guard: if there is an older socket with the same wallet, clean it up to avoid ghost presence
         try {
