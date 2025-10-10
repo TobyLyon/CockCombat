@@ -482,15 +482,17 @@ export async function DELETE(req: NextRequest) {
         const fromWallet = evmEscrowService.getWallet(lobby.escrowWalletId as any);
         if (fromWallet) {
           const wei = ethers.parseUnits(String(lobby.amount), 18);
+          // Refund back to original funding wallet if recorded
+          const refundTo = String(((leavingPlayer as any)?.__fundingWallet || leavingPlayer.playerId) as string)
           try {
-            const txHash = await evmEscrowService.transferNative(String(leavingPlayer.playerId), wei, fromWallet);
+            const txHash = await evmEscrowService.transferNative(refundTo, wei, fromWallet);
             try {
               await auditLogger.log({
                 eventType: 'wager_refund',
                 actorWallet: String(leavingPlayer.playerId),
                 endpoint: '/api/lobbies (leave)',
                 severity: 'info',
-                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown' },
+                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown', refundTo },
               });
             } catch {}
             // Reflect refund in memory for this player

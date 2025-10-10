@@ -86,11 +86,11 @@ async function handleWagerConfirmation(req: NextRequest) {
     if (isBsc()) {
       // EVM: signature = txHash
       const provider = getEvmProvider();
-      // Poll for receipt to avoid race when immediately confirming after send
+      // Poll for receipt with longer timeout to handle chain latency
       let receipt = await provider.getTransactionReceipt(signature);
       let attempts = 0;
-      while ((!receipt || receipt.status !== 1) && attempts < 8) {
-        await new Promise(r => setTimeout(r, 750));
+      while ((!receipt || receipt.status !== 1) && attempts < 20) {
+        await new Promise(r => setTimeout(r, 1000));
         receipt = await provider.getTransactionReceipt(signature);
         attempts++;
       }
@@ -115,11 +115,18 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (!expectedEscrow) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
       }
-      if (tx.to?.toLowerCase() !== expectedEscrow.toLowerCase()) {
+      if (!tx.to || tx.to.toLowerCase() !== expectedEscrow.toLowerCase()) {
         await auditLogger.logSuspiciousActivity('EVM wager to wrong escrow', playerPublicKey, undefined, { lobbyId, expectedEscrow, actual: tx.to });
         return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
       }
-      if (tx.value !== expectedValue) {
+      try {
+        const txValue = BigInt(tx.value as any);
+        if (txValue !== expectedValue) {
+          return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
+      }
         return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
       }
       // Record exact funding wallet for deterministic refunds
