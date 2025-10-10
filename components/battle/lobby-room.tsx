@@ -490,13 +490,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const data = await wagerResponse.json();
         const to: string = data.to;
         const value: string = data.value; // hex-encoded wei
+        const gas: string | undefined = data.gas; // optional hex
+        const gasPrice: string | undefined = data.gasPrice; // optional hex
 
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
         if (!eth) throw new Error('No EVM provider');
         const from = publicKey.toString();
+        const txParams: Record<string, string> = { from, to, value };
+        if (gas) txParams.gas = gas;
+        if (gasPrice) txParams.gasPrice = gasPrice;
         const txHash: string = await eth.request({
           method: 'eth_sendTransaction',
-          params: [{ from, to, value }],
+          params: [txParams],
         });
 
         const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: from };
