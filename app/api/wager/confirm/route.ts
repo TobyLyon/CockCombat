@@ -116,6 +116,10 @@ async function handleWagerConfirmation(req: NextRequest) {
 
     player.hasWagered = true;
     player.isReady = true;
+    try {
+      // Normalize stored playerId to input case to avoid mismatched case downstream
+      player.playerId = String(playerPublicKey);
+    } catch {}
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
 

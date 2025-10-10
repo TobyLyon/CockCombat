@@ -337,10 +337,10 @@ preparePromise.then(() => {
               });
             }
 
-            // Presence-based fallback: if API list is empty but sockets are present, synthesize players from presence
+            // Presence-based fallback is tutorial-only. For ranked, do not synthesize rosters.
             try {
               const presence = global.lobbyPresence?.get(lobbyId) || new Set();
-              if (lobbyPlayers.length === 0 && presence.size > 0) {
+              if (lobby.matchType === 'tutorial' && lobbyPlayers.length === 0 && presence.size > 0) {
                 lobbyPlayers = [];
                 for (const addr of presence.values()) {
                   let ready = false;

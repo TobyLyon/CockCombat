@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
     // (Previously required session validation here.)
 
     // Check if player is already in the lobby
-    const existingPlayer = lobby.players.find(p => p.playerId === playerId);
+    const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === String(playerId).toLowerCase());
     if (existingPlayer) {
     // Get socket instance and broadcast current lobby state (and presence add)
     try {
@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
     
     // De-duplicate any prior entry for this player in this lobby
     try {
-      lobby.players = lobby.players.filter(p => p.playerId !== playerId);
+      lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== String(playerId).toLowerCase());
     } catch {}
     
     const player = { 

@@ -486,6 +486,20 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             throw new Error(err.error || 'Wager confirmation failed');
           }
         }
+        // If origin blocked /api, try absolute URL fallback
+        if (confirmRes.status === 404 || confirmRes.status === 403) {
+          const origin = (typeof window !== 'undefined' ? window.location.origin : '') || ''
+          if (origin && origin.includes('cockcombat.xyz')) {
+            const abs = await fetch('https://www.cockcombat.xyz/api/wager/confirm', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lobbyId: lobby.id, signature: txHash, playerPublicKey: from })
+            })
+            if (!abs.ok) {
+              const err = await abs.json().catch(() => ({} as any));
+              throw new Error(err.error || 'Wager confirmation failed');
+            }
+          }
+        }
       } else {
         if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');
         const { transaction: serializedTransaction } = await wagerResponse.json();
