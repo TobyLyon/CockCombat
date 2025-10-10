@@ -419,7 +419,7 @@ preparePromise.then(() => {
             // Tutorial: if everyone is ready, start a room-wide countdown and queue with presence-based roster
             try {
               const isLowPaidTestLobby = String(lobbyId) === 'lobby-0.005';
-              const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
+              const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 2);
               const readyPlayers = lobbyPlayers.filter(p => p.isReady || p.isAi);
               const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
               const allReady = lobbyPlayers.length >= minPlayers && readyPlayers.length === lobbyPlayers.length && hasHumanReady;
@@ -1648,7 +1648,7 @@ preparePromise.then(() => {
         // Check if we have minimum players and all are ready
         // Special-case: allow quick testing for the lowest paid lobby (0.005) with 2 players
         const isLowPaidTestLobby = (lobby && (lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005'));
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 4);
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 2);
         const readyPlayers = eligiblePlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = eligiblePlayers.length >= minPlayers && 
@@ -1914,7 +1914,7 @@ preparePromise.then(() => {
         }
         
         // Check if we have minimum players and all are ready
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : 4;
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 2;
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         const allReady = lobbyPlayers.length >= minPlayers && 
                          lobbyPlayers.every(p => p.isReady || p.isAi) && hasHumanReady;
@@ -2032,7 +2032,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: isTutorial ? 2 : (lobbyMeta && lobbyMeta.id === 'lobby-0.005' ? 2 : 4),
+        minHumans: isTutorial ? 2 : (lobbyMeta && lobbyMeta.id === 'lobby-0.005' ? 2 : 2),
         escrowId: escrowIdVal,
       };
       io.to(lobbyId).emit('queue_begin', qbPayload);
@@ -2080,7 +2080,7 @@ preparePromise.then(() => {
       const presentHumans = requiredHumans.filter(w => presenceAcks.has(w) && assetsAcks.has(w));
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 2 : (lobby && lobby.id === 'lobby-0.005' ? 2 : 4);
+      const minHumans = isTutorial ? 2 : (lobby && lobby.id === 'lobby-0.005' ? 2 : 2);
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort)

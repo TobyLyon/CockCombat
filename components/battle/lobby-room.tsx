@@ -539,7 +539,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const minRequired = lobby.matchType === 'tutorial' ? 2 : ((lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005') ? 2 : 4)
+  const minRequired = lobby.matchType === 'tutorial' ? 2 : ((lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005') ? 2 : 2)
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()
@@ -743,7 +743,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       <div ref={bottomActionsRef} className="flex-shrink-0 sticky bottom-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
         {lobby.matchType !== 'tutorial' && (
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
-            <p className="text-[9px] text-yellow-400 text-center">Min. 4 players for ranked</p>
+            <p className="text-[9px] text-yellow-400 text-center">Min. 2 players for ranked</p>
           </div>
         )}
 

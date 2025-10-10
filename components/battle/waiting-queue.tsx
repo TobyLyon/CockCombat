@@ -53,7 +53,7 @@ export default function WaitingQueue({
   const expectedCountRef = useRef<number>(
     lobby.matchType === 'tutorial'
       ? 2
-      : Math.max(4, Array.isArray(lobby.players) ? lobby.players.length : 0)
+      : Math.max(2, Array.isArray(lobby.players) ? lobby.players.length : 0)
   )
 
   useEffect(() => {
@@ -459,7 +459,7 @@ export default function WaitingQueue({
                  <h4 className="text-sm lg:text-lg font-bold text-white pixel-font mb-2">Requirements</h4>
                  <div className="flex items-center text-xs lg:text-sm text-gray-300">
                   <AlertCircle className="h-3 w-3 lg:h-4 lg:w-4 mr-2 text-yellow-400 flex-shrink-0" />
-                  <span>4 players minimum to start.</span>
+                  <span>2 players minimum to start.</span>
                 </div>
               </div>
             )}
