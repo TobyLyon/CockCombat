@@ -213,22 +213,32 @@ export default function WaitingQueue({
           try { syncLobbyPlayers(cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))) } catch {}
         } else if ((!Array.isArray(players) || players.length === 0) && Array.isArray(currentLobby?.players) && currentLobby.players.length > 0) {
           try { syncLobbyPlayers(currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
-        } else if ((!Array.isArray(players) || players.length === 0)) {
-          try { socket?.emit('get_lobby_state', lobby.id) } catch {}
         }
       } catch {}
       // Cancel any scheduled start if server event arrives
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
-      // Slight delay to allow any sync above to apply
-      setTimeout(() => {
+      // Slight delay to allow any sync above to apply; if still empty, retry fetching up to 1.5s
+      const startWithOverride = () => {
         try {
           const override = (latestRosterRef.current || []).map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
           onStartBattle(override)
         } catch {
           onStartBattle()
         }
-      }, 50)
+      }
+      const hasRoster = () => (Array.isArray(latestRosterRef.current) && latestRosterRef.current.length > 0) || (Array.isArray(currentLobby?.players) && currentLobby.players.length > 0)
+      let attempts = 0
+      const tick = () => {
+        attempts++
+        if (hasRoster() || attempts > 6) { // ~1.2s max
+          startWithOverride()
+          return
+        }
+        try { socket?.emit('get_lobby_state', lobby.id) } catch {}
+        setTimeout(tick, 200)
+      }
+      setTimeout(tick, 100)
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
