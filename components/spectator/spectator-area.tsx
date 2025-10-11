@@ -131,7 +131,7 @@ export default function SpectatorArea() {
 
                   <div className="flex items-center space-x-2">
                     <div className="text-sm text-purple-300">Total Bets: {selectedMatch.totalBets}</div>
-                    <div className="text-sm text-yellow-400">Pool: {selectedMatch.poolSize} $CLUCK</div>
+                    <div className="text-sm text-yellow-400">Pool: {selectedMatch.poolSize} $COCK</div>
                   </div>
                 </div>
 
@@ -188,7 +188,7 @@ export default function SpectatorArea() {
                               selectedMatch.fighters.find((f) => f.id === selectedFighter).odds
                             ).toFixed(2)
                           : "0.00"}{" "}
-                        $CLUCK
+                        $COCK
                       </div>
                     </div>
 
@@ -260,7 +260,7 @@ export default function SpectatorArea() {
 
                   <div className="flex justify-between mt-4 text-sm">
                     <div className="text-purple-300">Total Bets: {match.totalBets}</div>
-                    <div className="text-yellow-400">Pool: {match.poolSize} $CLUCK</div>
+                    <div className="text-yellow-400">Pool: {match.poolSize} $COCK</div>
                   </div>
                 </div>
               ))}

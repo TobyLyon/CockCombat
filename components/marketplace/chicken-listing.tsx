@@ -71,7 +71,7 @@ export default function ChickenListing({ listing }) {
           </div>
 
           <div className="flex justify-between items-center">
-            <div className="font-bold text-lg text-yellow-400">{listing.price} $CLUCK</div>
+            <div className="font-bold text-lg text-yellow-400">{listing.price} $COCK</div>
 
             <Dialog>
               <DialogTrigger asChild>
@@ -83,7 +83,7 @@ export default function ChickenListing({ listing }) {
                 <DialogHeader>
                   <DialogTitle>Purchase Fighter</DialogTitle>
                   <DialogDescription className="text-purple-300">
-                    You are about to purchase {listing.name} for {listing.price} $CLUCK
+                    You are about to purchase {listing.name} for {listing.price} $COCK
                   </DialogDescription>
                 </DialogHeader>
 

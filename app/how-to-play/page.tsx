@@ -135,8 +135,8 @@ export default function HowToPlayPage() {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             {[
               { t: 'Controls', d: 'WASD/Arrows move • Space peck • Shift sprint', i: '🎮' },
-              { t: 'Win Condition', d: 'Last chicken standing or top score at timeout.', i: '🏆' },
-              { t: 'Economy', d: 'Earn $CLUCK from wins, wagers, and events. Claim in wallet.', i: '🪙' },
+              { t: 'Win Condition', d: 'Knock out rivals with pecks and positioning. Last alive wins. Ties break by last hit.', i: '🏆' },
+              { t: 'Economy', d: 'Earn $COCK from wins, wagers, and events. Wagers pool into prize; house takes a small cut.', i: '🪙' },
             ].map((x, idx) => (
               <motion.div key={x.t} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 + 0.05 * (idx + 1) }} className="bg-purple-900/40 backdrop-blur-sm border border-purple-600/40 rounded-xl p-5 shadow-[0_0_40px_rgba(0,0,0,0.25)]">
                 <div className="text-2xl mb-1">{x.i}</div>

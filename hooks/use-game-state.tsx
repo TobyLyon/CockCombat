@@ -8,7 +8,7 @@ export function useGameState() {
   const [playerHealth, setPlayerHealth] = useState(3)
   const [remainingPlayers, setRemainingPlayers] = useState(15)
   const [timeRemaining, setTimeRemaining] = useState(120) // 2 minutes
-  const [prizePool, setPrizePool] = useState(15) // 1 $CLUCK per player
+  const [prizePool, setPrizePool] = useState(15) // 1 $COCK per player
   const [peckCooldown, setPeckCooldown] = useState(0)
   const [isWinner, setIsWinner] = useState(false)
 

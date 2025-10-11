@@ -83,7 +83,7 @@ export default function LandingPage() {
             />
             <FeatureCard
               title="BET"
-              description="Can't fight? Place bets on your favorite champions and earn $CLUCK when they triumph in the arena."
+              description="Can't fight? Place bets on your favorite champions and earn $COCK when they triumph in the arena."
               icon="💰"
             />
             <FeatureCard
