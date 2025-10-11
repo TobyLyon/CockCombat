@@ -112,9 +112,9 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
         timerRef.current = 1.2 + Math.random() * 1.5
         // Pick a wander target across the bottom screen area within lane
         const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, laneZ)
-        const nx = current.x + (Math.random() - 0.5) * 4.5 // larger lateral wander across screen
+        const nx = current.x + (Math.random() - 0.5) * 3.5 // moderate lateral wander
         const nz = laneZ + (Math.random() - 0.5) * 0.05    // minimal depth variation
-        const clampedX = Math.max(-12, Math.min(12, nx)) // expanded horizontal bounds
+        const clampedX = Math.max(-8, Math.min(8, nx)) // moderate horizontal bounds
         const clampedZ = Math.max(laneZ - 0.04, Math.min(laneZ + 0.04, nz))
         targetRef.current = new THREE.Vector3(clampedX, 0.6, clampedZ)
       }
@@ -144,8 +144,8 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
         setState('idle')
         timerRef.current = 1.5 + Math.random() * 2.0
       }
-      // Keep strictly to lane with expanded horizontal bounds
-      pos.x = Math.max(-12, Math.min(12, pos.x))
+      // Keep strictly to lane with moderate horizontal bounds
+      pos.x = Math.max(-8, Math.min(8, pos.x))
       const laneBand = 0.04
       pos.z = Math.max(laneZ - laneBand, Math.min(laneZ + laneBand, pos.z))
     }
@@ -214,7 +214,7 @@ export default function HowToPlayPage() {
             initial={{ opacity: 0, y: 10 }} 
             animate={{ opacity: 1, y: 0 }} 
             transition={{ duration: 0.5 }} 
-            className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-purple-400 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
+            className="pixel-font text-4xl md:text-5xl lg:text-6xl font-extrabold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-purple-400 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
           >
             How to Play
           </motion.h1>
