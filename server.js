@@ -2166,7 +2166,7 @@ preparePromise.then(() => {
         c--;
         if (c < 0) {
           clearInterval(interval);
-          try { io.to(lobbyId).emit('round_start', { matchSessionId }); } catch {}
+          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}

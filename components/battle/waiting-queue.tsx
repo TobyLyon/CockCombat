@@ -206,8 +206,16 @@ export default function WaitingQueue({
         if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
       } catch {}
     }
-    const onStarted = () => {
+    const onStarted = (payload?: any) => {
       console.log('[WaitingQueue] round_start/match_started received')
+      try {
+        const fr = Array.isArray((payload as any)?.finalRoster) ? (payload as any).finalRoster : []
+        if (fr.length > 0) {
+          latestRosterRef.current = fr
+          try { (window as any).__latest_roster_override = fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
+          try { syncLobbyPlayers(fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))) } catch {}
+        }
+      } catch {}
       try { playSound('button') } catch {}
       // Ensure we have a roster before starting
       try {
