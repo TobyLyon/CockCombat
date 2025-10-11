@@ -1187,11 +1187,16 @@ preparePromise.then(() => {
               const player2Wallet = player2Conn?.walletAddress || null;
 
               // Insert or upsert into legacy 'matches' table for compatibility
+              // Upsert base match row with additional details
+              const matchDuration = (room.lastUpdateTime && room.startTime) ? Math.max(0, Math.round((room.lastUpdateTime - room.startTime) / 1000)) : 0;
               await supabase.from('matches').upsert({
                 id: roomId,
                 player1_wallet: player1Wallet,
                 player2_wallet: player2Wallet,
                 winner_wallet: winnerWallet,
+                player1_tokens_wagered: null, // filled below for ranked
+                player2_tokens_wagered: null,
+                duration_seconds: matchDuration,
                 metadata: {
                   source: 'socket_server',
                   started_at: room.startTime || Date.now(),
@@ -1227,6 +1232,13 @@ preparePromise.then(() => {
                     payout_processed: false,
                   }).select('id').single();
                   if (!mrErr && mr?.id) {
+                    // Also fill in wager amounts on the matches table for history
+                    try {
+                      await supabase.from('matches').update({
+                        player1_tokens_wagered: rankedLobby.amount,
+                        player2_tokens_wagered: rankedLobby.amount
+                      }).eq('id', roomId);
+                    } catch {}
                     // Trigger payout via internal API with server secret
                     const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${(process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`)}/api/payout`;
                     const serverSecret = process.env.PAYOUT_SERVER_SECRET;
@@ -1258,6 +1270,65 @@ preparePromise.then(() => {
                 }
               } catch (orchestratorErr) {
                 console.error('⚠️ Payout orchestrator error:', orchestratorErr);
+              }
+              // Server-side profile updates and transactions (best-effort)
+              try {
+                const houseCutPct = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
+                const isRanked = !!(rankedLobby && rankedLobby.amount > 0);
+                const wager = isRanked ? Number(rankedLobby.amount || 0) : 0;
+                const humansCount = isRanked ? ((rankedLobby.players || []).filter(p => !p.isAi).length || 0) : 0;
+                const prizePool = (isRanked && humansCount > 0) ? (wager * humansCount) : 0;
+                const winnerCut = prizePool > 0 ? prizePool * (1 - houseCutPct) : 0;
+                const wWallet = winnerWallet;
+                const lWallet = (wWallet && player1Wallet && player2Wallet) ? (wWallet === player1Wallet ? player2Wallet : player1Wallet) : null;
+                // Record transactions (wagers) for both humans
+                const txRows = [];
+                if (wager > 0 && player1Wallet) txRows.push({ wallet_address: player1Wallet, transaction_type: 'wager', amount: -wager, description: 'Match wager' });
+                if (wager > 0 && player2Wallet) txRows.push({ wallet_address: player2Wallet, transaction_type: 'wager', amount: -wager, description: 'Match wager' });
+                if (winnerCut > 0 && wWallet) txRows.push({ wallet_address: wWallet, transaction_type: 'win', amount: winnerCut, description: 'Match winnings' });
+                if (txRows.length > 0) {
+                  try { await supabase.from('transactions').insert(txRows.map(r => ({ ...r, related_entity_id: roomId }))); } catch {}
+                }
+                // Helper to read then update profile counters
+                const bumpProfile = async (wallet, opts) => {
+                  if (!wallet) return;
+                  try {
+                    const { data: prof } = await supabase.from('profiles').select('total_matches,wins,losses,win_streak,max_win_streak,total_tokens_won,total_tokens_lost,total_wagered,experience,level,next_level_xp').eq('wallet_address', wallet).maybeSingle();
+                    const exists = !!prof;
+                    const total_matches = (prof?.total_matches || 0) + 1;
+                    const wins = (prof?.wins || 0) + (opts.win ? 1 : 0);
+                    const losses = (prof?.losses || 0) + (opts.win ? 0 : 1);
+                    const win_streak = opts.win ? ((prof?.win_streak || 0) + 1) : 0;
+                    const max_win_streak = Math.max((prof?.max_win_streak || 0), win_streak);
+                    const total_tokens_won = (prof?.total_tokens_won || 0) + (opts.win ? (winnerCut || 0) : 0);
+                    const total_tokens_lost = (prof?.total_tokens_lost || 0) + (opts.win ? 0 : (wager || 0));
+                    const total_wagered = (prof?.total_wagered || 0) + (wager || 0);
+                    const xpGained = opts.win ? 100 : 25;
+                    let experience = (prof?.experience || 0) + xpGained;
+                    let level = prof?.level || 1;
+                    let next_level_xp = prof?.next_level_xp || 100;
+                    if (experience >= next_level_xp) {
+                      level = level + 1;
+                      next_level_xp = Math.floor(100 * Math.pow(1.5, Math.max(0, level - 1)));
+                    }
+                    if (exists) {
+                      await supabase.from('profiles').update({ total_matches, wins, losses, win_streak, max_win_streak, total_tokens_won, total_tokens_lost, total_wagered, experience, level, next_level_xp, last_login: new Date().toISOString() }).eq('wallet_address', wallet);
+                    } else {
+                      await supabase.from('profiles').insert({ wallet_address: wallet, username: `Player_${String(wallet).slice(0,6)}`, total_matches, wins, losses, win_streak, max_win_streak, total_tokens_won, total_tokens_lost, total_wagered, experience, level, next_level_xp });
+                    }
+                    // Notify client to refresh profile if connected
+                    try {
+                      for (const [, c] of activeConnections.entries()) {
+                        const w = String(c.walletAddress || '').toLowerCase();
+                        if (w && w === String(wallet).toLowerCase()) { c.socket?.emit?.('profile_updated', { wallet, roomId, ts: Date.now() }); }
+                      }
+                    } catch {}
+                  } catch {}
+                };
+                await bumpProfile(wWallet, { win: true });
+                await bumpProfile(lWallet, { win: false });
+              } catch (profileErr) {
+                console.error('⚠️ Profile update after match failed:', profileErr);
               }
             }
           } catch (e) {
