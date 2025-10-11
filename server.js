@@ -931,6 +931,41 @@ preparePromise.then(() => {
       try { socket.emit('active_players', { humans: getGlobalActiveHumans(), ts: Date.now() }); } catch {}
     });
 
+    // Prune tutorial lobby ghosts: remove humans not present in live socket presence
+    socket.on('prune_ghosts', async (lobbyId) => {
+      if (!checkRateLimit('prune_ghosts', 5)) return;
+      try {
+        if (!lobbyId) return;
+        const lob = lobbies.find(l => l && l.id === lobbyId);
+        if (!lob || lob.matchType !== 'tutorial') return;
+        const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+        const beforeCount = Array.isArray(lob.players) ? lob.players.length : 0;
+        if (!Array.isArray(lob.players)) lob.players = [];
+        lob.players = lob.players.filter(p => p.isAi || presence.has(String(p.playerId || '').toLowerCase()));
+        const afterCount = lob.players.length;
+        if (afterCount !== beforeCount) {
+          // Broadcast pruned roster
+          const lobbyPlayers = lob.players.map(p => ({
+            playerId: p.playerId,
+            username: p.username || (p.playerId ? String(p.playerId).slice(0,8)+'...' : 'Player'),
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : Boolean(p.isReady),
+            isAi: !!p.isAi,
+          }));
+          const version = nextLobbyVersion(lobbyId);
+          io.to(lobbyId).emit('lobby_updated', {
+            id: lobbyId,
+            players: lobbyPlayers,
+            capacity: lob.capacity,
+            amount: lob.amount,
+            currency: lob.currency,
+            matchType: lob.matchType,
+            version,
+          });
+        }
+      } catch {}
+    });
+
     // Broadcast active players to all clients on connect/disconnect churn (throttled)
     try {
       if (!global.__activePlayersBroadcast) global.__activePlayersBroadcast = { last: 0 };
@@ -1464,6 +1499,12 @@ preparePromise.then(() => {
               }
             }
 
+            // For guests in tutorial, force-remove if no active socket is present
+            const isGuest = String(walletAtDisconnect || '').startsWith('guest_')
+            if (isGuest) {
+              try { if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) global.lobbyPresence.get(lobbyAtDisconnect).delete(walletAtDisconnect); } catch {}
+            }
+
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             await fetch(`${baseUrl}/api/lobbies`, {
               method: 'DELETE',
@@ -1482,13 +1523,17 @@ preparePromise.then(() => {
               });
             } catch {}
 
-            // Broadcast updated lobby roster immediately
+            // Broadcast updated lobby roster immediately (and prune ghosts for tutorial)
             try {
               const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
               const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
               const all = res ? await res.json().catch(() => []) : [];
               const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyAtDisconnect) : null;
               if (lobby) {
+                if (lobby.matchType === 'tutorial') {
+                  const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
+                  lobby.players = lobby.players.filter((p: any) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
+                }
                 let lobbyPlayers = lobby.players.map(player => {
                   let isReady = false;
                   for (const [, c] of activeConnections.entries()) {

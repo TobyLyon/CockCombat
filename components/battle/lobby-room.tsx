@@ -125,6 +125,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }, 500)
       }
       
+      // Tutorial-only: request ghost pruning on join to clear stale guest entries
+      try { if (lobby.matchType === 'tutorial') socket.emit('prune_ghosts', lobby.id) } catch {}
+
       // No client snapshots; rely on server-driven roster_full/roster_diff events
 
       const cleanup = () => {
