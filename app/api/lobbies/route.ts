@@ -185,11 +185,20 @@ export async function POST(req: NextRequest) {
     }
     const { lobbyId, playerId, chickenId, sessionId } = parsed.data;
 
-    const lobby = lobbies.find(l => l.id === lobbyId);
+    const lobby = lobbies.find(l => l && l.id === lobbyId);
 
     if (!lobby) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
+
+    // Enforce: guests (playerId starting with 'guest_') can only join tutorial/free lobbies
+    try {
+      const isGuest = String(playerId || '').startsWith('guest_');
+      const isTutorial = lobby.matchType === 'tutorial' || Number(lobby.amount || 0) === 0;
+      if (isGuest && !isTutorial) {
+        return NextResponse.json({ error: 'Guests can only join tutorial lobbies' }, { status: 403 });
+      }
+    } catch {}
 
     if (lobby.players.length >= lobby.capacity) {
       if (lobby.matchType === 'tutorial') {
