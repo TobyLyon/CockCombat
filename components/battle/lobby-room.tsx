@@ -338,16 +338,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     if (!socket) return
     const onGrace = (payload: { seconds: number }) => setMajoritySeconds(payload.seconds)
     socket.on('majority_grace', onGrace)
-    const onActive = (p: any) => {
+    const onLobbyCounts = (payload: any) => {
       try {
-        const count = Math.max(0, Number(p?.humans) || 0)
-        setActiveHumans(count)
+        if (!payload || payload.id !== lobby.id) return
+        const humans = Math.max(0, Number(payload?.liveHumans) || 0)
+        setActiveHumans(humans)
       } catch {}
     }
-    socket.on('active_players', onActive)
-    try { socket.emit('get_active_players') } catch {}
-    const id = window.setInterval(() => { try { socket.emit('get_active_players') } catch {} }, 5000)
-    return () => { socket.off('majority_grace', onGrace); socket.off('active_players', onActive); window.clearInterval(id) }
+    socket.on('lobby_counts', onLobbyCounts)
+    return () => { socket.off('majority_grace', onGrace); socket.off('lobby_counts', onLobbyCounts) }
   }, [socket])
 
   const handleReadyToggle = async () => {
