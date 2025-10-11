@@ -241,11 +241,9 @@ export function PixelChicken({
   let flapTime = 0;
   const flapSpeed = 4;
 
-  // Peck animation state
-  const [peckProgress, setPeckProgress] = useState(0);
-  const [isPeckAnimating, setIsPeckAnimating] = useState(false);
-  const peckDuration = 0.2; // Reduced duration for faster animation
-  const peckAnimRef = useRef({ lastTime: 0 });
+  // Peck animation state (ref-based to avoid re-render jitter)
+  const peckDuration = 0.2; // seconds
+  const peckAnimRef = useRef<{ animating: boolean; startTime: number }>({ animating: false, startTime: 0 });
 
   // Walking animation state
   const [walkTime, setWalkTime] = useState(0);
@@ -299,7 +297,7 @@ export function PixelChicken({
     chickenRef.current.rotation.z = 0;
 
     // Head tracking - disabled during peck animation to avoid fighting transforms
-    if (headRef.current && neckRef.current && headTarget && !isPeckAnimating) {
+    if (headRef.current && neckRef.current && headTarget && !peckAnimRef.current.animating) {
       const targetRotationX = Math.max(-0.4, Math.min(0.4, -headTarget.y * 0.5));
       const targetRotationY = Math.max(-0.4, Math.min(0.4, headTarget.x * 0.5));
       // Removed head bobbing - keep static Y position
@@ -309,42 +307,36 @@ export function PixelChicken({
       headRef.current.rotation.x += (targetRotationX - headRef.current.rotation.x) * lerpFactor;
     }
 
-    // --- Peck Animation (Modified for more head nod) ---
-    if (isPecking && !isPeckAnimating) {
-      setIsPeckAnimating(true);
-      setPeckProgress(0);
-      peckAnimRef.current.lastTime = time;
+    // --- Peck Animation (ref-based, no React state during frames) ---
+    if (isPecking && !peckAnimRef.current.animating) {
+      peckAnimRef.current.animating = true;
+      peckAnimRef.current.startTime = time;
     }
-    
-    if (isPeckAnimating) {
-      const elapsed = time - peckAnimRef.current.lastTime;
-      const newProgress = Math.min(1, elapsed / peckDuration);
-      setPeckProgress(newProgress);
-      
+
+    if (peckAnimRef.current.animating) {
+      const elapsed = time - peckAnimRef.current.startTime;
+      const progress = Math.min(1, elapsed / peckDuration);
+
       if (neckRef.current && headRef.current) {
-        // Directional peck straight forward, no vertical angling
-        const baseNeckZ = 0.1
-        const baseHeadZ = 0.45
-        if (newProgress < 0.5) { // Attacking phase
-          const peckAmount = newProgress * 2;
-          // Push neck and head straight forward on Z axis only
-          neckRef.current.position.z = baseNeckZ + 0.4 * peckAmount;
-          headRef.current.position.z = baseHeadZ + 0.15 * peckAmount;
-          // No rotation to avoid clipping
+        const baseNeckZ = 0.1;
+        const baseHeadZ = 0.45;
+        if (progress < 0.5) {
+          const peckAmount = progress * 2;
+          neckRef.current.position.z = baseNeckZ + 0.38 * peckAmount; // slightly reduced to avoid overshoot
+          headRef.current.position.z = baseHeadZ + 0.14 * peckAmount;
           neckRef.current.rotation.x = 0;
           headRef.current.rotation.x = 0;
-        } else { // Returning phase
-          const returnAmount = (1 - newProgress) * 2; // Symmetrical return
-          neckRef.current.position.z = baseNeckZ + 0.4 * returnAmount;
-          headRef.current.position.z = baseHeadZ + 0.15 * returnAmount;
+        } else {
+          const returnAmount = (1 - progress) * 2;
+          neckRef.current.position.z = baseNeckZ + 0.38 * returnAmount;
+          headRef.current.position.z = baseHeadZ + 0.14 * returnAmount;
           neckRef.current.rotation.x = 0;
           headRef.current.rotation.x = 0;
         }
       }
-      
-      if (newProgress >= 1) {
-        setIsPeckAnimating(false);
-        setPeckProgress(0);
+
+      if (progress >= 1) {
+        peckAnimRef.current.animating = false; // cooldown ends
       }
     } else {
       // Lerp back to resting state
