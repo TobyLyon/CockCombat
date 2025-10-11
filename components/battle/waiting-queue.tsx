@@ -36,7 +36,6 @@ export default function WaitingQueue({
   // No countdown on the secondary confirmation screen
   const [countdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
-  const [queueCountdown, setQueueCountdown] = useState<number | null>(null)
   const { syncLobbyPlayers } = useGameState()
   // Track stable full-roster to auto-advance without asking users to ready again
   const lastCountRef = useRef<number>(0)
@@ -195,14 +194,11 @@ export default function WaitingQueue({
       }
       startWithOverride()
     }
-    const onRoundCountdown = (payload: any) => {
-      try { const n = Number(payload?.count); if (!isNaN(n)) setQueueCountdown(n >= 0 ? n : null) } catch {}
-    }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
     socket.on('match_started', onStarted)
-    socket.on('round_countdown', onRoundCountdown)
+    // no secondary countdown overlay here; arena scene shows the countdown
     // Join the match room for realtime sync using session id
     const onQueueBeginJoin = (payload: any) => {
       try {
@@ -219,7 +215,6 @@ export default function WaitingQueue({
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
-      socket.off('round_countdown', onRoundCountdown)
       socket.off('debug_trace', onDebug)
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
@@ -300,31 +295,7 @@ export default function WaitingQueue({
   
   return (
     <div className="bg-[#333333] border-4 border-[#222222] rounded-lg p-4 lg:p-6 max-w-6xl w-full mx-auto max-h-full overflow-hidden relative">
-      {/* Synced 3-2-1 countdown overlay */}
-      <AnimatePresence>
-        {typeof queueCountdown === 'number' && queueCountdown >= 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
-          >
-            <motion.div
-              key={queueCountdown}
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.2, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="text-6xl sm:text-8xl font-bold text-yellow-400 pixel-font drop-shadow-lg"
-              style={{ textShadow: '4px 4px 0px rgba(0,0,0,0.8), 8px 8px 0px rgba(255,170,0,0.3)' }}
-            >
-              {queueCountdown}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
-      {/* No countdown overlay on this screen */}
+      {/* No countdown overlay on this screen; arena handles countdown */}
 
       {/* Ready Status Banner */}
       <AnimatePresence>
