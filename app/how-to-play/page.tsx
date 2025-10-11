@@ -18,13 +18,13 @@ function FloatingParticles({ count = 40 }: { count?: number }) {
     const velocities = new Float32Array(count * 3)
     
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 20
-      positions[i * 3 + 1] = Math.random() * 12
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 10
+      positions[i * 3] = (Math.random() - 0.5) * 24
+      positions[i * 3 + 1] = Math.random() * 18 - 2 // spread from -2 to 16
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 12
       
-      velocities[i * 3] = (Math.random() - 0.5) * 0.02
-      velocities[i * 3 + 1] = Math.random() * 0.01 + 0.005
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02
+      velocities[i * 3] = (Math.random() - 0.5) * 0.015
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02 // can drift up or down
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.015
     }
     
     return { positions, velocities }
@@ -40,9 +40,13 @@ function FloatingParticles({ count = 40 }: { count?: number }) {
       positions[i * 3 + 1] += particles.velocities[i * 3 + 1] * delta * 60
       positions[i * 3 + 2] += particles.velocities[i * 3 + 2] * delta * 60
       
-      if (positions[i * 3 + 1] > 12) positions[i * 3 + 1] = 0
-      if (Math.abs(positions[i * 3]) > 10) positions[i * 3] *= -0.9
-      if (Math.abs(positions[i * 3 + 2]) > 5) positions[i * 3 + 2] *= -0.9
+      // Wrap Y vertically to cycle through entire page height
+      if (positions[i * 3 + 1] > 16) positions[i * 3 + 1] = -2
+      if (positions[i * 3 + 1] < -2) positions[i * 3 + 1] = 16
+      
+      // Bounce X and Z within wider bounds
+      if (Math.abs(positions[i * 3]) > 12) positions[i * 3] *= -0.9
+      if (Math.abs(positions[i * 3 + 2]) > 6) positions[i * 3 + 2] *= -0.9
     }
     
     particlesRef.current.geometry.attributes.position.needsUpdate = true
