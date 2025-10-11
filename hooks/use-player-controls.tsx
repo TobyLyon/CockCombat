@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import * as THREE from "three"
 
 export function usePlayerControls() {
@@ -9,6 +9,8 @@ export function usePlayerControls() {
   const [rotationAngle, setRotationAngle] = useState<number>(0)
   const [isPecking, setIsPecking] = useState<boolean>(false)
   const [isSprinting, setIsSprinting] = useState<boolean>(false)
+  const [mousePeck, setMousePeck] = useState<boolean>(false)
+  const mousePeckTimerRef = useRef<number | null>(null)
   
   // Track key states for smoother movement
   const [keys, setKeys] = useState<{
@@ -62,9 +64,9 @@ export function usePlayerControls() {
     // Update states
     setMoveDirection(direction)
     setRotationAngle(newRotationAngle)
-    setIsPecking(keys.Space)
+    setIsPecking(keys.Space || mousePeck)
     setIsSprinting(sprinting)
-  }, [keys, rotationAngle])
+  }, [keys, rotationAngle, mousePeck])
   
   // Handle key down events
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -88,8 +90,16 @@ export function usePlayerControls() {
   
   // Set up key listeners
   useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      setMousePeck(true)
+      if (mousePeckTimerRef.current) window.clearTimeout(mousePeckTimerRef.current)
+      mousePeckTimerRef.current = window.setTimeout(() => setMousePeck(false), 140)
+    }
+
     window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("keyup", handleKeyUp)
+    window.addEventListener("mousedown", onMouseDown)
     
     // Animation frame for smooth movement updates
     let animationFrameId: number
@@ -104,7 +114,9 @@ export function usePlayerControls() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("keyup", handleKeyUp)
+      window.removeEventListener("mousedown", onMouseDown)
       cancelAnimationFrame(animationFrameId)
+      if (mousePeckTimerRef.current) window.clearTimeout(mousePeckTimerRef.current)
     }
   }, [handleKeyDown, handleKeyUp, updateMovement])
   

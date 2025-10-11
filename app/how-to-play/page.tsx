@@ -19,6 +19,9 @@ function GrazingFlock() {
       <GrazingChicken position={[1.2, 0.5, -2.1]} paletteIndex={3} />
       <GrazingChicken position={[3.8, 0.5, -2.3]} paletteIndex={4} />
       <GrazingChicken position={[6.2, 0.5, -2.0]} paletteIndex={5} />
+      {/* Extra variety */}
+      <GrazingChicken position={[-5.8, 0.5, -2.15]} paletteIndex={6} />
+      <GrazingChicken position={[5.4, 0.5, -2.25]} paletteIndex={7} />
     </group>
   )
 }
@@ -29,6 +32,17 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
   const timerRef = useRef(0)
   const targetRef = useRef<THREE.Vector3 | null>(null)
   const speedRef = useRef(0.5 + Math.random() * 0.4) // per-chicken base speed
+  // Color palettes matching in-game variety
+  const PALETTES = [
+    { body: "#f97316", comb: "#ef4444", beak: "#FFD600", legs: "#FFD600", tail: "#6366f1", eyes: "#ffffff", pupils: "#222222" },
+    { body: "#f59e0b", comb: "#b91c1c", beak: "#fbbf24", legs: "#fbbf24", tail: "#7c3aed", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#f8fafc", comb: "#dc2626", beak: "#facc15", legs: "#facc15", tail: "#3b82f6", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#1f2937", comb: "#ef4444", beak: "#f59e0b", legs: "#f59e0b", tail: "#10b981", eyes: "#e5e7eb", pupils: "#000000" },
+    { body: "#60a5fa", comb: "#ef4444", beak: "#fbbf24", legs: "#fbbf24", tail: "#111827", eyes: "#ffffff", pupils: "#1f2937" },
+    { body: "#10b981", comb: "#dc2626", beak: "#fbbf24", legs: "#fbbf24", tail: "#2563eb", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#d1d5db", comb: "#b91c1c", beak: "#f59e0b", legs: "#f59e0b", tail: "#374151", eyes: "#ffffff", pupils: "#111827" },
+    { body: "#8b5cf6", comb: "#ef4444", beak: "#fbbf24", legs: "#fbbf24", tail: "#10b981", eyes: "#ffffff", pupils: "#111827" },
+  ]
 
   useFrame((_, delta) => {
     timerRef.current -= delta
@@ -72,7 +86,7 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
 
   return (
     <group ref={ref} position={position} scale={[0.7, 0.7, 0.7]}>
-      <PixelChicken position={[0, 0, 0]} rotation={[0, 0, 0]} health={undefined} maxHealth={undefined} isPlayer={false} isPecking={state==='peck'} disableBobbing={false} />
+      <PixelChicken position={[0, 0, 0]} rotation={[0, 0, 0]} health={undefined} maxHealth={undefined} isPlayer={false} isPecking={state==='peck'} disableBobbing={false} colors={PALETTES[((paletteIndex % PALETTES.length) + PALETTES.length) % PALETTES.length]} />
     </group>
   )
 }
