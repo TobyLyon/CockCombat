@@ -34,7 +34,7 @@ export function useWallet() {
     const w = window as any
     const eth = w.ethereum
     if (!eth) return null
-    // If multiple providers are present, select MetaMask specifically
+    // If multiple providers are present, do NOT auto-pick; require explicit selection
     if (Array.isArray(eth.providers)) {
       const list: any[] = eth.providers
       const pickByKey = (key: string | null) => {
@@ -50,9 +50,12 @@ export function useWallet() {
       }
       const selected = pickByKey(providerKey)
       if (selected) return selected
-      const mm = list.find((p: any) => p && p.isMetaMask)
-      return mm || eth
+      // If only one provider is available, allow using it without forcing a choice
+      if (list.length === 1) return list[0]
+      // Otherwise, require the UI to call select(key) first
+      return null
     }
+    // Single injected provider case
     return eth
   }, [providerKey])
 
@@ -138,6 +141,7 @@ export function useWallet() {
     await ensureBscChain()
     if (typeof window === 'undefined') return null
     const eth = getInjectedProvider()
+    // If multiple providers exist and none selected, abort so UI can prompt user
     if (!eth) return null
     try {
       setEvmConnecting(true)
@@ -240,12 +244,18 @@ export function useWallet() {
 
   // Compose chain-aware return
   if (isBsc()) {
+    const selectedName = (() => {
+      const fromKey = providerKey ? injectedWallets.find(w => w.key === providerKey)?.adapter.name : null
+      if (fromKey) return fromKey
+      if (injectedWallets.length === 1) return injectedWallets[0].adapter.name
+      return 'BSC (Injected)'
+    })()
     return {
       publicKey: evmPublicKey,
       connected: Boolean(evmAddress),
       connecting: evmConnecting,
       disconnect: evmDisconnect as AnyFn,
-      wallet: evmAddress ? { adapter: { name: (injectedWallets.find(w => w.key === (providerKey || 'metamask'))?.adapter.name) || 'BSC (Injected)' } } : null,
+      wallet: evmAddress ? { adapter: { name: selectedName } } : null,
       wallets: injectedWallets,
       select: evmConnect as AnyFn,
       chooseAccount: chooseAccount as AnyFn,
