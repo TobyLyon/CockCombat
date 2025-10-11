@@ -110,6 +110,7 @@ export default function WaitingQueue({
       // Use provided usernames; guest_* stays literal, wallets are shortened
       const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
       latestRosterRef.current = expected
+      try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(expected.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
@@ -182,6 +183,7 @@ export default function WaitingQueue({
       // Replace roster with locked list and keep provided names with guest rule
       const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
       latestRosterRef.current = finalR
+      try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')

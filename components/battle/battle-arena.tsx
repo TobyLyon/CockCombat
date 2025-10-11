@@ -88,7 +88,14 @@ export default function BattleArena() {
     const ensureStart = () => {
       // Only allow auto-start while explicitly on the queue screen.
       if (gameState === 'queue') {
-        try { startBattle() } catch {}
+        try {
+          const override = (typeof window !== 'undefined') ? (window as any).__latest_roster_override : undefined
+          if (Array.isArray(override) && override.length > 0) {
+            startBattle(override)
+          } else {
+            startBattle()
+          }
+        } catch {}
       }
     }
     const onStarted = () => ensureStart()
