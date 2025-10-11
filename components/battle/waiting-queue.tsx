@@ -201,18 +201,27 @@ export default function WaitingQueue({
     socket.on('match_started', onStarted)
     // no secondary countdown overlay here; arena scene shows the countdown
     // Join the match room for realtime sync using session id
+    // Ensure we join the match room on both queue_begin and arena_lock_roster to avoid missing start on one device
     const onQueueBeginJoin = (payload: any) => {
       try {
         const msid = payload?.matchSessionId
         if (msid) socket.emit('join_match_room', { matchSessionId: msid })
       } catch {}
     }
+    const onArenaLockJoinRoom = (payload: any) => {
+      try {
+        const msid = payload?.matchSessionId
+        if (msid) socket.emit('join_match_room', { matchSessionId: msid })
+      } catch {}
+    }
     socket.on('queue_begin', onQueueBeginJoin)
+    socket.on('arena_lock_roster', onArenaLockJoinRoom)
     const onDebug = (p: any) => console.log('[MATCH][DEBUG]', p)
     socket.on('debug_trace', onDebug)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('queue_begin', onQueueBeginJoin)
+      socket.off('arena_lock_roster', onArenaLockJoinRoom)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
