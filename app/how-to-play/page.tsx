@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button"
 function GrazingFlock() {
   return (
     <group position={[0, 0, 0]}>
-      <GrazingChicken position={[-3.5, 0.6, -2.0]} paletteIndex={0} />
-      <GrazingChicken position={[-1.0, 0.6, -2.3]} paletteIndex={1} />
-      <GrazingChicken position={[1.2, 0.6, -2.1]} paletteIndex={2} />
-      <GrazingChicken position={[3.8, 0.6, -2.4]} paletteIndex={3} />
+      <GrazingChicken position={[-7.0, 0.6, -2.2]} paletteIndex={0} />
+      <GrazingChicken position={[-4.2, 0.6, -2.0]} paletteIndex={1} />
+      <GrazingChicken position={[-1.5, 0.6, -2.4]} paletteIndex={2} />
+      <GrazingChicken position={[1.2, 0.6, -2.1]} paletteIndex={3} />
+      <GrazingChicken position={[3.8, 0.6, -2.3]} paletteIndex={4} />
+      <GrazingChicken position={[6.2, 0.6, -2.0]} paletteIndex={5} />
     </group>
   )
 }
@@ -26,15 +28,26 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
   const [state, setState] = useState<'idle' | 'peck' | 'walk'>('idle')
   const timerRef = useRef(0)
   const targetRef = useRef<THREE.Vector3 | null>(null)
+  const speedRef = useRef(0.5 + Math.random() * 0.4) // per-chicken base speed
 
   useFrame((_, delta) => {
     timerRef.current -= delta
     if (timerRef.current <= 0) {
       // Randomly pick next state with bias to idle/peck
       const r = Math.random()
-      if (r < 0.6) { setState('idle'); timerRef.current = 2 + Math.random() * 3 }
-      else if (r < 0.9) { setState('peck'); timerRef.current = 0.4 }
-      else { setState('walk'); timerRef.current = 1.2 + Math.random() * 1.2; targetRef.current = new THREE.Vector3((Math.random()-0.5)*0.8, 0.6, -2.2 + (Math.random()-0.5)*0.6) }
+      if (r < 0.5) { setState('idle'); timerRef.current = 1.5 + Math.random() * 2.5 }
+      else if (r < 0.85) { setState('peck'); timerRef.current = 0.5 }
+      else {
+        setState('walk')
+        timerRef.current = 1.5 + Math.random() * 2.2
+        // Pick a nearby wander target within the bottom band
+        const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, -2.2)
+        const nx = current.x + (Math.random() - 0.5) * 3.2 // small lateral wander
+        const nz = -2.2 + (Math.random() - 0.5) * 0.6    // keep a tight depth band
+        const clampedX = Math.max(-8, Math.min(8, nx))
+        const clampedZ = Math.max(-2.8, Math.min(-1.6, nz))
+        targetRef.current = new THREE.Vector3(clampedX, 0.6, clampedZ)
+      }
     }
 
     if (ref.current && state === 'walk' && targetRef.current) {
@@ -44,12 +57,16 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
       dir.y = 0
       const dist = dir.length()
       if (dist > 0.001) {
-        dir.normalize().multiplyScalar(0.6 * delta)
+        // Approach with per-chicken speed
+        dir.normalize().multiplyScalar(speedRef.current * delta)
         pos.add(dir)
         // Face direction of travel
         const angle = Math.atan2(dir.x, dir.z)
         ref.current.rotation.y = angle
       }
+      // Clamp within band to avoid exiting the page edge
+      pos.x = Math.max(-8, Math.min(8, pos.x))
+      pos.z = Math.max(-2.8, Math.min(-1.6, pos.z))
     }
   })
 
@@ -131,8 +148,8 @@ export default function HowToPlayPage() {
         </div>
       </div>
 
-      {/* Bottom grazing chickens - transparent canvas, contact shadows, same page bg */}
-      <div className="absolute left-0 right-0 bottom-0 h-52 md:h-64 z-10 pointer-events-none">
+      {/* Bottom grazing chickens - foreground overlay, can pass in front of text */}
+      <div className="absolute left-0 right-0 bottom-0 h-52 md:h-64 z-30 pointer-events-none">
         <Canvas camera={{ position: [0, 1.8, 6], fov: 42 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
           <ambientLight intensity={0.9} />
           <directionalLight position={[6, 8, 6]} intensity={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
