@@ -137,8 +137,8 @@ export default function HowToPlayPage() {
         </Link>
       </div>
 
-      {/* Centered informational content - no scroll needed */}
-      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center p-6">
+      {/* Informational content - moved up */}
+      <div className="absolute inset-0 z-20 pointer-events-none flex items-start justify-center p-6 pt-8 md:pt-12 lg:pt-16">
         <div className="max-w-5xl w-full text-center pointer-events-auto">
           <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-5xl md:text-6xl font-extrabold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-purple-400">
             How to Play
