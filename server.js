@@ -2159,7 +2159,7 @@ preparePromise.then(() => {
         try { io.to(lobbyId).emit('debug_trace', { type: 'arena_lock_roster', lobbyId, matchSessionId, finalRosterWallets: finalRoster.map(r => r.wallet) }); } catch {}
       } catch {}
 
-      // Emit 3..0 countdown aligned to round start
+      // Emit 3..0 countdown aligned to round start (synced across clients)
       let c = 3;
       const interval = setInterval(() => {
         try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
