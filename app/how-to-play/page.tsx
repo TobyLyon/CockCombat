@@ -13,12 +13,12 @@ import { Button } from "@/components/ui/button"
 function GrazingFlock() {
   return (
     <group position={[0, 0, 0]}>
-      <GrazingChicken position={[-7.0, 0.6, -2.2]} paletteIndex={0} />
-      <GrazingChicken position={[-4.2, 0.6, -2.0]} paletteIndex={1} />
-      <GrazingChicken position={[-1.5, 0.6, -2.4]} paletteIndex={2} />
-      <GrazingChicken position={[1.2, 0.6, -2.1]} paletteIndex={3} />
-      <GrazingChicken position={[3.8, 0.6, -2.3]} paletteIndex={4} />
-      <GrazingChicken position={[6.2, 0.6, -2.0]} paletteIndex={5} />
+      <GrazingChicken position={[-7.0, 0.5, -2.2]} paletteIndex={0} />
+      <GrazingChicken position={[-4.2, 0.5, -2.0]} paletteIndex={1} />
+      <GrazingChicken position={[-1.5, 0.5, -2.4]} paletteIndex={2} />
+      <GrazingChicken position={[1.2, 0.5, -2.1]} paletteIndex={3} />
+      <GrazingChicken position={[3.8, 0.5, -2.3]} paletteIndex={4} />
+      <GrazingChicken position={[6.2, 0.5, -2.0]} paletteIndex={5} />
     </group>
   )
 }
@@ -71,10 +71,18 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
   })
 
   return (
-    <group ref={ref} position={position}>
+    <group ref={ref} position={position} scale={[0.7, 0.7, 0.7]}>
       <PixelChicken position={[0, 0, 0]} rotation={[0, 0, 0]} health={undefined} maxHealth={undefined} isPlayer={false} isPecking={state==='peck'} disableBobbing={false} />
     </group>
   )
+}
+
+function CameraAim({ target }: { target: [number, number, number] }) {
+  const t = new THREE.Vector3(...target)
+  useFrame(({ camera }) => {
+    camera.lookAt(t)
+  })
+  return null
 }
 
 export default function HowToPlayPage() {
@@ -149,12 +157,13 @@ export default function HowToPlayPage() {
       </div>
 
       {/* Bottom grazing chickens - foreground overlay, can pass in front of text */}
-      <div className="absolute left-0 right-0 bottom-0 h-52 md:h-64 z-30 pointer-events-none">
-        <Canvas camera={{ position: [0, 1.8, 6], fov: 42 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
+      <div className="absolute left-0 right-0 bottom-0 h-64 md:h-72 z-30 pointer-events-none">
+        <Canvas camera={{ position: [0, 1.5, 8], fov: 40 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
           <ambientLight intensity={0.9} />
           <directionalLight position={[6, 8, 6]} intensity={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
           <GrazingFlock />
           <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={20} blur={2.5} far={5} color="#1a1a1a" />
+          <CameraAim target={[0, 0.5, -2]} />
         </Canvas>
       </div>
     </div>
