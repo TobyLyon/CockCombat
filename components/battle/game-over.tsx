@@ -51,9 +51,11 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   // Play sound and trigger payout on component mount
   useEffect(() => {
-    // Victory sound is broadcast by server; avoid duplicate. Fallback: only non-winner plays death.
-    if (!isHumanWinner) {
-      playSound('death');
+    // Ensure a local victory/death cue as fallback (server may also broadcast)
+    if (isHumanWinner) {
+      try { playSound('victory') } catch {}
+    } else {
+      try { playSound('death') } catch {}
     }
 
     const handlePayout = async () => {
@@ -149,12 +151,12 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-6 bg-black/40 p-4 rounded-lg">
-          <div className="text-center">
+          <div className="text-center flex flex-col items-center justify-center">
             <p className="text-gray-400 text-sm mb-1">PLAYERS</p>
             <p className="text-3xl font-bold text-white">{totalPlayers}</p>
           </div>
           {isHumanWinner && (
-            <div className="text-center">
+            <div className="text-center flex flex-col items-center justify-center">
               <p className="text-gray-400 text-sm mb-1">PRIZE</p>
               <p className="text-3xl font-bold text-yellow-400">
                 {netWinner.toFixed(2)} {currency}
