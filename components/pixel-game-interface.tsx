@@ -312,7 +312,7 @@ export default function PixelGameInterface() {
             </div>
           </div>
 
-      {/* Minimal UI - Bottom Center: two equal buttons side-by-side, no containers */}
+      {/* Minimal UI - Bottom Center: three buttons side-by-side */}
       <div className="absolute bottom-48 left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-4">
         {/* Wallet connect button (chain aware) */}
         <WalletMultiButton />
@@ -328,6 +328,17 @@ export default function PixelGameInterface() {
           >
             {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
           </Button>
+
+        {/* How To Play button */}
+        <Button
+          variant="outline"
+          className="h-12 px-6 text-base font-bold rounded-lg border-2 border-purple-400 text-purple-100 bg-purple-900/40 hover:bg-purple-800/60 active:scale-[0.985] touch-manipulation select-none"
+          onClick={() => handleNavigation("/how-to-play")}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
+          disabled={isNavigating}
+        >
+          How to Play
+        </Button>
                   </div>
 
     </div>
