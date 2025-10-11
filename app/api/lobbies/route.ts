@@ -296,14 +296,8 @@ export async function POST(req: NextRequest) {
       hasWagered: lobby.amount === 0 ? true : false,
       isReady: lobby.amount === 0 ? true : false,
     };
-    // Ensure humans are prioritized: insert the human, then trim excess AI if over capacity (tutorial only)
+    // Insert player (AI removed entirely)
     lobby.players.push(player);
-    if (lobby.matchType === 'tutorial' && lobby.players.length > lobby.capacity) {
-      while (lobby.players.length > lobby.capacity) {
-        removeOneAiPlayer(lobby)
-        if (!lobby.players.some(p => p.isAi)) break
-      }
-    }
 
     // Track presence immediately
     try {
@@ -367,25 +361,20 @@ export async function POST(req: NextRequest) {
           return lobby.players.map((p: any) => {
             const pid = String(p.playerId || '');
             let isReady = false;
-            if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
-              isReady = Boolean(p.hasWagered)
-            } else {
-              try {
-                const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
-                if (presence && presence.has(pid)) {
-                  for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
-                    if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
-                  }
+            try {
+              const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
+              if (presence && presence.has(pid)) {
+                for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+                  if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
                 }
-              } catch {}
-            }
-            if (lobby.matchType === 'tutorial' && p.isAi) isReady = true
+              }
+            } catch {}
             return {
               playerId: pid,
               username: p.username || pid.slice(0, 8) + '...',
               chickenName: p.chickenId || 'Default',
               isReady,
-              isAi: p.isAi || false
+              isAi: false
             }
           })
         } catch { return [] as any[] }

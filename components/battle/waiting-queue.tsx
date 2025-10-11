@@ -116,7 +116,7 @@ export default function WaitingQueue({
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
-        return { playerId: p.wallet, username, isAi: p.isAi }
+        return { playerId: p.wallet, username, isAi: false }
       })) } catch {}
       // Track session id for subsequent acks/timing
       const prevMsid = matchSessionIdRef.current
@@ -185,11 +185,11 @@ export default function WaitingQueue({
       const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
       latestRosterRef.current = finalR
       try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
-      try { syncLobbyPlayers(finalR.map((p: any) => {
+    try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
-        return { playerId: p.wallet, username, isAi: p.isAi }
+      return { playerId: p.wallet, username, isAi: false }
       })) } catch {}
       // Schedule a local start aligned to the server-provided epoch to avoid missing 'match_started' during screen transition
       try {

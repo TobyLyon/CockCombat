@@ -718,18 +718,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             </motion.div>
           ))}
           
-          {/* Empty slots - Ultra Compact */}
-          {Array.from({ length: lobby.capacity - players.length }).map((_, index) => (
-            <div
-              key={`empty-${index}`}
-              className="flex items-center gap-1.5 p-2 rounded border border-dashed border-gray-600/50 bg-gray-800/20"
-            >
-              <div className="w-6 h-6 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
-                <Users className="h-3 w-3 text-gray-500" />
-              </div>
-              <span className="text-xs text-gray-500">Waiting...</span>
-            </div>
-          ))}
+          {/* No AI placeholders */}
         </div>
       </div>
 

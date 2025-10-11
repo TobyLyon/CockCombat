@@ -2133,8 +2133,8 @@ preparePromise.then(() => {
         return;
       }
 
-      // Build final roster: include present humans; tutorial also keeps any AI in expected roster
-      let finalRoster = expectedRoster.filter(p => p.isAi || presentHumans.includes(p.wallet));
+      // Build final roster: include present humans only (AI removed)
+      let finalRoster = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
       // Remove over-eager tutorial fallback; require at least one human ready AND AI roster populated by prior steps
 
       // Refund any paid human who failed the queue handshake (ranked only)
