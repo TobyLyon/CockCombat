@@ -1187,22 +1187,26 @@ preparePromise.then(() => {
               const player2Wallet = player2Conn?.walletAddress || null;
 
               // Insert or upsert into legacy 'matches' table for compatibility
-              // Upsert base match row with additional details
+              // Insert base match row with additional details and capture matchId
               const matchDuration = (room.lastUpdateTime && room.startTime) ? Math.max(0, Math.round((room.lastUpdateTime - room.startTime) / 1000)) : 0;
-              await supabase.from('matches').upsert({
-                id: roomId,
-                player1_wallet: player1Wallet,
-                player2_wallet: player2Wallet,
-                winner_wallet: winnerWallet,
-                player1_tokens_wagered: null, // filled below for ranked
-                player2_tokens_wagered: null,
-                duration_seconds: matchDuration,
-                metadata: {
-                  source: 'socket_server',
-                  started_at: room.startTime || Date.now(),
-                  ended_at: Date.now(),
-                },
-              }, { onConflict: 'id' });
+              let matchIdBase = null;
+              try {
+                const { data: matchRow } = await supabase.from('matches').insert({
+                  player1_wallet: player1Wallet,
+                  player2_wallet: player2Wallet,
+                  winner_wallet: winnerWallet,
+                  player1_tokens_wagered: null, // filled below for ranked
+                  player2_tokens_wagered: null,
+                  duration_seconds: matchDuration,
+                  metadata: {
+                    source: 'socket_server',
+                    roomId,
+                    started_at: room.startTime || Date.now(),
+                    ended_at: Date.now(),
+                  },
+                }).select('id').single();
+                matchIdBase = matchRow?.id || null;
+              } catch {}
 
               // Ranked payout orchestrator: if lobby info available and amount > 0, record match_results and trigger payout
               try {
@@ -1237,7 +1241,7 @@ preparePromise.then(() => {
                       await supabase.from('matches').update({
                         player1_tokens_wagered: rankedLobby.amount,
                         player2_tokens_wagered: rankedLobby.amount
-                      }).eq('id', roomId);
+                      }).eq('id', matchIdBase);
                     } catch {}
                     // Trigger payout via internal API with server secret
                     const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${(process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`)}/api/payout`;
@@ -1251,7 +1255,7 @@ preparePromise.then(() => {
                         },
                         body: JSON.stringify({
                           winnerAddress: winnerWallet,
-                          prizePoolLamports,
+                          prizePool: (prizePoolLamports / 1_000_000_000),
                           matchId: mr.id,
                         }),
                       });
