@@ -67,16 +67,11 @@ function FloatingParticles({ count = 40 }: { count?: number }) {
 function GrazingFlock() {
   return (
     <group position={[0, 0, 0]}>
-      {/* Discrete depth lanes to prevent overlap flicker */}
-      <GrazingChicken position={[-7.0, 0.5, -1.70]} paletteIndex={0} laneZ={-1.70} />
-      <GrazingChicken position={[-4.2, 0.5, -1.90]} paletteIndex={1} laneZ={-1.90} />
-      <GrazingChicken position={[-1.5, 0.5, -2.10]} paletteIndex={2} laneZ={-2.10} />
-      <GrazingChicken position={[1.2, 0.5, -2.30]} paletteIndex={3} laneZ={-2.30} />
-      <GrazingChicken position={[3.8, 0.5, -2.50]} paletteIndex={4} laneZ={-2.50} />
-      <GrazingChicken position={[6.2, 0.5, -1.80]} paletteIndex={5} laneZ={-1.80} />
-      {/* Extra variety */}
-      <GrazingChicken position={[-5.8, 0.5, -2.40]} paletteIndex={6} laneZ={-2.40} />
-      <GrazingChicken position={[5.4, 0.5, -2.00]} paletteIndex={7} laneZ={-2.00} />
+      {/* Reduced to 4 chickens with well-spaced lanes */}
+      <GrazingChicken position={[-5.5, 0.5, -1.80]} paletteIndex={0} laneZ={-1.80} />
+      <GrazingChicken position={[-1.8, 0.5, -2.10]} paletteIndex={2} laneZ={-2.10} />
+      <GrazingChicken position={[1.8, 0.5, -2.40]} paletteIndex={4} laneZ={-2.40} />
+      <GrazingChicken position={[5.5, 0.5, -2.00]} paletteIndex={6} laneZ={-2.00} />
     </group>
   )
 }
@@ -102,45 +97,56 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
   useFrame((_, delta) => {
     timerRef.current -= delta
     if (timerRef.current <= 0) {
-      // Randomly pick next state with bias to idle/peck
+      // Randomly pick next state with heavier bias to idle/peck (less walking)
       const r = Math.random()
-      if (r < 0.5) { setState('idle'); timerRef.current = 1.5 + Math.random() * 2.5 }
-      else if (r < 0.85) { setState('peck'); timerRef.current = 0.5 }
+      if (r < 0.6) { 
+        setState('idle')
+        timerRef.current = 2.0 + Math.random() * 3.0
+      }
+      else if (r < 0.92) { 
+        setState('peck')
+        timerRef.current = 0.6 + Math.random() * 0.4
+      }
       else {
         setState('walk')
-        timerRef.current = 1.5 + Math.random() * 2.2
-        // Pick a nearby wander target within this chicken's depth lane
+        timerRef.current = 1.2 + Math.random() * 1.5
+        // Pick a nearby wander target within this chicken's depth lane (smaller wander radius)
         const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, laneZ)
-        const nx = current.x + (Math.random() - 0.5) * 3.2 // small lateral wander
-        const nz = laneZ + (Math.random() - 0.5) * 0.08    // very small depth wander inside lane
-        const clampedX = Math.max(-8, Math.min(8, nx))
-        const clampedZ = Math.max(laneZ - 0.06, Math.min(laneZ + 0.06, nz))
+        const nx = current.x + (Math.random() - 0.5) * 2.0 // reduced lateral wander
+        const nz = laneZ + (Math.random() - 0.5) * 0.05    // minimal depth variation
+        const clampedX = Math.max(-7, Math.min(7, nx))
+        const clampedZ = Math.max(laneZ - 0.04, Math.min(laneZ + 0.04, nz))
         targetRef.current = new THREE.Vector3(clampedX, 0.6, clampedZ)
       }
     }
 
     if (ref.current && state === 'walk' && targetRef.current) {
-      // Move slightly toward target, keep within a narrow band near bottom
+      // Move gently toward target
       const pos = ref.current.position
       const dir = targetRef.current.clone().sub(pos)
       dir.y = 0
       const dist = dir.length()
-      if (dist > 0.001) {
-        // Approach with per-chicken speed
-        dir.normalize().multiplyScalar(speedRef.current * delta)
+      if (dist > 0.05) {
+        // Slow gentle approach
+        dir.normalize().multiplyScalar(Math.min(dist * 0.8, speedRef.current) * delta)
         pos.add(dir)
-        // Face direction of travel (smoothed to avoid snap/jitter)
+        // Very smooth rotation toward movement
         const targetAngle = Math.atan2(dir.x, dir.z)
-        const current = ref.current.rotation.y
-        let deltaAngle = targetAngle - current
+        const currentAngle = ref.current.rotation.y
+        let deltaAngle = targetAngle - currentAngle
+        // Normalize to [-PI, PI]
         deltaAngle = Math.atan2(Math.sin(deltaAngle), Math.cos(deltaAngle))
-        const maxTurn = 2.5 * delta
+        const maxTurn = 1.8 * delta // reduced turn speed for smoothness
         const step = THREE.MathUtils.clamp(deltaAngle, -maxTurn, maxTurn)
-        ref.current.rotation.y = current + step
+        ref.current.rotation.y = currentAngle + step
+      } else {
+        // Reached target, stop walking
+        setState('idle')
+        timerRef.current = 1.5 + Math.random() * 2.0
       }
-      // Keep to lane with a tight band to avoid depth overlap
-      pos.x = Math.max(-8, Math.min(8, pos.x))
-      const laneBand = 0.06
+      // Keep strictly to lane
+      pos.x = Math.max(-7, Math.min(7, pos.x))
+      const laneBand = 0.04
       pos.z = Math.max(laneZ - laneBand, Math.min(laneZ + laneBand, pos.z))
     }
   })
