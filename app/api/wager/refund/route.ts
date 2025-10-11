@@ -14,12 +14,20 @@ export async function POST(req: NextRequest) {
         lobbyId: z.string().min(3),
         playerPublicKey: z.string().min(32),
         reason: z.string().optional(),
+        __serverOnlyToken: z.string().optional(),
       })
       const parsed = BodySchema.safeParse(await req.json())
       if (!parsed.success) {
         return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 })
       }
-      const { lobbyId, playerPublicKey, reason } = parsed.data
+      const { lobbyId, playerPublicKey, reason, __serverOnlyToken } = parsed.data
+
+      // Reject client-initiated refunds; only allow when invoked by our server logic
+      // Server provides a shared-secret token via env
+      const expected = process.env.REFUND_SERVER_TOKEN
+      if (!expected || __serverOnlyToken !== expected) {
+        return NextResponse.json({ error: 'Refunds must be initiated by server' }, { status: 403 })
+      }
 
       const lobby = lobbies.find(l => l.id === lobbyId)
       if (!lobby) return NextResponse.json({ error: 'Lobby not found' }, { status: 404 })

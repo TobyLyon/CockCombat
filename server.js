@@ -2128,7 +2128,7 @@ preparePromise.then(() => {
               await fetch(`${baseUrl}/api/wager/refund`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players' }),
+                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players', __serverOnlyToken: process.env.REFUND_SERVER_TOKEN || '' }),
               }).catch(() => {});
             } catch {}
           }
@@ -2151,7 +2151,7 @@ preparePromise.then(() => {
             await fetch(`${baseUrl}/api/wager/refund`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show' }),
+              body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show', __serverOnlyToken: process.env.REFUND_SERVER_TOKEN || '' }),
             }).catch(() => {});
           } catch {}
         }

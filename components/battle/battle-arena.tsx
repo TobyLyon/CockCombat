@@ -277,16 +277,6 @@ export default function BattleArena() {
       if (joinedLobby) {
         const id = getCurrentPlayerId();
         if (id) {
-          // Best-effort refund (server will decide eligibility)
-          try {
-            if (joinedLobby.amount > 0 && joinedLobby.matchType !== 'tutorial') {
-              await fetch('/api/wager/refund', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId: joinedLobby.id, playerPublicKey: id, reason: 'player_left' })
-              }).catch(() => {});
-            }
-          } catch {}
           await fetch('/api/lobbies', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
