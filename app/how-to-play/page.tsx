@@ -110,11 +110,11 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
       else {
         setState('walk')
         timerRef.current = 1.2 + Math.random() * 1.5
-        // Pick a nearby wander target within this chicken's depth lane (smaller wander radius)
+        // Pick a wander target across the bottom screen area within lane
         const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, laneZ)
-        const nx = current.x + (Math.random() - 0.5) * 2.0 // reduced lateral wander
+        const nx = current.x + (Math.random() - 0.5) * 4.5 // larger lateral wander across screen
         const nz = laneZ + (Math.random() - 0.5) * 0.05    // minimal depth variation
-        const clampedX = Math.max(-7, Math.min(7, nx))
+        const clampedX = Math.max(-12, Math.min(12, nx)) // expanded horizontal bounds
         const clampedZ = Math.max(laneZ - 0.04, Math.min(laneZ + 0.04, nz))
         targetRef.current = new THREE.Vector3(clampedX, 0.6, clampedZ)
       }
@@ -144,8 +144,8 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
         setState('idle')
         timerRef.current = 1.5 + Math.random() * 2.0
       }
-      // Keep strictly to lane
-      pos.x = Math.max(-7, Math.min(7, pos.x))
+      // Keep strictly to lane with expanded horizontal bounds
+      pos.x = Math.max(-12, Math.min(12, pos.x))
       const laneBand = 0.04
       pos.z = Math.max(laneZ - laneBand, Math.min(laneZ + laneBand, pos.z))
     }
@@ -189,6 +189,13 @@ export default function HowToPlayPage() {
       
       {/* Grain texture overlay */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.015] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNhKSIvPjwvc3ZnPg==')]" />
+
+      {/* Full-page floating particles */}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        <Canvas camera={{ position: [0, 6, 12], fov: 50 }} dpr={[1, 1.5]} gl={{ alpha: true }}>
+          <FloatingParticles count={50} />
+        </Canvas>
+      </div>
 
       {/* Header actions */}
       <div className="absolute top-4 left-4 z-30 flex gap-3">
@@ -326,14 +333,13 @@ export default function HowToPlayPage() {
         </div>
       </div>
 
-      {/* Bottom grazing chickens with particles - foreground overlay */}
+      {/* Bottom grazing chickens - foreground overlay */}
       <div className="absolute left-0 right-0 bottom-0 h-64 md:h-72 z-30 pointer-events-none">
-        <Canvas camera={{ position: [0, 1.5, 8], fov: 40 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
+        <Canvas camera={{ position: [0, 1.5, 10], fov: 45 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
           <ambientLight intensity={0.9} />
           <directionalLight position={[6, 8, 6]} intensity={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-          <FloatingParticles count={40} />
           <GrazingFlock />
-          <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={20} blur={2.5} far={5} color="#1a1a1a" />
+          <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={30} blur={2.5} far={5} color="#1a1a1a" />
           <CameraAim target={[0, 0.5, -2]} />
         </Canvas>
       </div>
