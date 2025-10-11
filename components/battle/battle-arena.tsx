@@ -302,7 +302,7 @@ export default function BattleArena() {
   const getCurrentPlayerId = (): string | undefined => {
     try {
       if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58();
-      if (typeof window !== 'undefined') return localStorage.getItem('guest_id') || undefined;
+      // Do not fallback to cached guest id; only explicit wallet
     } catch {}
     return undefined;
   };
@@ -380,10 +380,7 @@ export default function BattleArena() {
       const joinResult = await joinResponse.json();
       console.log('✅ Successfully joined lobby:', joinResult);
 
-      // Store guest id locally if applicable (persist to localStorage for sockets)
-      if (joiningAsGuest && guestIdGenerated) {
-        try { localStorage.setItem('guest_id', guestIdGenerated); } catch {}
-      }
+      // Stop persisting guest IDs globally to avoid sticky ghost identities
       setGuestId(joiningAsGuest ? guestIdGenerated : null);
  
       // Go to lobby room for ready-up phase (wager will be handled there)
@@ -391,6 +388,7 @@ export default function BattleArena() {
       // Use API response lobby (contains server-enriched usernames/players) when available
       setJoinedLobby(joinResult || lobby);
       setInLobbyRoom(true);
+      try { (window as any).currentLobbyId = lobby.id } catch {}
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

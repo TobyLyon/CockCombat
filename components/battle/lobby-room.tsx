@@ -99,7 +99,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     try {
       if (playerIdentifier) return playerIdentifier
       if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58()
-      if (typeof window !== 'undefined') return localStorage.getItem('guest_id') || undefined
+      // Do not fallback to cached guest id; only use explicit playerIdentifier
     } catch {}
     return undefined
   }
@@ -112,6 +112,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       
       // Register the player identifier (wallet or guest id) with the socket
       socket.emit('register_wallet', id);
+      try { (window as any).currentLobbyId = lobby.id } catch {}
       
       // Wait for wallet_registered ACK before joining room (prevents race)
       const tryJoin = () => socket.emit('join_lobby_room', lobby.id);
@@ -139,6 +140,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         } else {
           console.log(`⏸️ Preserving lobby room membership during queue transition: ${lobby.id}`);
         }
+        try { if ((window as any).currentLobbyId === lobby.id) (window as any).currentLobbyId = undefined } catch {}
       };
       window.addEventListener('beforeunload', cleanup)
       return () => {

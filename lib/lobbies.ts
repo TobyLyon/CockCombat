@@ -26,7 +26,6 @@ export const lobbies: Lobby[] = [
   { id: 'tutorial-1', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
   // Primary test ranked lobbies
   { id: 'lobby-0p005', amount: 0.005, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'lobby-0p005-2', amount: 0.005, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'lobby-0.01', amount: 0.01, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
 ];
 

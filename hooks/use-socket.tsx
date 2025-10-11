@@ -52,15 +52,13 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       // Auto-register current identity (wallet or guest) on connect
       try {
         const tryRegister = (addr?: string | null) => {
-          const id = addr || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+          const id = addr
           if (id) {
             try { socketInstance.emit('register_wallet', id) } catch {}
           }
         }
         // Attempt with last-known wallet (broadcast via custom event elsewhere)
         tryRegister((window as any)?.__cock_wallet__?.evmAddress || null)
-        // Also attempt with stored guest id
-        tryRegister(null)
         // Listen for wallet address changes to re-register
         const onWalletAddrChanged = (e: any) => {
           tryRegister((e && e.detail) ? String(e.detail) : null)

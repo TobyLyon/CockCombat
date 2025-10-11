@@ -1683,10 +1683,8 @@ preparePromise.then(() => {
           console.log(`🧹 Filtered ${lobbyPlayers.length - eligiblePlayers.length} ghost player(s) from ${lobbyId} for readiness check`);
         }
 
-        // Check if we have minimum players and all are ready
-        // Special-case: allow quick testing for the lowest paid lobby (0.005) with 2 players
-        const isLowPaidTestLobby = (lobby && (lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005'));
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : (isLowPaidTestLobby ? 2 : 2);
+        // Check if we have minimum players and all are ready (uniform policy)
+        const minPlayers = lobbyId.includes('tutorial') ? 2 : 2;
         const readyPlayers = eligiblePlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
         const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = eligiblePlayers.length >= minPlayers && 
@@ -2059,13 +2057,13 @@ preparePromise.then(() => {
       try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
 
       // Notify clients to begin queue confirmation
-      const qbPayload = {
+        const qbPayload = {
         matchSessionId,
         expectedRoster,
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: isTutorial ? 2 : (lobbyMeta && lobbyMeta.id === 'lobby-0.005' ? 2 : 2),
+          minHumans: isTutorial ? 2 : 2,
         escrowId: escrowIdVal,
       };
       io.to(lobbyId).emit('queue_begin', qbPayload);
@@ -2113,7 +2111,7 @@ preparePromise.then(() => {
       const presentHumans = requiredHumans.filter(w => isTutorial ? presenceAcks.has(w) : (presenceAcks.has(w) && assetsAcks.has(w)));
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 2 : (lobby && lobby.id === 'lobby-0.005' ? 2 : 2);
+      const minHumans = isTutorial ? 2 : 2;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort)

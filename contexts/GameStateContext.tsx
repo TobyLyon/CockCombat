@@ -532,7 +532,6 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const fromWallet = publicKey?.toBase58?.() || publicKey?.toString?.();
         if (fromWallet) return String(fromWallet);
       } catch {}
-      try { if (typeof window !== 'undefined') { const g = localStorage.getItem('guest_id'); if (g) return g } } catch {}
       return 'guest_local';
     })();
 

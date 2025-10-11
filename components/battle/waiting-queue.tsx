@@ -128,7 +128,7 @@ export default function WaitingQueue({
       }
       // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
-        const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+        const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
         const msid = matchSessionIdRef.current
         if (id && msid) {
           socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
@@ -365,15 +365,17 @@ export default function WaitingQueue({
   // Ensure we are in the lobby room while on the waiting screen
   useEffect(() => {
     if (!socket || !isConnected) return
-    // register wallet/guest id
+    // register wallet only (no cached guest id fallback)
     try {
-      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || (typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null)
+      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
       if (id) socket.emit('register_wallet', id)
     } catch {}
     socket.emit('join_lobby_room', lobby.id)
+    try { (window as any).currentLobbyId = lobby.id } catch {}
     socket.emit('get_lobby_state', lobby.id)
     return () => {
       socket.emit('leave_lobby_room', lobby.id)
+      try { if ((window as any).currentLobbyId === lobby.id) (window as any).currentLobbyId = undefined } catch {}
     }
   }, [socket, isConnected, lobby.id, publicKey])
 
