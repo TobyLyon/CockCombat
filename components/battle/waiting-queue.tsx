@@ -15,7 +15,7 @@ import { useGameState } from "@/contexts/GameStateContext"
 interface WaitingQueueProps {
   lobby: Lobby;
   onLeaveQueue: () => void;
-  onStartBattle: () => void;
+  onStartBattle: (overrideRoster?: Array<{ playerId: string; username: string; isAi: boolean }>) => void;
   playSound: (sound: string) => void;
 }
 
@@ -221,7 +221,14 @@ export default function WaitingQueue({
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
       // Slight delay to allow any sync above to apply
-      setTimeout(() => onStartBattle(), 50)
+      setTimeout(() => {
+        try {
+          const override = (latestRosterRef.current || []).map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
+          onStartBattle(override)
+        } catch {
+          onStartBattle()
+        }
+      }, 50)
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)

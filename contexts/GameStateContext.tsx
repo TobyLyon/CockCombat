@@ -46,7 +46,7 @@ interface GameStateContextType {
   inQueue: boolean;
   joinQueue: () => void;
   leaveQueue: () => void;
-  startBattle: () => void;
+  startBattle: (rosterOverride?: Array<{ playerId: string; username?: string; isAi?: boolean }>) => void;
   endBattle: () => void;
   exitBattle: () => void;
   returnToMainMenu: () => void;
@@ -523,9 +523,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   }, [playSound, lobbyPlayers.length]);
   
   // Start battle
-  const startBattle = useCallback(() => {
+  const startBattle = useCallback((rosterOverride?: Array<{ playerId: string; username?: string; isAi?: boolean }>) => {
     console.log('Starting battle with players:', players);
-    
+
     // Use deterministic self + exact lobby roster by ID
     const myId = (() => {
       try {
@@ -536,23 +536,26 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       return 'guest_local';
     })();
 
-    // Build battle roster in the exact server-provided order (from syncLobbyPlayers)
+    // Build battle roster: prefer override list if provided; otherwise use sync'd lobbyPlayers
     const ringRadius = 10;
-    const roster = lobbyPlayers.slice();
+    const roster = Array.isArray(rosterOverride) && rosterOverride.length > 0
+      ? rosterOverride.map(r => ({ id: String(r.playerId), name: r.username, isAi: Boolean(r.isAi) }))
+      : lobbyPlayers.slice().map(lp => ({ id: lp.id, name: lp.name, isAi: lp.isAi }))
+
     const totalChickens = roster.length;
     const positions = generateOpponentPositions(totalChickens, ringRadius);
-    const positionedPlayers: PlayerStatus[] = roster.map((entry, index) => {
+    const positionedPlayers: PlayerStatus[] = roster.map((entry: any, index) => {
       const id = String(entry.id);
       const isSelf = id === myId;
       const colors = entry.colors || getDeterministicColorsForId(id);
       const displayName = isSelf
         ? (profile?.username || 'You')
-        : ((entry as any).name || (entry as any).username || (id.startsWith('guest_') ? id : id.slice(0, 8) + '...'));
+        : (entry.name || (id.startsWith('guest_') ? id : id.slice(0, 8) + '...'));
       return {
         id,
         name: displayName,
         isPlayer: isSelf,
-        isAi: Boolean((entry as any).isAi),
+        isAi: Boolean(entry.isAi),
         position: positions[index].position,
         rotation: positions[index].rotation,
         colors,
