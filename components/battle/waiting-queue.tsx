@@ -221,7 +221,10 @@ export default function WaitingQueue({
       // Slight delay to allow any sync above to apply; if still empty, retry fetching up to 1.5s
       const startWithOverride = () => {
         try {
-          const override = (latestRosterRef.current || []).map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
+          const cached = Array.isArray(latestRosterRef.current) ? latestRosterRef.current : []
+          const override = (cached.length > 0
+            ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
+            : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) : []))
           onStartBattle(override)
         } catch {
           onStartBattle()
