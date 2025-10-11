@@ -13,20 +13,21 @@ import { Button } from "@/components/ui/button"
 function GrazingFlock() {
   return (
     <group position={[0, 0, 0]}>
-      <GrazingChicken position={[-7.0, 0.5, -2.2]} paletteIndex={0} />
-      <GrazingChicken position={[-4.2, 0.5, -2.0]} paletteIndex={1} />
-      <GrazingChicken position={[-1.5, 0.5, -2.4]} paletteIndex={2} />
-      <GrazingChicken position={[1.2, 0.5, -2.1]} paletteIndex={3} />
-      <GrazingChicken position={[3.8, 0.5, -2.3]} paletteIndex={4} />
-      <GrazingChicken position={[6.2, 0.5, -2.0]} paletteIndex={5} />
+      {/* Discrete depth lanes to prevent overlap flicker */}
+      <GrazingChicken position={[-7.0, 0.5, -1.70]} paletteIndex={0} laneZ={-1.70} />
+      <GrazingChicken position={[-4.2, 0.5, -1.90]} paletteIndex={1} laneZ={-1.90} />
+      <GrazingChicken position={[-1.5, 0.5, -2.10]} paletteIndex={2} laneZ={-2.10} />
+      <GrazingChicken position={[1.2, 0.5, -2.30]} paletteIndex={3} laneZ={-2.30} />
+      <GrazingChicken position={[3.8, 0.5, -2.50]} paletteIndex={4} laneZ={-2.50} />
+      <GrazingChicken position={[6.2, 0.5, -1.80]} paletteIndex={5} laneZ={-1.80} />
       {/* Extra variety */}
-      <GrazingChicken position={[-5.8, 0.5, -2.15]} paletteIndex={6} />
-      <GrazingChicken position={[5.4, 0.5, -2.25]} paletteIndex={7} />
+      <GrazingChicken position={[-5.8, 0.5, -2.40]} paletteIndex={6} laneZ={-2.40} />
+      <GrazingChicken position={[5.4, 0.5, -2.00]} paletteIndex={7} laneZ={-2.00} />
     </group>
   )
 }
 
-function GrazingChicken({ position, paletteIndex }: { position: [number, number, number]; paletteIndex: number }) {
+function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, number, number]; paletteIndex: number; laneZ: number }) {
   const ref = useRef<THREE.Group>(null)
   const [state, setState] = useState<'idle' | 'peck' | 'walk'>('idle')
   const timerRef = useRef(0)
@@ -54,12 +55,12 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
       else {
         setState('walk')
         timerRef.current = 1.5 + Math.random() * 2.2
-        // Pick a nearby wander target within the bottom band
-        const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, -2.2)
+        // Pick a nearby wander target within this chicken's depth lane
+        const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, laneZ)
         const nx = current.x + (Math.random() - 0.5) * 3.2 // small lateral wander
-        const nz = -2.2 + (Math.random() - 0.5) * 0.6    // keep a tight depth band
+        const nz = laneZ + (Math.random() - 0.5) * 0.08    // very small depth wander inside lane
         const clampedX = Math.max(-8, Math.min(8, nx))
-        const clampedZ = Math.max(-2.8, Math.min(-1.6, nz))
+        const clampedZ = Math.max(laneZ - 0.06, Math.min(laneZ + 0.06, nz))
         targetRef.current = new THREE.Vector3(clampedX, 0.6, clampedZ)
       }
     }
@@ -74,13 +75,19 @@ function GrazingChicken({ position, paletteIndex }: { position: [number, number,
         // Approach with per-chicken speed
         dir.normalize().multiplyScalar(speedRef.current * delta)
         pos.add(dir)
-        // Face direction of travel
-        const angle = Math.atan2(dir.x, dir.z)
-        ref.current.rotation.y = angle
+        // Face direction of travel (smoothed to avoid snap/jitter)
+        const targetAngle = Math.atan2(dir.x, dir.z)
+        const current = ref.current.rotation.y
+        let deltaAngle = targetAngle - current
+        deltaAngle = Math.atan2(Math.sin(deltaAngle), Math.cos(deltaAngle))
+        const maxTurn = 2.5 * delta
+        const step = THREE.MathUtils.clamp(deltaAngle, -maxTurn, maxTurn)
+        ref.current.rotation.y = current + step
       }
-      // Clamp within band to avoid exiting the page edge
+      // Keep to lane with a tight band to avoid depth overlap
       pos.x = Math.max(-8, Math.min(8, pos.x))
-      pos.z = Math.max(-2.8, Math.min(-1.6, pos.z))
+      const laneBand = 0.06
+      pos.z = Math.max(laneZ - laneBand, Math.min(laneZ + laneBand, pos.z))
     }
   })
 
