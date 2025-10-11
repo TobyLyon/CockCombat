@@ -2110,7 +2110,7 @@ preparePromise.then(() => {
       const isTutorial = lobby ? lobby.matchType === 'tutorial' : false;
 
       const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => p.wallet);
-      const presentHumans = requiredHumans.filter(w => presenceAcks.has(w) && assetsAcks.has(w));
+      const presentHumans = requiredHumans.filter(w => isTutorial ? presenceAcks.has(w) : (presenceAcks.has(w) && assetsAcks.has(w)));
 
       // Ranked cancellation if insufficient humans
       const minHumans = isTutorial ? 2 : (lobby && lobby.id === 'lobby-0.005' ? 2 : 2);
@@ -2157,6 +2157,16 @@ preparePromise.then(() => {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
         try { io.to(lobbyId).emit('debug_trace', { type: 'arena_lock_roster', lobbyId, matchSessionId, finalRosterWallets: finalRoster.map(r => r.wallet) }); } catch {}
+        // Ensure all humans join the match room immediately
+        try {
+          const humans = finalRoster.filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase());
+          for (const [sid, conn] of activeConnections.entries()) {
+            const w = String(conn.walletAddress || '').toLowerCase();
+            if (humans.includes(w)) {
+              try { conn.socket.join(matchSessionId); conn.currentMatch = matchSessionId; } catch {}
+            }
+          }
+        } catch {}
       } catch {}
 
       // Emit 3..0 countdown aligned to round start (synced across clients)
