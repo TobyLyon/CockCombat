@@ -342,11 +342,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       try {
         if (!payload || payload.id !== lobby.id) return
         const humans = Math.max(0, Number(payload?.liveHumans) || 0)
-        setActiveHumans(humans)
+        const fallback = (() => { try { return (playersRef.current || []).filter(p => !p.isAi).length } catch { return humans } })()
+        setActiveHumans(humans > 0 ? humans : fallback)
       } catch {}
     }
     socket.on('lobby_counts', onLobbyCounts)
-    return () => { socket.off('majority_grace', onGrace); socket.off('lobby_counts', onLobbyCounts) }
+    const onCountsSnapshot = (payload: any) => {
+      try {
+        const map = (payload && payload.counts) || {}
+        const rec = map && map[lobby.id]
+        const humans = Math.max(0, Number(rec?.liveHumans) || 0)
+        const fallback = (() => { try { return (playersRef.current || []).filter(p => !p.isAi).length } catch { return humans } })()
+        setActiveHumans(humans > 0 ? humans : fallback)
+      } catch {}
+    }
+    socket.on('lobby_counts_snapshot', onCountsSnapshot)
+    try { socket.emit('get_lobby_counts') } catch {}
+    return () => { socket.off('majority_grace', onGrace); socket.off('lobby_counts', onLobbyCounts); socket.off('lobby_counts_snapshot', onCountsSnapshot) }
   }, [socket])
 
   const handleReadyToggle = async () => {
