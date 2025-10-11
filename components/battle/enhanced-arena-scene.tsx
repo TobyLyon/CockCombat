@@ -695,6 +695,24 @@ function SceneContent({
     return () => clearInterval(id)
   }, [syncedCountdown])
 
+  // Arena overlay countdown
+  const CountdownOverlay = useMemo(() => {
+    return function Overlay() {
+      if (typeof syncedCountdown !== 'number' || syncedCountdown < 0) return null
+      return (
+        <Html
+          position={[0, 8, 0]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <div className="text-7xl sm:text-9xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.8)]">
+            {syncedCountdown}
+          </div>
+        </Html>
+      )
+    }
+  }, [syncedCountdown])
+
   // MAIN RENDER LOOP HOOK (useFrame)
   // The useFrame hook itself must be called unconditionally.
   // The logic *inside* its callback can, of course, be conditional.
@@ -1035,7 +1053,7 @@ function SceneContent({
   // ----- JSX to render the scene -----
   return (
     <>
-      {gameState === 'battle' && typeof syncedCountdown === 'number' && syncedCountdown > 0 && (
+      {gameState === 'battle' && typeof syncedCountdown === 'number' && (
         <Html center style={{ pointerEvents: 'none' }}>
           <div className="pixel-font" style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
