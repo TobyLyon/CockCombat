@@ -18,13 +18,13 @@ function FloatingParticles({ count = 40 }: { count?: number }) {
     const velocities = new Float32Array(count * 3)
     
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 24
-      positions[i * 3 + 1] = Math.random() * 18 - 2 // spread from -2 to 16
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 12
+      positions[i * 3] = (Math.random() - 0.5) * 30
+      positions[i * 3 + 1] = Math.random() * 24 - 4 // spread from -4 to 20 for full coverage
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 14
       
-      velocities[i * 3] = (Math.random() - 0.5) * 0.015
-      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02 // can drift up or down
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.015
+      velocities[i * 3] = (Math.random() - 0.5) * 0.02
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.025 // can drift up or down
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02
     }
     
     return { positions, velocities }
@@ -40,13 +40,13 @@ function FloatingParticles({ count = 40 }: { count?: number }) {
       positions[i * 3 + 1] += particles.velocities[i * 3 + 1] * delta * 60
       positions[i * 3 + 2] += particles.velocities[i * 3 + 2] * delta * 60
       
-      // Wrap Y vertically to cycle through entire page height
-      if (positions[i * 3 + 1] > 16) positions[i * 3 + 1] = -2
-      if (positions[i * 3 + 1] < -2) positions[i * 3 + 1] = 16
+      // Wrap Y vertically to cycle through entire page height including bottom
+      if (positions[i * 3 + 1] > 20) positions[i * 3 + 1] = -4
+      if (positions[i * 3 + 1] < -4) positions[i * 3 + 1] = 20
       
       // Bounce X and Z within wider bounds
-      if (Math.abs(positions[i * 3]) > 12) positions[i * 3] *= -0.9
-      if (Math.abs(positions[i * 3 + 2]) > 6) positions[i * 3 + 2] *= -0.9
+      if (Math.abs(positions[i * 3]) > 15) positions[i * 3] *= -0.9
+      if (Math.abs(positions[i * 3 + 2]) > 7) positions[i * 3 + 2] *= -0.9
     }
     
     particlesRef.current.geometry.attributes.position.needsUpdate = true
@@ -196,8 +196,8 @@ export default function HowToPlayPage() {
 
       {/* Full-page floating particles */}
       <div className="pointer-events-none absolute inset-0 z-10">
-        <Canvas camera={{ position: [0, 6, 12], fov: 50 }} dpr={[1, 1.5]} gl={{ alpha: true }}>
-          <FloatingParticles count={50} />
+        <Canvas camera={{ position: [0, 8, 16], fov: 60 }} dpr={[1, 1.5]} gl={{ alpha: true }}>
+          <FloatingParticles count={80} />
         </Canvas>
       </div>
 
