@@ -47,6 +47,8 @@ export default function WaitingQueue({
   const assetsReadyRef = useRef<boolean>(false)
   const lastAssetsAckMsIdRef = useRef<string | null>(null)
   const finalizeFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cache the most recent roster from queue_begin/arena_lock for reliable start
+  const latestRosterRef = useRef<Array<{ wallet: string; isAi?: boolean; username?: string; chickenName?: string }>>([])
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
   // For ranked: expect at least min humans or the current lobby size at entry.
@@ -106,7 +108,9 @@ export default function WaitingQueue({
     if (!socket) return
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
-      try { syncLobbyPlayers((payload?.expectedRoster || []).map((p: any) => {
+      const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
+      latestRosterRef.current = expected
+      try { syncLobbyPlayers(expected.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
@@ -176,7 +180,9 @@ export default function WaitingQueue({
     const onArenaLock = (payload: any) => {
       console.log('[WaitingQueue] arena_lock_roster', payload)
       // Replace roster with locked list and keep provided names with guest rule
-      try { syncLobbyPlayers((payload?.finalRoster || []).map((p: any) => {
+      const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
+      latestRosterRef.current = finalR
+      try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
@@ -200,10 +206,22 @@ export default function WaitingQueue({
     const onStarted = () => {
       console.log('[WaitingQueue] round_start/match_started received')
       try { playSound('button') } catch {}
+      // Ensure we have a roster before starting
+      try {
+        const cached = latestRosterRef.current || []
+        if ((!Array.isArray(players) || players.length === 0) && cached.length > 0) {
+          try { syncLobbyPlayers(cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))) } catch {}
+        } else if ((!Array.isArray(players) || players.length === 0) && Array.isArray(currentLobby?.players) && currentLobby.players.length > 0) {
+          try { syncLobbyPlayers(currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
+        } else if ((!Array.isArray(players) || players.length === 0)) {
+          try { socket?.emit('get_lobby_state', lobby.id) } catch {}
+        }
+      } catch {}
       // Cancel any scheduled start if server event arrives
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
-      onStartBattle()
+      // Slight delay to allow any sync above to apply
+      setTimeout(() => onStartBattle(), 50)
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
