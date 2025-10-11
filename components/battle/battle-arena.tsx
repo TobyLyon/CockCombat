@@ -542,11 +542,7 @@ export default function BattleArena() {
                                   </div>
                                   <div className="mt-1 text-[11px] text-white/70 text-right">{fillPercent}% filled</div>
                                 </div>
-                                {lobby.matchType === 'tutorial' && (
-                                  <div className="mt-1 text-[10px] text-white/60">
-                                    auto fills with AI if not enough participants
-                                  </div>
-                                )}
+                                {/* Removed AI autofill note for tutorial */}
                               </>
                             );
                           })()}
