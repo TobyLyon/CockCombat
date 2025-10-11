@@ -1690,26 +1690,34 @@ preparePromise.then(() => {
         let allReady = eligiblePlayers.length >= minPlayers && 
                        readyPlayers.length === eligiblePlayers.length && hasHumanReady;
 
-        // Ranked enforcement: all human players must have confirmed wagers to assigned escrow
+        // Ranked enforcement: require wagers; auto-assign escrow if missing (do not block countdown)
         if (!lobbyId.includes('tutorial')) {
           try {
-            // Fetch the live lobby from API to inspect hasWagered flags and escrow wallet
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`);
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);
             if (liveLobby && liveLobby.amount > 0) {
-            const humans = (liveLobby.players || []).filter(p => !p.isAi && presenceSet.has(String(p.playerId || '').toLowerCase()));
+              const humans = (liveLobby.players || []).filter(p => !p.isAi && presenceSet.has(String(p.playerId || '').toLowerCase()));
               const allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
-              const hasEscrow = Boolean(liveLobby.escrowWalletId);
-              if (!allWagered || !hasEscrow) {
+              // Ensure escrow is assigned if missing (best-effort)
+              if (!liveLobby.escrowWalletId) {
+                try {
+                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
+                  const wallet = evmEscrowService.getNextWallet();
+                  if (wallet && wallet.id) {
+                    const mem = lobbies.find(l => l && l.id === lobbyId);
+                    if (mem) mem.escrowWalletId = wallet.id;
+                    liveLobby.escrowWalletId = wallet.id;
+                    console.log(`🔐 Auto-assigned escrow ${wallet.id} to ${lobbyId} during ready check`);
+                  }
+                } catch {}
+              }
+              if (!allWagered) {
                 allReady = false;
                 const version2 = nextLobbyVersion(lobbyId);
-                try {
-                  const snap = await buildLobbySnapshot(lobbyId);
-                  if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version: version2 });
-                } catch {}
-                console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered} hasEscrow=${hasEscrow}`);
+                try { const snap = await buildLobbySnapshot(lobbyId); if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version: version2 }); } catch {}
+                console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered}`);
               }
             }
           } catch (e) {
