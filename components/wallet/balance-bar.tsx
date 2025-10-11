@@ -57,7 +57,18 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
 
     fetchBalances()
     timer = window.setInterval(fetchBalances, pollIntervalMs)
-    return () => { if (timer) window.clearInterval(timer) }
+    // Socket listener for payout success to immediately refresh
+    const onPayout = (p: any) => {
+      try {
+        const me = (publicKey as any)?.toString?.() || ''
+        if (me && String(p?.winner || '').toLowerCase() === me.toLowerCase()) {
+          // Immediate refresh
+          fetchBalances()
+        }
+      } catch {}
+    }
+    try { (window as any)?.__socket__?.on?.('payout_success', onPayout) } catch {}
+    return () => { if (timer) window.clearInterval(timer); try { (window as any)?.__socket__?.off?.('payout_success', onPayout) } catch {} }
   }, [mounted, connected, publicKey, tokenMint, pollIntervalMs, sol, spl, initialized, bnb])
 
   if (!mounted) {

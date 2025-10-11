@@ -128,6 +128,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     });
     
     setSocket(socketInstance);
+    try { (window as any).__socket__ = socketInstance } catch {}
 
     return () => {
       console.log('🧹 Cleaning up socket connection');

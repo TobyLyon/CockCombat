@@ -221,6 +221,26 @@ export default function BattleArena() {
   // Subscribe to live lobby counts from socket
   useEffect(() => {
     if (!socket) return
+    // payout toast
+    const onPayout = (p: any) => {
+      try {
+        const me = getCurrentPlayerId()
+        if (!me) return
+        const isWinner = String(p?.winner||'').toLowerCase() === String(me).toLowerCase()
+        if (!isWinner) return
+        const amount = Number(p?.amount)||0
+        const url = String(p?.explorer||'')
+        toast.success(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold">Payout received</span>
+            <span className="text-sm text-white/80">+{amount.toFixed(3)} BNB</span>
+            {url && <a href={url} target="_blank" rel="noreferrer" className="text-xs underline text-yellow-300">View transaction</a>}
+          </div>,
+          { duration: 4000 }
+        )
+      } catch {}
+    }
+    try { socket.on('payout_success', onPayout) } catch {}
     const onCounts = (payload: any) => {
       try {
         const { id, liveHumans, liveTotal } = payload || {}
@@ -239,6 +259,7 @@ export default function BattleArena() {
     // Request an initial snapshot
     try { socket.emit('get_lobby_counts') } catch {}
     return () => {
+      try { socket.off('payout_success', onPayout) } catch {}
       socket.off('lobby_counts', onCounts)
       socket.off('lobby_counts_snapshot', onSnapshot)
     }

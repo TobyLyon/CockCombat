@@ -260,6 +260,32 @@ export async function POST(request: Request) {
       }
     }
 
+    // Broadcast payout to the winner via Socket.IO so clients can notify and refresh balances
+    try {
+      const io: any = (global as any).socketIo;
+      const active: any = (global as any).activeConnections;
+      const winnerLower = String(winnerAddress || '').toLowerCase();
+      const payload = {
+        winner: winnerAddress,
+        amount: prizePool * (1 - houseCutPercentage),
+        currency: 'BNB',
+        matchId: matchId || null,
+        txHash: winnerSignature,
+        explorer: getEvmExplorerUrl(winnerSignature),
+        ts: Date.now(),
+      };
+      if (io && active && typeof active.entries === 'function') {
+        for (const [, conn] of active.entries()) {
+          try {
+            const w = String(conn.walletAddress || '').toLowerCase();
+            if (w && w === winnerLower) {
+              conn.socket?.emit?.('payout_success', payload);
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
     return NextResponse.json({
       success: true,
       message: "Payout successful!",
