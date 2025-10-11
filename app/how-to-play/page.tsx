@@ -81,7 +81,7 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
   const [state, setState] = useState<'idle' | 'peck' | 'walk'>('idle')
   const timerRef = useRef(0)
   const targetRef = useRef<THREE.Vector3 | null>(null)
-  const speedRef = useRef(0.5 + Math.random() * 0.4) // per-chicken base speed
+  const speedRef = useRef(0.7 + Math.random() * 0.5) // increased base speed
   // Color palettes matching in-game variety
   const PALETTES = [
     { body: "#f97316", comb: "#ef4444", beak: "#FFD600", legs: "#FFD600", tail: "#6366f1", eyes: "#ffffff", pupils: "#222222" },
@@ -97,19 +97,19 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
   useFrame((_, delta) => {
     timerRef.current -= delta
     if (timerRef.current <= 0) {
-      // Randomly pick next state with heavier bias to idle/peck (less walking)
+      // More balanced state distribution with increased walking
       const r = Math.random()
-      if (r < 0.6) { 
+      if (r < 0.45) { 
         setState('idle')
-        timerRef.current = 2.0 + Math.random() * 3.0
+        timerRef.current = 1.5 + Math.random() * 2.0
       }
-      else if (r < 0.92) { 
+      else if (r < 0.75) { 
         setState('peck')
-        timerRef.current = 0.6 + Math.random() * 0.4
+        timerRef.current = 0.5 + Math.random() * 0.3
       }
       else {
         setState('walk')
-        timerRef.current = 1.2 + Math.random() * 1.5
+        timerRef.current = 1.8 + Math.random() * 2.5
         // Pick a wander target across the bottom screen area within lane
         const current = ref.current ? ref.current.position.clone() : new THREE.Vector3(0, 0.6, laneZ)
         const nx = current.x + (Math.random() - 0.5) * 3.5 // moderate lateral wander
@@ -152,7 +152,7 @@ function GrazingChicken({ position, paletteIndex, laneZ }: { position: [number, 
   })
 
   return (
-    <group ref={ref} position={position} scale={[0.7, 0.7, 0.7]}>
+    <group ref={ref} position={position} scale={[1.05, 1.05, 1.05]}>
       <PixelChicken position={[0, 0, 0]} rotation={[0, 0, 0]} health={undefined} maxHealth={undefined} isPlayer={false} isPecking={state==='peck'} disableBobbing={false} colors={PALETTES[((paletteIndex % PALETTES.length) + PALETTES.length) % PALETTES.length]} />
     </group>
   )
