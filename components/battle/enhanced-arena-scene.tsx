@@ -620,10 +620,10 @@ function SceneContent({
         const byId = typeof payload?.by === 'string' ? payload.by : undefined
         // Client-side de-dupe by target
         const now = Date.now()
-        if ((lastAppliedDamageRef[targetId]||0) && now - (lastAppliedDamageRef[targetId]||0) < 150) return
+        if ((lastAppliedDamageRef[targetId]||0) && now - (lastAppliedDamageRef[targetId]||0) < 120) return
         lastAppliedDamageRef[targetId] = now
         // Ensure a guaranteed flash window for remote target
-        try { remoteHitUntilRef.current[targetId] = now + 400 } catch {}
+        try { remoteHitUntilRef.current[targetId] = now + 600 } catch {}
         onPlayerDamage(targetId, amount, byId)
       } catch {}
     }
@@ -809,8 +809,9 @@ function SceneContent({
               try {
                 const msid = (window as any)?.__last_match_session_id
                 // Send once and locally show hit flash immediately
-                // Emit once, avoid local duplicate visual peck here; server event will drive feedback
+                // Emit once; also trigger a local visual-only flash for immediate feedback
                 socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
+                try { if (onPlayerDamage) onPlayerDamage(opponent.id, 0.5) } catch {}
               } catch {}
             } else if (onPlayerDamage) {
               onPlayerDamage(opponent.id, 1)
