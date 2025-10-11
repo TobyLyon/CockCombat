@@ -638,6 +638,7 @@ function SceneContent({
         }
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
+          try { (window as any).__last_round_start_at = startAt } catch {}
           roundStartAtMsRef.current = startAt
           freezeUntilRef.current = startAt
           invulnerableUntilRef.current = startAt + 1000

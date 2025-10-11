@@ -146,6 +146,7 @@ export default function WaitingQueue({
       try {
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
+        try { if (startAt > 0) (window as any).__last_round_start_at = startAt } catch {}
         if (startAt > 0) {
           const delay = Math.max(0, startAt - Date.now() + 100)
           scheduledStartRef.current = Date.now() + delay
