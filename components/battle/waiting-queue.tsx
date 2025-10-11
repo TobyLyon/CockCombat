@@ -61,45 +61,7 @@ export default function WaitingQueue({
 
   useEffect(() => {
     // If sockets are connected, rely on realtime updates and skip HTTP polling
-    if (isConnected) return;
-
-    // Poll the specific lobby for status updates (fallback when sockets unavailable)
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch('/api/lobbies');
-        if (!response.ok) throw new Error('Failed to fetch lobbies');
-        
-        const lobbies: Lobby[] = await response.json();
-        const updatedLobby = lobbies.find(l => l.id === lobby.id);
-
-        if (updatedLobby) {
-          // Do not allow HTTP fallback to shrink roster below the current socket state
-          let effectivePlayers: any[] = []
-          setCurrentLobby(prev => {
-            const nextPlayers = Array.isArray(updatedLobby.players) ? updatedLobby.players : [];
-            const keepPlayers = (prev?.players || []).length > nextPlayers.length ? prev.players : nextPlayers;
-            effectivePlayers = keepPlayers
-            return { ...prev, ...updatedLobby, players: keepPlayers } as Lobby;
-          });
-          
-          // Sync roster for spawning using the effective (non-regressing) list
-          try { syncLobbyPlayers((effectivePlayers || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
-          
-          // If the lobby is starting or already started, trigger the battle (HTTP fallback)
-          if (updatedLobby.status === 'starting' || updatedLobby.status === 'started') {
-            playSound('button'); // Or a more appropriate sound
-            onStartBattle();
-            clearInterval(interval); // Stop polling once the match starts
-          }
-          
-          // Do not run any readiness-based auto-advance here; this screen is connection-only
-        }
-      } catch (error) {
-        console.error("Error polling for lobby status:", error);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    return () => clearInterval(interval);
+    return;
   }, [isConnected, lobby.id, lobby.matchType, onStartBattle, playSound]);
 
   // No countdown ticking on this screen
@@ -167,17 +129,7 @@ export default function WaitingQueue({
       } catch {}
 
       // Schedule finalize fallback a bit past ack deadline
-      try {
-        if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
-        const dl = Math.max(2000, Number(payload?.ackDeadlineMs) || 4000)
-        finalizeFallbackRef.current = setTimeout(() => {
-          if (!scheduledStartRef.current) {
-            console.log('[WaitingQueue] finalize fallback kicking in')
-            try { socket.emit('ensure_queue_progress', lobby.id) } catch {}
-            try { socket.emit('get_lobby_state', lobby.id) } catch {}
-          }
-        }, dl + 1500)
-      } catch {}
+      try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
     }
     const onArenaLock = (payload: any) => {
       console.log('[WaitingQueue] arena_lock_roster', payload)
@@ -241,18 +193,7 @@ export default function WaitingQueue({
           onStartBattle()
         }
       }
-      const hasRoster = () => (Array.isArray(latestRosterRef.current) && latestRosterRef.current.length > 0) || (Array.isArray(currentLobby?.players) && currentLobby.players.length > 0)
-      let attempts = 0
-      const tick = () => {
-        attempts++
-        if (hasRoster() || attempts > 6) { // ~1.2s max
-          startWithOverride()
-          return
-        }
-        try { socket?.emit('get_lobby_state', lobby.id) } catch {}
-        setTimeout(tick, 200)
-      }
-      setTimeout(tick, 100)
+      startWithOverride()
     }
     const onRoundCountdown = (payload: any) => {
       try { const n = Number(payload?.count); if (!isNaN(n)) setQueueCountdown(n >= 0 ? n : null) } catch {}
@@ -321,44 +262,18 @@ export default function WaitingQueue({
       console.log('[WaitingQueue] Updated currentLobby players:', (payload.players || []).length || 0)
     }
 
-    const onLobbySync = (payload: any) => {
-      console.log('[WaitingQueue] lobby_synced received:', payload)
-      if (!payload || payload.id !== lobby.id) return
-      let mergedPlayersLocal: any[] = []
-      setCurrentLobby(prev => {
-        const nextPlayers = Array.isArray(payload.players) ? payload.players : prev.players
-        const byId = new Map<string, any>(Array.isArray(prev.players) ? prev.players.map((p:any) => [String(p.playerId), p]) : [])
-        for (const p of (Array.isArray(nextPlayers) ? nextPlayers : [])) {
-          byId.set(String(p.playerId), { ...(byId.get(String(p.playerId))||{}), ...p })
-        }
-        const mergedPlayers = Array.from(byId.values())
-        mergedPlayersLocal = mergedPlayers
-        return {
-          ...prev,
-          players: mergedPlayers,
-          capacity: typeof payload.capacity === 'number' ? payload.capacity : prev.capacity,
-          amount: typeof payload.amount === 'number' ? payload.amount : prev.amount,
-          currency: typeof payload.currency === 'string' ? payload.currency : prev.currency,
-          matchType: (payload.matchType as any) || prev.matchType,
-        } as Lobby
-      })
-      try { syncLobbyPlayers((mergedPlayersLocal || []).map((p: any) => ({ playerId: p.playerId, username: p.username, chickenName: p.chickenName, isAi: p.isAi }))) } catch {}
-      console.log('[WaitingQueue] Synced currentLobby players:', payload.players?.length || 0)
-    }
+    const onLobbySync = (_payload: any) => {}
 
-    const onRefreshLobbyState = () => {
-      console.log('[WaitingQueue] refresh_lobby_state requested, emitting get_lobby_state')
-      socket.emit('get_lobby_state', lobby.id)
-    }
+    // no refresh_lobby_state hooks
 
     socket.on('lobby_updated', onLobbyUpdated)
     socket.on('lobby_synced', onLobbySync)
-    socket.on('refresh_lobby_state', onRefreshLobbyState)
+    // no refresh_lobby_state hooks
 
     return () => {
       socket.off('lobby_updated', onLobbyUpdated)
       socket.off('lobby_synced', onLobbySync)
-      socket.off('refresh_lobby_state', onRefreshLobbyState)
+      // no refresh_lobby_state cleanup
     }
   }, [socket, isConnected, lobby.id, lobby.matchType, currentLobby.players])
 
@@ -372,7 +287,6 @@ export default function WaitingQueue({
     } catch {}
     socket.emit('join_lobby_room', lobby.id)
     try { (window as any).currentLobbyId = lobby.id } catch {}
-    socket.emit('get_lobby_state', lobby.id)
     return () => {
       socket.emit('leave_lobby_room', lobby.id)
       try { if ((window as any).currentLobbyId === lobby.id) (window as any).currentLobbyId = undefined } catch {}
