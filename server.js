@@ -1244,7 +1244,7 @@ preparePromise.then(() => {
                       }).eq('id', matchIdBase);
                     } catch {}
                     // Trigger payout via internal API with server secret
-                    const payoutUrl = baseUrl ? `${baseUrl}/api/payout` : `${(process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`)}/api/payout`;
+                    const payoutUrl = `${(process.env.NEXT_PUBLIC_APP_URL || baseUrl || `http://localhost:${port}`)}/api/payout`;
                     const serverSecret = process.env.PAYOUT_SERVER_SECRET;
                     if (serverSecret) {
                       const res = await fetch(payoutUrl, {
@@ -1291,7 +1291,7 @@ preparePromise.then(() => {
                 if (wager > 0 && player2Wallet) txRows.push({ wallet_address: player2Wallet, transaction_type: 'wager', amount: -wager, description: 'Match wager' });
                 if (winnerCut > 0 && wWallet) txRows.push({ wallet_address: wWallet, transaction_type: 'win', amount: winnerCut, description: 'Match winnings' });
                 if (txRows.length > 0) {
-                  try { await supabase.from('transactions').insert(txRows.map(r => ({ ...r, related_entity_id: roomId }))); } catch {}
+                  try { await supabase.from('transactions').insert(txRows.map(r => ({ ...r, related_entity_id: matchIdBase || roomId }))); } catch {}
                 }
                 // Helper to read then update profile counters
                 const bumpProfile = async (wallet, opts) => {

@@ -156,22 +156,22 @@ export async function POST(request: Request) {
       }
 
       // Require match validation for non-zero payouts
-      if (!matchWinnerFromDb && prizePoolLamports > 0) {
+      if (!matchWinnerFromDb && prizePool > 0) {
         await auditLogger.logSuspiciousActivity(
           'Payout without match record',
           winnerAddress,
           undefined,
-          { matchId, amount: prizePoolLamports }
+          { matchId, amount: prizePool }
         );
         return NextResponse.json({ error: 'Match winner not recorded in database' }, { status: 400 });
       }
-    } else if (prizePoolLamports > 0) {
+    } else if (prizePool > 0) {
       // Require matchId for all non-zero payouts
       await auditLogger.logSuspiciousActivity(
         'Payout without match ID',
         winnerAddress,
         undefined,
-        { amount: prizePoolLamports }
+        { amount: prizePool }
       );
       return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
     }
