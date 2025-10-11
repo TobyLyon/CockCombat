@@ -313,7 +313,7 @@ export default function PixelGameInterface() {
           </div>
 
       {/* Minimal UI - Bottom Center: three buttons side-by-side */}
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-40 flex items-center justify-center gap-4 flex-wrap">
+      <div className="absolute bottom-48 left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-4">
         {/* Wallet connect button (chain aware) */}
         <WalletMultiButton />
         
@@ -331,7 +331,7 @@ export default function PixelGameInterface() {
 
         {/* How To Play button */}
         <Button
-          className="h-12 px-6 text-base font-bold rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-600 hover:from-purple-600 hover:to-fuchsia-700 text-white active:scale-[0.985] touch-manipulation select-none shadow-md"
+          className="h-12 px-6 text-base font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-lg active:scale-[0.985] touch-manipulation select-none"
           onClick={() => handleNavigation("/how-to-play")}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
           disabled={isNavigating}
