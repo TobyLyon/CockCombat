@@ -1532,7 +1532,7 @@ preparePromise.then(() => {
               if (lobby) {
                 if (lobby.matchType === 'tutorial') {
                   const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
-                  lobby.players = lobby.players.filter((p: any) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
+                  lobby.players = lobby.players.filter((p) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
                 }
                 let lobbyPlayers = lobby.players.map(player => {
                   let isReady = false;
