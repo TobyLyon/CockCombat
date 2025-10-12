@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'No refund for free/tutorial matches' }, { status: 400 })
       }
 
-      const player = lobby.players.find(p => p.playerId === playerPublicKey)
+      const player = lobby.players.find(p => String(p.playerId||'').toLowerCase() === String(playerPublicKey||'').toLowerCase())
       if (!player) return NextResponse.json({ error: 'Player not found in lobby' }, { status: 404 })
 
       // Only allow refund if countdown not active and queue not started
@@ -49,6 +49,18 @@ export async function POST(req: NextRequest) {
       if (!player.hasWagered || (player as any).__refunded) {
         return NextResponse.json({ ok: true, message: 'Already refunded or no recorded wager' })
       }
+
+      // In-memory idempotency key to avoid double-refunds due to retries
+      try {
+        if (!(global as any).__refundLocks) (global as any).__refundLocks = new Set<string>()
+        const key = `${lobbyId}:${String(player.playerId).toLowerCase()}`
+        if ((global as any).__refundLocks.has(key)) {
+          return NextResponse.json({ ok: true, message: 'Refund already processing' })
+        }
+        (global as any).__refundLocks.add(key)
+        // Clean up lock after 30s just in case
+        setTimeout(() => { try { (global as any).__refundLocks.delete(key) } catch {} }, 30000)
+      } catch {}
 
       if (!isBsc()) return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 })
       if (!lobby.escrowWalletId) return NextResponse.json({ error: 'Escrow not assigned' }, { status: 500 })

@@ -477,6 +477,28 @@ preparePromise.then(() => {
           const wallet = (activeConnections.get(socket.id)?.walletAddress) || socket.id;
           const name = await getUsernameForWallet(wallet);
           const entry = await upsertRoster(lobbyId, wallet, { username: name });
+          // Ensure roster reflects authoritative readiness for existing players in the lobby (late-join sync)
+          try {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+            const all = res ? await res.json().catch(() => []) : [];
+            const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+            if (liveLobby) {
+              for (const p of (liveLobby.players || [])) {
+                const pid = String(p.playerId || '');
+                if (!pid) continue;
+                const patch = {
+                  username: p.username || undefined,
+                  chickenName: p.chickenId || 'Default',
+                  isAi: !!p.isAi,
+                  hasWagered: Boolean(p.hasWagered),
+                  // Ranked humans: readiness mirrors hasWagered; AI always ready; tutorial uses per-connection readiness elsewhere
+                  isReady: (liveLobby.matchType !== 'tutorial' && !p.isAi) ? Boolean(p.hasWagered) : (p.isAi ? true : false),
+                };
+                await upsertRoster(lobbyId, pid, patch);
+              }
+            }
+          } catch {}
           // Send full roster to the joiner only
           try {
             const map = getRosterMap(lobbyId);
@@ -669,6 +691,24 @@ preparePromise.then(() => {
           }
         } catch {}
         
+        // Update socket-level roster so late joiners see accurate readiness in paid lobbies
+        try {
+          // Derive hasWagered from live lobby (already read above) to persist in roster
+          let hasWagered = false;
+          try {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+            const all = res ? await res.json().catch(() => []) : [];
+            const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+            if (liveLobby) {
+              const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
+              hasWagered = !!(me && me.hasWagered);
+            }
+          } catch {}
+          const entry = await upsertRoster(lobbyId, normalizedPlayerId, { hasWagered, isReady: finalReady });
+          emitRosterDiff(io, lobbyId, 'upsert', entry);
+        } catch {}
+
         // Broadcast ready status and also send a lobby_synced snapshot for late joiners
         // Debounce room refresh to avoid thundering herd when multiple players toggle
         io.to(lobbyId).emit('player_ready_status', {
