@@ -26,6 +26,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Remove the X-Powered-By header for a small security hardening boost
+  poweredByHeader: false,
   // Prevent R3F/Three from being bundled on the server
   serverExternalPackages: ['three', '@react-three/fiber', '@react-three/drei'],
   webpack: (config, { isServer }) => {
@@ -54,34 +56,55 @@ const nextConfig = {
   },
   // Add security headers
   async headers() {
+    // Content Security Policy — permissive enough to avoid breaking the app,
+    // but strict enough to reduce abuse signals that can trigger ISP filters.
+    // Note: Allow HTTPS and WSS for API/socket calls to support env-configured endpoints.
+    const csp = [
+      "default-src 'self'",
+      // External scripts: p5 from cdnjs; keep inline disabled for scripts
+      "script-src 'self' https://cdnjs.cloudflare.com",
+      // Styles: allow Google Fonts and inline styles used by frameworks
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      // Fonts from Google Fonts
+      "font-src 'self' https://fonts.gstatic.com data:",
+      // Images and textures, including data URLs and blobs
+      "img-src 'self' https: data: blob:",
+      // Media (mp3 sound effects)
+      "media-src 'self' https: data: blob:",
+      // API calls: same-origin, Supabase, and any HTTPS/WSS endpoints
+      "connect-src 'self' https: wss: https://*.supabase.co wss://*.supabase.co",
+      // Disallow plugins
+      "object-src 'none'",
+      // Prevent clickjacking beyond our own origin
+      "frame-ancestors 'self'",
+      // Misc protections
+      "base-uri 'self'",
+      "form-action 'self' https:"
+    ].join('; ')
+
+    const permissionsPolicy = [
+      'accelerometer=()',
+      'camera=()',
+      'geolocation=()',
+      'gyroscope=()',
+      'magnetometer=()',
+      'microphone=()',
+      'payment=()',
+      'usb=()'
+    ].join(', ')
+
     return [
       {
         source: '/:path*',
         headers: [
-          {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on'
-          },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload'
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN'
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block'
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin'
-          }
+          { key: 'X-DNS-Prefetch-Control', value: 'on' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-XSS-Protection', value: '1; mode=block' },
+          { key: 'Referrer-Policy', value: 'origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: permissionsPolicy },
+          { key: 'Content-Security-Policy', value: csp }
         ]
       }
     ]
