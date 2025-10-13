@@ -1285,7 +1285,7 @@ preparePromise.then(() => {
                     } catch {}
                     // Trigger payout via server-only function (no HTTP)
                     try {
-                      const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+                      const { processPayoutServerOnly } = require('./lib/payout-service.js');
                       const houseWalletAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET;
                       const houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
                       const { winnerSignature, houseSignature } = await processPayoutServerOnly({
