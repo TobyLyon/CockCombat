@@ -85,16 +85,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   const handleShare = () => {
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cockcombat.game';
-      const title = isHumanWinner ? 'I just won a Cock Combat match!' : 'I just finished a Cock Combat match!';
-      const prizeText = `Prize: ${netWinner.toFixed(2)} ${currency}`;
-      const typeText = `Mode: ${isTutorial ? 'Tutorial' : 'Ranked'}`;
-      const rosterText = `Players: ${totalPlayers}`;
-      const durText = durationSec !== null ? `Duration: ${durationSec}s` : '';
-      const text = encodeURIComponent([title, prizeText, typeText, rosterText, durText, '#CockCombat #BNB'].filter(Boolean).join(' | '));
-      const url = encodeURIComponent(origin);
-      const intent = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
-      window.open(intent, '_blank', 'noopener,noreferrer');
+      window.open('https://x.com/CockCombatBNB', '_blank', 'noopener,noreferrer');
     } catch {}
   };
 
