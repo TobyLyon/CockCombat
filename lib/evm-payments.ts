@@ -82,6 +82,59 @@ export async function sendIdempotentPayment(args: SendArgs) {
     } catch {}
   }
 
+  // Attempt to claim the opId for sending by transitioning to in_progress.
+  // Only one process will succeed because we match state='pending' and tx_hash IS NULL.
+  if (supabase) {
+    try {
+      const { data: claimed } = await supabase
+        .from('payments')
+        .update({ state: 'in_progress' })
+        .eq('op_id', opId)
+        .eq('state', 'pending')
+        .is('tx_hash', null)
+        .select('op_id')
+        .maybeSingle()
+
+      if (!claimed) {
+        // Another process is handling this op. Wait for its txHash to appear.
+        const start = Date.now()
+        const maxWaitMs = 20000
+        const intervalMs = 400
+        while (Date.now() - start < maxWaitMs) {
+          try {
+            const { data: existing } = await supabase
+              .from('payments')
+              .select('tx_hash, state')
+              .eq('op_id', opId)
+              .maybeSingle()
+            if (existing && existing.tx_hash) {
+              console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: existing.tx_hash })
+              return { txHash: existing.tx_hash as string }
+            }
+          } catch {}
+          await new Promise(r => setTimeout(r, intervalMs))
+        }
+        // Timed out waiting; as a safety, do a final read and return if present
+        try {
+          const { data: existing } = await supabase
+            .from('payments')
+            .select('tx_hash, state')
+            .eq('op_id', opId)
+            .maybeSingle()
+          if (existing && existing.tx_hash) {
+            console.log('[PAYMENTS][IDEMPOTENT_AWAIT_TIMEOUT_HIT]', { opId, txHash: existing.tx_hash })
+            return { txHash: existing.tx_hash as string }
+          }
+        } catch {}
+        // Give up without sending to avoid duplicates
+        throw new Error(`Payment already in progress for ${opId}`)
+      }
+      console.log('[PAYMENTS][CLAIMED]', { opId })
+    } catch (e) {
+      // If claim fails (e.g., table lacks columns), fall back to best-effort behavior
+    }
+  }
+
   // Define the execution as a promise and store it in in-flight map before sending
   const execPromise = (async () => {
     // Re-check DB just before sending to reduce race window (two processes)
