@@ -793,18 +793,42 @@ preparePromise.then(() => {
           }
         } catch {}
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrl = `http://localhost:${port}`;
           const resSnap = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const allSnap = resSnap ? await resSnap.json().catch(() => []) : [];
           const lobbySnap = Array.isArray(allSnap) ? allSnap.find(l => l && l.id === lobbyId) : null;
           if (lobbySnap) {
-            const players = (lobbySnap.players || []).map(p => ({
-              playerId: p.playerId,
-              username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
-              chickenName: p.chickenId || 'Default',
-              isReady: p.isAi ? true : Boolean(p.isReady),
-              isAi: !!p.isAi
-            }));
+            // Build presence set for readiness
+            const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
+            const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
+            const players = (lobbySnap.players || []).map(p => {
+              const pid = String(p.playerId || '');
+              const pidLower = pid.toLowerCase();
+              let ready = false;
+              if (lobbySnap.matchType !== 'tutorial' && !p.isAi) {
+                // Ranked: treat wagered as ready (authoritative), fallback to roster map
+                ready = Boolean(p.hasWagered);
+                if (!ready) {
+                  try { const cur = map && map.get ? map.get(pidLower) : null; ready = !!(cur && cur.hasWagered); } catch {}
+                }
+              } else if (p.isAi) {
+                ready = true;
+              } else {
+                // Tutorial/free: use connection state when present
+                if (presence && presence.has(pidLower)) {
+                  for (const [, c] of activeConnections.entries()) {
+                    if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === pidLower) { ready = !!c.isReady; break; }
+                  }
+                }
+              }
+              return {
+                playerId: pid,
+                username: p.username || (pid ? pid.slice(0,8)+'...' : 'Player'),
+                chickenName: p.chickenId || 'Default',
+                isReady: ready,
+                isAi: !!p.isAi
+              };
+            });
             io.to(lobbyId).emit('lobby_synced', { id: lobbyId, players, capacity: lobbySnap.capacity, amount: lobbySnap.amount, currency: lobbySnap.currency, matchType: lobbySnap.matchType });
           }
         } catch {}
