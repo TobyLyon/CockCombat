@@ -467,10 +467,12 @@ export async function DELETE(req: NextRequest) {
     try {
       const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
       const hasWagered = Boolean((leavingPlayer as any)?.hasWagered);
+      // Strict policy: only refund if the player had explicitly readied up after paying
+      const wasReady = Boolean((leavingPlayer as any)?.isReady);
       const alreadyRefunded = Boolean((leavingPlayer as any)?.__refunded);
       const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]); } catch { return false; } })();
       const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)); } catch { return false; } })();
-      const eligibleForRefund = isPaidRanked && hasWagered && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
+      const eligibleForRefund = isPaidRanked && hasWagered && wasReady && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
 
       if (eligibleForRefund && lobby.escrowWalletId) {
         const [{ evmEscrowService }, { ethers }] = await Promise.all([
