@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-// Use server-held state not API/lib
+import { lobbies } from '@/lib/lobbies';
 // Solana imports removed in EVM-only build
 import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
@@ -8,34 +8,6 @@ import { z } from 'zod';
 import { isBsc, toNativeUnits } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
-
-// Local fallback catalog to avoid any HTTP dependency if global server catalog isn't available
-function getLobbyMetaLocal(lobbyId: string) {
-  const CATALOG = [
-    { id: 'tutorial-1', amount: 0, currency: 'FREE', capacity: 8, matchType: 'tutorial', escrowWalletId: null as any },
-    { id: 'lobby-0p005', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
-    { id: 'lobby-0p005-2', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
-    { id: 'lobby-0.01', amount: 0.01, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
-  ];
-  return CATALOG.find(l => l.id === lobbyId) || null;
-}
-
-function getEscrowIdByAddress(addr?: string | null): string | null {
-  try {
-    if (!addr) return null;
-    const target = String(addr).toLowerCase();
-    for (const key of Object.keys(process.env)) {
-      const m = key.match(/^EVM_ESCROW_(.+)_ADDRESS$/);
-      if (!m) continue;
-      const id = m[1];
-      const val = (process.env[key] || '').toString().toLowerCase();
-      if (val && val === target) return id;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -64,20 +36,27 @@ async function handleWagerConfirmation(req: NextRequest) {
 
   // EVM-only build: validate EVM address format lightly if needed (skipped here)
 
-    const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : getLobbyMetaLocal(lobbyId);
-    if (!lobbyMeta) {
+    const lobby = lobbies.find(l => l.id === lobbyId);
+    if (!lobby) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
-    // Read/initialize roster entry from server memory
-    const rosterMap = (global as any).lobbyRoster?.get(lobbyId) || new Map();
-    try { if (!(global as any).lobbyRoster?.has?.(lobbyId)) { (global as any).lobbyRoster.set(lobbyId, rosterMap) } } catch {}
 
-    const pidNorm = String(playerPublicKey || '').toLowerCase();
-    let player = rosterMap.get(pidNorm) || null;
+    let player = lobby.players.find(p => {
+      const a = String(p.playerId || '').toLowerCase();
+      const b = String(playerPublicKey || '').toLowerCase();
+      return a === b;
+    });
     if (!player) {
-      const username = (playerPublicKey || '').slice(0, 8) + '...';
-      player = { playerId: playerPublicKey, chickenName: 'Default', username, hasWagered: false, isReady: false } as any;
-      try { rosterMap.set(pidNorm, player); } catch {}
+      // Fallback: add the wallet into this lobby roster to ensure confirm can proceed (server will enforce payouts)
+      try {
+        const username = (playerPublicKey || '').slice(0, 8) + '...';
+        const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
+        lobby.players.push(newP);
+        player = newP;
+      } catch {}
+      if (!player) {
+        return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+      }
     }
 
     // Verify the transaction moved the exact wager to the escrow wallet
@@ -115,39 +94,12 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (tx.from?.toLowerCase() !== playerPublicKey.toLowerCase()) {
         return NextResponse.json({ error: 'Sender mismatch' }, { status: 400 });
       }
-      // Derive or validate escrow assignment for this lobby based on tx.to
-      const txTo = tx.to?.toLowerCase();
-      const derivedEscrowId = getEscrowIdByAddress(txTo);
-      if (!lobbyMeta.escrowWalletId) {
-        // Assign escrow dynamically from tx recipient if known
-        if (!derivedEscrowId) {
-          await auditLogger.logSuspiciousActivity('EVM wager to unknown escrow', playerPublicKey, undefined, { lobbyId, signature, txTo });
-          return NextResponse.json({ error: 'Unknown escrow address' }, { status: 400 });
-        }
-        try {
-          lobbyMeta.escrowWalletId = derivedEscrowId as any;
-          const g: any = global as any;
-          if (g && g.lobbyCatalog && typeof g.lobbyCatalog.set === 'function') {
-            // Persist back to global catalog so the server flow uses the same escrow going forward
-            const cur = g.lobbyCatalog.get(lobbyId) || lobbyMeta;
-            cur.escrowWalletId = derivedEscrowId;
-            g.lobbyCatalog.set(lobbyId, cur);
-          }
-        } catch {}
-      } else {
-        // If lobby already had an escrow assigned, ensure tx recipient matches the configured escrow address
-        const envKeyValidate = `EVM_ESCROW_${lobbyMeta.escrowWalletId}_ADDRESS`;
-        const configuredEscrowAddr = process.env[envKeyValidate];
-        if (!configuredEscrowAddr) {
-          return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-        }
-        if (String(configuredEscrowAddr).toLowerCase() !== String(txTo)) {
-          await auditLogger.logSuspiciousActivity('EVM wager to mismatched escrow', playerPublicKey, undefined, { lobbyId, expected: configuredEscrowAddr, actual: txTo });
-          return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
-        }
+      if (!lobby.escrowWalletId) {
+        await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
+        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
       }
-      const expectedValue = ethers.parseUnits(String(lobbyMeta.amount), 18);
-      const envKey = `EVM_ESCROW_${lobbyMeta.escrowWalletId}_ADDRESS`;
+      const expectedValue = ethers.parseUnits(lobby.amount.toString(), 18);
+      const envKey = `EVM_ESCROW_${lobby.escrowWalletId}_ADDRESS`;
       const expectedEscrow = process.env[envKey];
       if (!expectedEscrow) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
@@ -170,7 +122,7 @@ async function handleWagerConfirmation(req: NextRequest) {
       signature,
       playerPublicKey,
       '/api/wager/confirm',
-      { lobbyId, amount: lobbyMeta.amount }
+      { lobbyId, amount: lobby.amount }
     );
 
     player.hasWagered = true;
@@ -181,7 +133,26 @@ async function handleWagerConfirmation(req: NextRequest) {
     } catch {}
     // De-duplicate any existing entries for this wallet (prefer the one with hasWagered=true)
     try {
-      try { rosterMap.set(pidNorm, player); } catch {}
+      const pidNorm = String(playerPublicKey || '').toLowerCase();
+      const keep = lobby.players.reduce((best: any | null, p: any) => {
+        const id = String(p.playerId || '').toLowerCase();
+        if (id !== pidNorm) return best;
+        if (!best) return p;
+        // Prefer entry that is wagered/ready; otherwise keep the latest
+        if (!!p.hasWagered && !best.hasWagered) return p;
+        return p; // last-writer-wins
+      }, null);
+      const next: any[] = [];
+      const seen = new Set<string>();
+      for (const p of lobby.players) {
+        const id = String(p.playerId || '').toLowerCase();
+        if (id === pidNorm) {
+          if (!seen.has(id)) { next.push(keep || p); seen.add(id); }
+        } else {
+          next.push(p);
+        }
+      }
+      lobby.players = next;
     } catch {}
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
@@ -231,11 +202,12 @@ async function handleWagerConfirmation(req: NextRequest) {
       severity: 'info',
       metadata: {
         lobbyId,
-        amount: lobbyMeta.amount,
+        amount: lobby.amount,
         signature,
       },
     });
-    return NextResponse.json({ message: "Player status updated to ready" });
+
+    return NextResponse.json({ message: "Player status updated to ready", lobby });
 
   } catch (error) {
     console.error("Error confirming wager:", error);
