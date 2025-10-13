@@ -1715,7 +1715,9 @@ preparePromise.then(() => {
         if (!msid) return;
         // Idempotency per session
         try { if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set(); } catch {}
-        if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(msid)) return;
+        const winnerLowerKey = String((payload?.winnerWallet || '')).toLowerCase();
+        const idempoKey = `${msid}:${winnerLowerKey}`;
+        if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) return;
 
         const meta = global.recentMatchMetaBySession ? global.recentMatchMetaBySession.get(msid) : null;
         if (!meta) return;
@@ -1750,6 +1752,11 @@ preparePromise.then(() => {
 
         // Create a match_results row to obtain a matchId for payout validation
         let matchId = null;
+        let selectedEscrow = (meta && meta.escrow) ? meta.escrow : null;
+        try {
+          if (!global.cachedEscrowBySession) global.cachedEscrowBySession = new Map();
+          if (!selectedEscrow) selectedEscrow = global.cachedEscrowBySession.get(msid) || null;
+        } catch {}
         try {
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1759,7 +1766,7 @@ preparePromise.then(() => {
             const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
             const { data: mrRow } = await supabase.from('match_results').insert({
               lobby_id: meta.lobbyId || null,
-              escrow_wallet_id: meta.escrow || null,
+              escrow_wallet_id: selectedEscrow || null,
               match_started_at: meta.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
               match_ended_at: new Date().toISOString(),
               winner_wallet: winnerWallet,
@@ -1770,6 +1777,8 @@ preparePromise.then(() => {
               payout_processed: false,
             }).select('id').single();
             matchId = mrRow?.id || null;
+            try { if (!selectedEscrow && meta && meta.escrow) selectedEscrow = meta.escrow } catch {}
+            try { if (selectedEscrow && global.cachedEscrowBySession) global.cachedEscrowBySession.set(msid, selectedEscrow); } catch {}
           }
         } catch (e) {
           console.warn('match_results insert (fast path) failed:', e?.message || e);
@@ -1779,11 +1788,11 @@ preparePromise.then(() => {
         const resp = await fetch(`${baseUrl}/api/payout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined })
+          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, escrowWalletId: selectedEscrow || undefined })
         }).catch(() => null);
         if (resp && resp.ok) {
           console.log('💸 Ranked payout executed via HTTP (client-declared end)');
-          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(msid); } catch {}
+          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
         } else {
           const status = resp ? resp.status : 'no_response';
           const txt = resp ? await resp.text().catch(() => '') : 'no response';
