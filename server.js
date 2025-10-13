@@ -1365,7 +1365,7 @@ preparePromise.then(() => {
                       const resp = await fetch(`${baseUrl}/api/payout`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) || undefined })
+                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
                       }).catch(() => null);
                       if (resp && resp.ok) {
                         console.log('💸 Ranked payout executed via HTTP (fast path)');
@@ -1499,7 +1499,7 @@ preparePromise.then(() => {
                         const resp = await fetch(`${baseUrl}/api/payout`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined })
+                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
                         }).catch(() => null);
                         if (resp && resp.ok) {
                           console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
