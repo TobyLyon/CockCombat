@@ -540,6 +540,7 @@ function SceneContent({
 
   // Lightweight screen red flash when the local player is hit
   const [selfHitActive, setSelfHitActive] = useState(false)
+  const selfHitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Discrete input request flags to guarantee 1 key press => 1 action locally
   const jumpRequestRef = useRef<boolean>(false)
@@ -629,8 +630,9 @@ function SceneContent({
         // If this client is the target, also trigger a brief screen red flash
         try {
           if (selfIdRef.current && targetId === selfIdRef.current) {
+            if (selfHitTimerRef.current) { clearTimeout(selfHitTimerRef.current); selfHitTimerRef.current = null }
             setSelfHitActive(true)
-            setTimeout(() => setSelfHitActive(false), 150)
+            selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
           }
         } catch {}
         onPlayerDamage(targetId, amount, byId)
@@ -807,9 +809,14 @@ function SceneContent({
           const dz = playerPos.z - opponentPos.z;
           const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
 
-          // Slightly increase reach to improve corner-angle registration
-          const peckReach = 3.6;
-          if (horizontalDistance <= peckReach) {
+          // Require vertical alignment: hits only when target's body height overlaps player's peck plane
+          // Both chickens use feet at y≈0.85; constrain vertical delta to a small window
+          const dy = Math.abs(playerPos.y - opponentPos.y);
+          const verticalWindow = 0.45; // ~same height band; avoids hitting air under/over jumping chickens
+
+          // Slightly reduced reach to be stricter now that vertical alignment is enforced
+          const peckReach = 3.2;
+          if (horizontalDistance <= peckReach && dy <= verticalWindow) {
             // Respect invulnerability window at round start for opponents
             const isInvulnerable = Date.now() < invulnerableUntilRef.current
             if (isInvulnerable) break
@@ -1392,8 +1399,13 @@ function ChickenInstances({
           // In range: try to peck with cooldown
           const last = lastPeckRef.current[chicken.id] || 0
           if (!isFrozen && !isInvulnerable && now - last > 1200) {
+            // Require vertical alignment similar to player hits
+            const dy = Math.abs(pos.y - playerPos.y)
+            const verticalWindow = 0.45
+            if (dy <= verticalWindow) {
             lastPeckRef.current[chicken.id] = now
             try { onAiDamagePlayer && onAiDamagePlayer() } catch {}
+            }
           }
         }
 
