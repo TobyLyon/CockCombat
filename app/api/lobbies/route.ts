@@ -191,6 +191,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
+    // Prevent joins if the 5s countdown has begun for this lobby
+    try {
+      const isCountdownActive = Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]);
+      if (isCountdownActive) {
+        return NextResponse.json({ error: 'Lobby is starting, cannot join now' }, { status: 409 });
+      }
+    } catch {}
+
     // Enforce: guests (playerId starting with 'guest_') can only join tutorial/free lobbies
     try {
       const isGuest = String(playerId || '').startsWith('guest_');
@@ -463,43 +471,22 @@ export async function DELETE(req: NextRequest) {
 
     const leavingPlayer = lobby.players[idx];
 
-    // Best-effort refund if leaving before countdown/queue begins (ranked only)
+    // Best-effort refund if leaving before countdown/queue begins (ranked only) via idempotent server routine
     try {
       const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
       const hasWagered = Boolean((leavingPlayer as any)?.hasWagered);
-      // Strict policy: only refund if the player had explicitly readied up after paying
       const wasReady = Boolean((leavingPlayer as any)?.isReady);
       const alreadyRefunded = Boolean((leavingPlayer as any)?.__refunded);
       const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]); } catch { return false; } })();
       const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)); } catch { return false; } })();
       const eligibleForRefund = isPaidRanked && hasWagered && wasReady && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
 
-      if (eligibleForRefund && lobby.escrowWalletId) {
-        const [{ evmEscrowService }, { ethers }] = await Promise.all([
-          import('@/lib/evm-escrow-service'),
-          import('ethers'),
-        ]);
-
-        const fromWallet = evmEscrowService.getWallet(lobby.escrowWalletId as any);
-        if (fromWallet) {
-          const wei = ethers.parseUnits(String(lobby.amount), 18);
-          try {
-            const txHash = await evmEscrowService.transferNative(String(leavingPlayer.playerId), wei, fromWallet);
-            try {
-              await auditLogger.log({
-                eventType: 'wager_refund',
-                actorWallet: String(leavingPlayer.playerId),
-                endpoint: '/api/lobbies (leave)',
-                severity: 'info',
-                metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason: 'left_before_countdown' },
-              });
-            } catch {}
-            // Reflect refund in memory for this player
-            try { (leavingPlayer as any).__refunded = true; (leavingPlayer as any).hasWagered = false; (leavingPlayer as any).isReady = false; } catch {}
-            console.log(`↩️ Refunded ${lobby.amount} to ${leavingPlayer.playerId} from escrow ${lobby.escrowWalletId} (tx ${txHash})`);
-          } catch (e) {
-            console.warn('Refund transfer failed (non-fatal):', (e as any)?.message || e);
-          }
+      if (eligibleForRefund) {
+        try {
+          const { processRefundServerOnly } = await import('@/app/api/wager/refund/route');
+          await processRefundServerOnly({ lobbyId, playerPublicKey: String(leavingPlayer.playerId), reason: 'left_before_countdown' });
+        } catch (err) {
+          console.warn('Refund routine failed (non-fatal):', (err as any)?.message || err);
         }
       }
     } catch (e) {
