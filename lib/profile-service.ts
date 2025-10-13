@@ -12,7 +12,8 @@ export class ProfileService {
   static async getProfile(walletAddress: string): Promise<Profile | null> {
     console.log('Fetching profile for:', walletAddress)
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('profiles')
         .select('*')
         .eq('wallet_address', walletAddress)
@@ -226,7 +227,8 @@ export class ProfileService {
    */
   static async recordMatch(matchData: Partial<Match>): Promise<Match | null> {
     try {
-      const { data, error } = await supabase
+      const db = getWriteClient()
+      const { data, error } = await db
         .from('matches')
         .insert([matchData])
         .select()
@@ -409,7 +411,8 @@ export class ProfileService {
       }
 
       // Update profile
-      const { error } = await supabase
+      const db = getWriteClient()
+      const { error } = await db
         .from('profiles')
         .update({
           total_matches: profile.total_matches + 1,
@@ -529,7 +532,8 @@ export class ProfileService {
       }
 
       // Update chicken
-      const { error } = await supabase
+      const db = getWriteClient()
+      const { error } = await db
         .from('chickens')
         .update({
           wins: newWins,
