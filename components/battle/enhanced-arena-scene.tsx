@@ -770,11 +770,10 @@ function SceneContent({
     // Skip if game is not in battle state
     if (gameState !== 'battle') return; // Note: 'battle' might need to be GameState.PLAYING or similar
 
-    // Arm a 3s freeze and 4s invulnerability at round start (server-synced when available)
+  // Arm a 3s freeze and 4s invulnerability at round start (server-synced when available)
     if (!hasArmedCountdownRef.current) {
-      const startAt = roundStartAtMsRef.current && roundStartAtMsRef.current > Date.now()
-        ? roundStartAtMsRef.current
-        : Date.now() + 3000
+      const startAt = (roundStartAtMsRef.current && roundStartAtMsRef.current > Date.now()) ? roundStartAtMsRef.current : (Date.now() + 3000)
+      // Always clamp to exactly 3 seconds from now if no server time yet; will be overwritten when 'round_countdown' with startAt arrives
       freezeUntilRef.current = startAt
       invulnerableUntilRef.current = startAt + 1000
       hasArmedCountdownRef.current = true

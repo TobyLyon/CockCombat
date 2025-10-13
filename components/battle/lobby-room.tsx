@@ -229,7 +229,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const handleMatchStarting = (data: { countdown: number }) => {
       console.log('🚀 Match starting in:', data.countdown);
-      setCountdown(data.countdown);
+      // Do not run a local lobby countdown; arena scene shows the synced 3..2..1
     };
 
     const handleMatchStarted = () => {
@@ -304,15 +304,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   // Removed snapshot-based HTTP fallbacks and initial snapshot; server events are authoritative
 
-  // Countdown effect
-  useEffect(() => {
-    if (countdown !== null && countdown > 0) {
-      const timer = setTimeout(() => {
-        setCountdown(countdown - 1)
-      }, 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [countdown])
+  // Removed local countdown effect to avoid conflicting timers
 
   // Majority grace seconds left (server-driven)
   const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
@@ -542,49 +534,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
-      {/* Countdown Overlay */}
-      <AnimatePresence>
-        {countdown !== null && countdown > 0 && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            className="absolute inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50"
-          >
-            <div className="text-center">
-              <motion.div
-                key={countdown}
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 1.2, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="text-6xl sm:text-8xl font-bold text-yellow-400 pixel-font mb-4 drop-shadow-lg"
-                style={{ 
-                  textShadow: '4px 4px 0px rgba(0,0,0,0.8), 8px 8px 0px rgba(255,170,0,0.3)' 
-                }}
-              >
-                {countdown}
-              </motion.div>
-              <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xl sm:text-2xl text-gray-300 pixel-font mb-4"
-              >
-                MATCH STARTING...
-              </motion.p>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="flex items-center justify-center gap-2 text-base text-yellow-400"
-              >
-                <Clock className="h-5 w-5 animate-pulse" />
-                <span>Get ready to fight!</span>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Countdown overlay removed from lobby; arena displays synced 3..2..1 */}
 
       {/* Majority-ready grace small notice (non-blocking) */}
       {typeof majoritySeconds === 'number' && majoritySeconds > 0 && (
