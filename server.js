@@ -1496,6 +1496,14 @@ preparePromise.then(() => {
       } catch {}
     });
 
+    // Lightweight ping/pong for measuring client RTT during secondary confirmation
+    socket.on('queue_ping', (payload) => {
+      try {
+        const ts = (payload && payload.ts) ? Number(payload.ts) : Date.now();
+        socket.emit('queue_pong', { ts });
+      } catch {}
+    });
+
     socket.on('assets_loaded', (payload) => {
       try {
         const { matchSessionId, wallet } = payload || {};
@@ -1503,6 +1511,11 @@ preparePromise.then(() => {
         const session = global.queueSessions && global.queueSessions.get(matchSessionId);
         if (!session) return;
         session.assetsAcks.set(wallet, Date.now());
+        // Broadcast asset readiness to lobby participants
+        try {
+          const lobbyId = session.lobbyId;
+          io.to(lobbyId).emit('queue_assets_update', { wallet });
+        } catch {}
       } catch {}
     });
 

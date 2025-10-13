@@ -33,6 +33,7 @@ export default function WaitingQueue({
   const { publicKey } = useWallet()
   const { socket, isConnected } = useSocket()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
+  const [latencyByWallet, setLatencyByWallet] = useState<Record<string, number>>({})
   // No countdown on the secondary confirmation screen
   const [countdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
@@ -199,6 +200,48 @@ export default function WaitingQueue({
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
     socket.on('match_started', onStarted)
+    // Presence/latency updates
+    const onPresence = (p: any) => {
+      try {
+        const w = String(p?.wallet||'')
+        const l = typeof p?.latencyMs === 'number' ? p.latencyMs : undefined
+        if (!w) return
+        if (typeof l === 'number') {
+          setLatencyByWallet(prev => ({ ...prev, [w.toLowerCase()]: l }))
+        }
+      } catch {}
+    }
+    const onAssets = (p: any) => {
+      try {
+        const w = String(p?.wallet||'')
+        if (!w) return
+        setLatencyByWallet(prev => ({ ...prev, [w.toLowerCase()]: (prev[w.toLowerCase()]||0) }))
+      } catch {}
+    }
+    socket.on('queue_presence_update', onPresence)
+    socket.on('queue_assets_update', onAssets)
+    // Local ping loop to estimate latency
+    let pingTimer: any = null
+    const startPing = () => {
+      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
+      if (!id) return
+      const sendPing = () => {
+        try {
+          const ts = Date.now()
+          const handler = (payload: any) => {
+            try {
+              const rtt = Date.now() - (payload?.ts||ts)
+              setLatencyByWallet(prev => ({ ...prev, [String(id).toLowerCase()]: rtt }))
+            } catch {}
+          }
+          socket.once('queue_pong', handler)
+          socket.emit('queue_ping', { ts })
+        } catch {}
+      }
+      sendPing()
+      pingTimer = setInterval(sendPing, 2000)
+    }
+    startPing()
     // no secondary countdown overlay here; arena scene shows the countdown
     // Join the match room for realtime sync using session id
     // Ensure we join the match room on both queue_begin and arena_lock_roster to avoid missing start on one device
@@ -226,6 +269,9 @@ export default function WaitingQueue({
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
       socket.off('debug_trace', onDebug)
+      socket.off('queue_presence_update', onPresence)
+      socket.off('queue_assets_update', onAssets)
+      if (pingTimer) clearInterval(pingTimer)
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
     }
@@ -379,7 +425,29 @@ export default function WaitingQueue({
                         </div>
                       </div>
                     </div>
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 flex items-center gap-2">
+                      {/* Connection bars */}
+                      {(() => {
+                        try {
+                          const id = String(player.playerId||'')
+                          const me = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || ''
+                          const key = id.toLowerCase()
+                          const rtt = latencyByWallet[key]
+                          let bars = 0
+                          if (typeof rtt === 'number') {
+                            if (rtt < 80) bars = 4; else if (rtt < 150) bars = 3; else if (rtt < 250) bars = 2; else bars = 1
+                          }
+                          const barCls = (n: number) => n <= bars ? 'bg-green-400' : 'bg-gray-600'
+                          return (
+                            <div className="flex items-end gap-0.5" title={typeof rtt==='number' ? `${rtt}ms` : 'no data'}>
+                              <div className={`w-1 h-1.5 ${barCls(1)}`}></div>
+                              <div className={`w-1 h-2 ${barCls(2)}`}></div>
+                              <div className={`w-1 h-2.5 ${barCls(3)}`}></div>
+                              <div className={`w-1 h-3 ${barCls(4)}`}></div>
+                            </div>
+                          )
+                        } catch { return null }
+                      })()}
                       {player.isReady ? (
                         <Badge className="bg-green-600 text-white text-xs px-2 py-1">
                           <Check className="mr-1 h-3 w-3" />
