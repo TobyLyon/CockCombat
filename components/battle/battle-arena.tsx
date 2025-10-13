@@ -103,7 +103,8 @@ export default function BattleArena() {
       try {
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
-          const delay = Math.max(0, startAt - Date.now() + 100)
+          // Enter battle ~3s before the server start epoch to show synced countdown
+          const delay = Math.max(0, startAt - Date.now() - 3000)
           if (startTimer) clearTimeout(startTimer)
           startTimer = setTimeout(ensureStart, delay)
         }

@@ -149,7 +149,8 @@ export default function WaitingQueue({
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         try { if (startAt > 0) (window as any).__last_round_start_at = startAt } catch {}
         if (startAt > 0) {
-          const delay = Math.max(0, startAt - Date.now() + 100)
+          // Enter the battle scene ~3s before start so the synced countdown displays
+          const delay = Math.max(0, startAt - Date.now() - 3000)
           scheduledStartRef.current = Date.now() + delay
           startTimerRef.current = setTimeout(() => {
             try { playSound('button') } catch {}
