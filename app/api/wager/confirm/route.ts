@@ -20,6 +20,23 @@ function getLobbyMetaLocal(lobbyId: string) {
   return CATALOG.find(l => l.id === lobbyId) || null;
 }
 
+function getEscrowIdByAddress(addr?: string | null): string | null {
+  try {
+    if (!addr) return null;
+    const target = String(addr).toLowerCase();
+    for (const key of Object.keys(process.env)) {
+      const m = key.match(/^EVM_ESCROW_(.+)_ADDRESS$/);
+      if (!m) continue;
+      const id = m[1];
+      const val = (process.env[key] || '').toString().toLowerCase();
+      if (val && val === target) return id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
     return handleWagerConfirmation(req);
@@ -98,9 +115,36 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (tx.from?.toLowerCase() !== playerPublicKey.toLowerCase()) {
         return NextResponse.json({ error: 'Sender mismatch' }, { status: 400 });
       }
+      // Derive or validate escrow assignment for this lobby based on tx.to
+      const txTo = tx.to?.toLowerCase();
+      const derivedEscrowId = getEscrowIdByAddress(txTo);
       if (!lobbyMeta.escrowWalletId) {
-        await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
-        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+        // Assign escrow dynamically from tx recipient if known
+        if (!derivedEscrowId) {
+          await auditLogger.logSuspiciousActivity('EVM wager to unknown escrow', playerPublicKey, undefined, { lobbyId, signature, txTo });
+          return NextResponse.json({ error: 'Unknown escrow address' }, { status: 400 });
+        }
+        try {
+          lobbyMeta.escrowWalletId = derivedEscrowId as any;
+          const g: any = global as any;
+          if (g && g.lobbyCatalog && typeof g.lobbyCatalog.set === 'function') {
+            // Persist back to global catalog so the server flow uses the same escrow going forward
+            const cur = g.lobbyCatalog.get(lobbyId) || lobbyMeta;
+            cur.escrowWalletId = derivedEscrowId;
+            g.lobbyCatalog.set(lobbyId, cur);
+          }
+        } catch {}
+      } else {
+        // If lobby already had an escrow assigned, ensure tx recipient matches the configured escrow address
+        const envKeyValidate = `EVM_ESCROW_${lobbyMeta.escrowWalletId}_ADDRESS`;
+        const configuredEscrowAddr = process.env[envKeyValidate];
+        if (!configuredEscrowAddr) {
+          return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        }
+        if (String(configuredEscrowAddr).toLowerCase() !== String(txTo)) {
+          await auditLogger.logSuspiciousActivity('EVM wager to mismatched escrow', playerPublicKey, undefined, { lobbyId, expected: configuredEscrowAddr, actual: txTo });
+          return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
+        }
       }
       const expectedValue = ethers.parseUnits(String(lobbyMeta.amount), 18);
       const envKey = `EVM_ESCROW_${lobbyMeta.escrowWalletId}_ADDRESS`;
