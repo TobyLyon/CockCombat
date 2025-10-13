@@ -2075,6 +2075,7 @@ preparePromise.then(() => {
                         if (countdown < 0) {
                 clearInterval(countdownInterval);
                 try { io.to(lobbyId).emit('match_started'); } catch {}
+                try { console.log(`[match] match_started`, { lobbyId }); } catch {}
                 // Clear lobby association on all sockets so lobby counts drop immediately
                 try {
                   for (const [, conn] of activeConnections.entries()) {
@@ -2140,6 +2141,7 @@ preparePromise.then(() => {
               if (countdown < 0) {
                 clearInterval(countdownInterval);
                 try { io.to(lobbyId).emit('match_started'); } catch {}
+                try { console.log(`[match] match_started`, { lobbyId }); } catch {}
                 // Clear lobby association on all sockets so lobby counts drop immediately
                 try {
                   for (const [, conn] of activeConnections.entries()) {
@@ -2210,6 +2212,7 @@ preparePromise.then(() => {
             if (countdown < 0) {
               clearInterval(countdownInterval);
               io.to(lobbyId).emit('match_started');
+              try { console.log(`[match] match_started`, { lobbyId }); } catch {}
               // Clean up lobby connections (drop lobby association)
               try {
                 for (const [id, connection] of activeConnections.entries()) {
@@ -2316,6 +2319,10 @@ preparePromise.then(() => {
       };
       io.to(lobbyId).emit('queue_begin', qbPayload);
       try {
+        const humans = (expectedRoster || []).filter(r => !r.isAi).map(r => r.wallet);
+        console.log(`[match] queue_begin`, { lobbyId, matchSessionId, humans, totalRoster: (expectedRoster || []).length });
+      } catch {}
+      try {
         io.to(lobbyId).emit('debug_trace', {
           type: 'queue_begin', lobbyId, matchSessionId,
           expectedRosterWallets: (expectedRoster || []).map(r => r.wallet),
@@ -2394,6 +2401,10 @@ preparePromise.then(() => {
       try {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
+        try {
+          const humans = (finalRoster || []).filter(r => !r.isAi).map(r => r.wallet);
+          console.log(`[match] arena_lock_roster`, { lobbyId, matchSessionId, humansCount: humans.length, roundStartAtEpochMs });
+        } catch {}
         try { io.to(lobbyId).emit('debug_trace', { type: 'arena_lock_roster', lobbyId, matchSessionId, finalRosterWallets: finalRoster.map(r => r.wallet) }); } catch {}
         // Persist payout meta for this match session so end-of-match payout does not depend on lobby polling
         try {
@@ -2426,6 +2437,7 @@ preparePromise.then(() => {
         if (c < 0) {
           clearInterval(interval);
           try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
+          try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}
