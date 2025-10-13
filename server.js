@@ -1911,12 +1911,23 @@ preparePromise.then(() => {
         if (!lobbyId.includes('tutorial')) {
           try {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-            const res = await fetch(`${baseUrl}/api/lobbies`);
+            const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' });
             const all = await res.json();
             const liveLobby = all.find(l => l.id === lobbyId);
             if (liveLobby && liveLobby.amount > 0) {
               const humans = (liveLobby.players || []).filter(p => !p.isAi && presenceSet.has(String(p.playerId || '').toLowerCase()));
-              const allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
+              // Cross-check hasWagered with socket roster map to avoid API staleness
+              let allWagered = false;
+              try {
+                const roster = (global.lobbyRoster && global.lobbyRoster.get(lobbyId)) || null;
+                allWagered = humans.length > 0 && humans.every((p) => {
+                  const key = String(p.playerId || '').toLowerCase();
+                  const entry = roster && roster.get ? roster.get(key) : null;
+                  return Boolean(p.hasWagered) || Boolean(entry && entry.hasWagered);
+                });
+              } catch {
+                allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
+              }
               // Ensure escrow is assigned if missing (best-effort)
               if (!liveLobby.escrowWalletId) {
                 try {
@@ -1975,7 +1986,7 @@ preparePromise.then(() => {
               ;(async () => {
                 try {
                   const baseUrlLocal = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-                  const resLive = await fetch(`${baseUrlLocal}/api/lobbies`).catch(() => null);
+          const resLive = await fetch(`${baseUrlLocal}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
                   const allLive = resLive ? await resLive.json().catch(() => []) : [];
                   const liveLobby = Array.isArray(allLive) ? allLive.find(l => l && l.id === lobbyId) : null;
                   if (!liveLobby) return;
