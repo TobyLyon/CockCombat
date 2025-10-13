@@ -539,6 +539,13 @@ function SceneContent({
   // Maintain a brief window for remote hit flash to guarantee visibility even if context lags
   const remoteHitUntilRef = useRef<Record<string, number>>({})
 
+  // Track my own player id for damage overlay checks
+  const selfIdRef = useRef<string | null>(null)
+  useEffect(() => { try { selfIdRef.current = playerChicken?.id || null } catch {} }, [playerChicken])
+
+  // Lightweight screen red flash when the local player is hit
+  const [selfHitActive, setSelfHitActive] = useState(false)
+
   // Discrete input request flags to guarantee 1 key press => 1 action locally
   const jumpRequestRef = useRef<boolean>(false)
   const peckRequestRef = useRef<boolean>(false)
@@ -624,6 +631,13 @@ function SceneContent({
         lastAppliedDamageRef[targetId] = now
         // Ensure a guaranteed flash window for remote target
         try { remoteHitUntilRef.current[targetId] = now + 600 } catch {}
+        // If this client is the target, also trigger a brief screen red flash
+        try {
+          if (selfIdRef.current && targetId === selfIdRef.current) {
+            setSelfHitActive(true)
+            setTimeout(() => setSelfHitActive(false), 150)
+          }
+        } catch {}
         onPlayerDamage(targetId, amount, byId)
       } catch {}
     }
@@ -1117,7 +1131,15 @@ function SceneContent({
           invulnerableUntilMs={invulnerableUntilRef.current}
           remoteHumans={remoteHumansRef.current}
           remoteHitUntil={remoteHitUntilRef.current}
-          onAiDamagePlayer={() => { if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1) }}
+          onAiDamagePlayer={() => { 
+            try {
+              if (playerChicken?.id) {
+                setSelfHitActive(true)
+                setTimeout(() => setSelfHitActive(false), 150)
+              }
+            } catch {}
+            if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1)
+          }}
         />
       )}
 
@@ -1154,6 +1176,11 @@ function SceneContent({
         near={0.1}
         far={1000} // Adjusted far plane
       />
+      {selfHitActive && (
+        <Html fullscreen style={{ pointerEvents: 'none' }}>
+          <div className="fixed inset-0 z-[100]" style={{ background: 'rgba(255,0,0,0.18)', transition: 'opacity 120ms ease-out' }} />
+        </Html>
+      )}
     </>
   );
 }
