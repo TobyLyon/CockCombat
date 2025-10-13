@@ -118,13 +118,17 @@ preparePromise.then(() => {
   console.log('🚀 Socket.io server initialized');
   // Print loaded escrow wallets (if any)
   try {
-    const evm = require('./lib/evm-escrow-service.ts');
-    const svc = evm && (evm.evmEscrowService || evm.default);
-    const list = svc && svc.getWallet ? ['A','B','C'].map(id => svc.getWallet(id)).filter(Boolean) : [];
-    if (Array.isArray(list) && list.length > 0) {
-      console.log('🔐 Loaded EVM escrow wallets (runtime):', list.map(w => `${w.id}:${String(w.address).slice(0,6)}…${String(w.address).slice(-4)}`).join(', '));
-    } else {
-      console.warn('⚠️ No EVM escrow wallets available at runtime');
+    const evm = require('./lib/evm-config.js');
+    const { getEvmProvider } = evm || {};
+    if (getEvmProvider) {
+      // Probe provider and log configured addresses (if any)
+      const provider = getEvmProvider();
+      const addrs = ['A','B','C'].map(id => process.env[`EVM_ESCROW_${id}_ADDRESS`] || process.env[`ESCROW_WALLET_${id}_PUBLIC_KEY`]).filter(Boolean);
+      if (addrs.length > 0) {
+        console.log('🔐 Loaded EVM escrow wallets:', addrs.map(a => `${String(a).slice(0,6)}…${String(a).slice(-4)}`).join(', '));
+      } else {
+        console.warn('⚠️ No EVM escrow wallets available at runtime');
+      }
     }
   } catch {}
 
@@ -587,6 +591,14 @@ preparePromise.then(() => {
         return;
       }
       if (lobbyId) {
+        // Block leaving during active 5s lobby countdown (cutoff window)
+        try {
+          if (global.countdownActive && global.countdownActive[lobbyId]) {
+            try { socket.emit('leave_blocked', { lobbyId, reason: 'countdown_active' }); } catch {}
+            console.log(`🚫 Blocked lobby room leave during countdown for ${lobbyId} (socket ${socket.id})`);
+            return;
+          }
+        } catch {}
         console.log(`🚪 Client ${socket.id} leaving lobby room: ${lobbyId}`);
         socket.leave(lobbyId);
         
@@ -1497,19 +1509,27 @@ preparePromise.then(() => {
                       if (secret) {
                         console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
                         try {
-                          const { processPayoutServerOnly } = require('./lib/payout-service.js');
-                          const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined });
-                          console.log('💸 Ranked payout executed (server)', { matchId: mr.id, tx: res?.winnerSignature });
-                          try { room._payoutTriggered = true; } catch {}
-                          try {
-                            const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
-                            if (msid && winnerWallet) {
-                              if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
-                              const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
-                              global.payoutTriggeredBySession.add(idempoKey);
-                            }
-                          } catch {}
-                          return;
+                          const resp = await fetch(`${baseUrl}/api/payout`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+                            body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
+                          }).catch(()=>null)
+                          if (resp && (resp.ok || resp.status === 202)) {
+                            console.log('💸 Ranked payout executed via HTTP');
+                            try { room._payoutTriggered = true; } catch {}
+                            try {
+                              const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
+                              if (msid && winnerWallet) {
+                                if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
+                                const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
+                                global.payoutTriggeredBySession.add(idempoKey);
+                              }
+                            } catch {}
+                            return;
+                          } else {
+                            const txt = resp ? await resp.text().catch(()=> '') : 'no response'
+                            console.warn('Server payout HTTP error:', txt)
+                          }
                         } catch (eh) {
                           console.warn('Server payout error:', eh?.message || eh);
                         }
@@ -1831,9 +1851,19 @@ preparePromise.then(() => {
 
         console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
         try {
-          const { processPayoutServerOnly } = require('./lib/payout-service.js');
-          const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined });
-          console.log('💸 Ranked payout executed (server, client-declared end)', { matchId, tx: res?.winnerSignature });
+          const payoutSecret = process.env.PAYOUT_SERVER_SECRET;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const body = { winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined };
+          const resp = await fetch(`${baseUrl}/api/payout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${payoutSecret||''}` },
+            body: JSON.stringify(body)
+          }).catch(() => null);
+          if (!resp || !resp.ok) {
+            const txt = resp ? await resp.text().catch(() => '') : 'no response';
+            throw new Error(`payout_http_failed ${txt}`);
+          }
+          console.log('💸 Ranked payout executed (server, client-declared end)');
         } catch (e) {
           console.warn('⚠️ Server payout failed (client-declared end)', e?.message || e);
           // Release to allow retry later
@@ -2197,14 +2227,8 @@ preparePromise.then(() => {
               // Ensure escrow is assigned if missing (best-effort)
               if (!liveLobby.escrowWalletId) {
                 try {
-                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
-                  const wallet = evmEscrowService.getNextWallet();
-                  if (wallet && wallet.id) {
-                    const mem = lobbies.find(l => l && l.id === lobbyId);
-                    if (mem) mem.escrowWalletId = wallet.id;
-                    liveLobby.escrowWalletId = wallet.id;
-                    console.log(`🔐 Auto-assigned escrow ${wallet.id} to ${lobbyId} during ready check`);
-                  }
+                  // Defer escrow assignment to payout time; avoid TS require here
+                  console.warn(`⚠️ No escrow assigned for ${lobbyId} yet; will assign at payout time`);
                 } catch {}
               }
               if (!allWagered) {
@@ -2672,10 +2696,17 @@ preparePromise.then(() => {
       const minHumans = isTutorial ? 2 : 2;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
-          // Refund all expected humans (best-effort) via server-only function
-          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
+          // Refund all expected humans (best-effort) via HTTP API to avoid TS require issues
+          const token = process.env.REFUND_SERVER_TOKEN || ''
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`
           for (const w of requiredHumans) {
-            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'insufficient_players' }); } catch {}
+            try {
+              await fetch(`${baseUrl}/api/wager/refund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players', __serverOnlyToken: token })
+              }).catch(()=>null)
+            } catch {}
           }
         } catch {}
         try { io.to(lobbyId).emit('match_cancelled', { reason: 'insufficient_players' }); } catch {}
@@ -2692,9 +2723,16 @@ preparePromise.then(() => {
       if (!isTutorial) {
         const failedHumans = requiredHumans.filter(w => !presentHumans.includes(w));
         try {
-          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
+          const token = process.env.REFUND_SERVER_TOKEN || ''
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`
           for (const w of failedHumans) {
-            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'queue_no_show' }); } catch {}
+            try {
+              await fetch(`${baseUrl}/api/wager/refund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show', __serverOnlyToken: token })
+              }).catch(()=>null)
+            } catch {}
           }
         } catch {}
       }

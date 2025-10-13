@@ -229,11 +229,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const handleMatchStarting = (data: { countdown: number }) => {
       console.log('🚀 Match starting in:', data.countdown);
-      // Do not run a local lobby countdown; arena scene shows the synced 3..2..1
+      // Restore visible 5s lobby countdown and lock leaving during this window
+      try {
+        const value = typeof (data as any)?.countdown === 'number' ? (data as any).countdown : 5
+        setCountdown(value)
+      } catch {
+        setCountdown(5)
+      }
     };
 
     const handleMatchStarted = () => {
       console.log('🎮 Match started!');
+      setCountdown(null);
       transitionedToQueueRef.current = true;
       onStartMatch();
     };
@@ -534,7 +541,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
-      {/* Countdown overlay removed from lobby; arena displays synced 3..2..1 */}
+      {/* Lobby 5s countdown banner and overlay (joining/leaving locked) */}
+      {typeof countdown === 'number' && countdown >= 0 && (
+        <div className="absolute top-0 left-0 right-0 bg-blue-600/90 backdrop-blur-sm p-3 z-50">
+          <div className="text-center">
+            <div className="text-white text-sm font-bold pixel-font">
+              Match starting in {Math.max(1, countdown)}s — joining/leaving locked
+            </div>
+          </div>
+        </div>
+      )}
+      {typeof countdown === 'number' && countdown >= 0 && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="text-7xl sm:text-8xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.85)]">
+            {Math.max(1, countdown)}
+          </div>
+        </div>
+      )}
 
       {/* Majority-ready grace small notice (non-blocking) */}
       {typeof majoritySeconds === 'number' && majoritySeconds > 0 && (
@@ -707,7 +730,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
-          disabled={isProcessingWager}
+          disabled={isProcessingWager || typeof countdown === 'number'}
           className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
             isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'
@@ -829,6 +852,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         {/* Leave Lobby Button */}
         <Button
           onClick={onLeaveLobby}
+          disabled={typeof countdown === 'number'}
           variant="outline"
           className="w-full h-8 text-xs font-semibold border-2 border-red-500 text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-all pixel-font mt-1"
         >
