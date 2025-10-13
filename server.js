@@ -116,6 +116,17 @@ preparePromise.then(() => {
   global.socketIo = io;
 
   console.log('🚀 Socket.io server initialized');
+  // Print loaded escrow wallets (if any)
+  try {
+    const evm = require('./lib/evm-escrow-service.ts');
+    const svc = evm && (evm.evmEscrowService || evm.default);
+    const list = svc && svc.getWallet ? ['A','B','C'].map(id => svc.getWallet(id)).filter(Boolean) : [];
+    if (Array.isArray(list) && list.length > 0) {
+      console.log('🔐 Loaded EVM escrow wallets (runtime):', list.map(w => `${w.id}:${String(w.address).slice(0,6)}…${String(w.address).slice(-4)}`).join(', '));
+    } else {
+      console.warn('⚠️ No EVM escrow wallets available at runtime');
+    }
+  } catch {}
 
   // --- Payout Reconciliation Job ---
   // Periodically find completed matches without processed payouts and trigger server-side payout
@@ -1910,7 +1921,7 @@ preparePromise.then(() => {
               // Ensure escrow is assigned if missing (best-effort)
               if (!liveLobby.escrowWalletId) {
                 try {
-                  const { evmEscrowService } = require('./lib/evm-escrow-service.js');
+                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
                   const wallet = evmEscrowService.getNextWallet();
                   if (wallet && wallet.id) {
                     const mem = lobbies.find(l => l && l.id === lobbyId);
