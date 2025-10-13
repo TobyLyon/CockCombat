@@ -1353,43 +1353,29 @@ preparePromise.then(() => {
                         player2_tokens_wagered: rankedAmount
                       }).eq('id', matchIdBase);
                     } catch {}
-                    // Trigger payout via server-only function (no HTTP), with HTTP fallback
+                    // Trigger payout via internal HTTP API to avoid TS/CJS import issues on server-only path
                     try {
-                      const { processPayoutServerOnly } = require('./lib/payout-service.js');
-                      const houseWalletAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET;
-                      const houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
-                      const { winnerSignature, houseSignature } = await processPayoutServerOnly({
-                        winnerAddress: winnerWallet,
-                        prizePool: (prizePoolLamports / 1_000_000_000),
-                        matchId: mr.id,
-                        houseWalletAddress,
-                        houseCutPercentage,
-                        matchResult: { id: mr.id, escrow_wallet_id: escrowIdVal },
-                      });
-                      console.log('💸 Ranked payout executed for match_result:', mr.id, { winnerSignature, houseSignature });
-                      try { room._payoutTriggered = true; } catch {}
-                    } catch (e) {
-                      console.error('❌ Ranked payout failed (server fn):', e);
-                      try {
-                        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-                        const secret = process.env.PAYOUT_SERVER_SECRET;
-                        if (secret) {
-                          const resp = await fetch(`${baseUrl}/api/payout`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                            body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id })
-                          }).catch(() => null);
-                          if (resp && resp.ok) {
-                            console.log('💸 Ranked payout executed via HTTP fallback for match_result:', mr.id);
-                            try { room._payoutTriggered = true; } catch {}
-                          } else {
-                            const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                            console.warn('⚠️ HTTP payout fallback failed', { matchId: mr.id, details: txt });
-                          }
+                      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                      const secret = process.env.PAYOUT_SERVER_SECRET;
+                      if (secret) {
+                        const resp = await fetch(`${baseUrl}/api/payout`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id })
+                        }).catch(() => null);
+                        if (resp && resp.ok) {
+                          console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
+                          try { room._payoutTriggered = true; } catch {}
+                        } else {
+                          const status = resp ? resp.status : 'no_response';
+                          const txt = resp ? await resp.text().catch(() => '') : 'no response';
+                          console.warn('⚠️ HTTP payout failed', { matchId: mr.id, status, details: txt });
                         }
-                      } catch (eh) {
-                        console.warn('HTTP payout fallback error:', eh?.message || eh);
+                      } else {
+                        console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
                       }
+                    } catch (eh) {
+                      console.warn('HTTP payout error:', eh?.message || eh);
                     }
                   } else if (mrErr) {
                     console.error('❌ Failed to insert match_results:', mrErr);
