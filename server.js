@@ -2751,8 +2751,8 @@ preparePromise.then(() => {
       const interval = setInterval(() => {
         // Emit only 3..2..1 (no zero)
         if (c > 0) {
-          try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
-          try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+          try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c, roundStartAtEpochMs }); } catch {}
+          try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c, roundStartAtEpochMs }); } catch {}
         }
         c--;
         if (c <= 0) {

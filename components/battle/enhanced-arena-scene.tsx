@@ -682,7 +682,7 @@ function SceneContent({
           try { (window as any).__last_match_session_id = msid } catch {}
           socket.emit('join_match_room', { matchSessionId: msid })
         }
-        const startAt = Number((window as any)?.__last_round_start_at || 0)
+        const startAt = Number(payload?.roundStartAtEpochMs || (window as any)?.__last_round_start_at || 0)
         // If server included start time earlier, prefer that for drift-free countdown
         if (startAt > 0) {
           roundStartAtMsRef.current = startAt
