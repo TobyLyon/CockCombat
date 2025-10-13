@@ -2084,12 +2084,19 @@ preparePromise.then(() => {
         // Disabled tutorial AI backfill for now
         try { /* no-op */ } catch {}
         
-        // Filter out ghost humans (present in API but no live socket presence)
+        // Filter out ghost humans (present in API but no live presence)
+        // Presence = union of live sockets + in-memory lobbyPresence (set on player_ready)
         let presenceSet = new Set();
         try {
+          const activeSet = new Set();
           for (const [, c] of activeConnections.entries()) {
-            if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSet.add(String(c.walletAddress).toLowerCase());
+            if (c && c.currentLobby === lobbyId && c.walletAddress) activeSet.add(String(c.walletAddress).toLowerCase());
           }
+          const memSet = (global.lobbyPresence && global.lobbyPresence.get) ? (global.lobbyPresence.get(lobbyId) || new Set()) : new Set();
+          const union = new Set();
+          for (const v of activeSet.values()) union.add(v);
+          for (const v of memSet.values()) union.add(v);
+          presenceSet = union;
         } catch {}
         let eligiblePlayers = lobbyPlayers.filter(p => p.isAi || presenceSet.has(String(p.playerId || '').toLowerCase()));
         if (eligiblePlayers.length !== lobbyPlayers.length) {
@@ -2132,6 +2139,9 @@ preparePromise.then(() => {
         const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = eligiblePlayers.length >= minPlayers && 
                        readyPlayers.length === eligiblePlayers.length && hasHumanReady;
+        try {
+          console.log(`[READY][CHECK]`, { lobbyId, eligible: eligiblePlayers.length, ready: readyPlayers.length, min: minPlayers, isRanked: (lobby.matchType !== 'tutorial'), amount: (lobby.amount || 0), allReady });
+        } catch {}
 
         // Ranked enforcement: require wagers; auto-assign escrow if missing (do not block countdown)
         if (!lobbyId.includes('tutorial')) {
