@@ -967,8 +967,8 @@ preparePromise.then(() => {
             const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
             
             lobbyPlayers.push({
-              playerId: id,
-              username: `Player_${id.slice(0, 6)}`,
+              playerId: String(connection.walletAddress || id),
+              username: `Player_${String(connection.walletAddress || id).slice(0, 6)}`,
               chickenName: randomChicken,
               isReady: connection.isReady || false,
               isAi: false
@@ -1843,14 +1843,21 @@ preparePromise.then(() => {
       if (lobby) {
         // Merge API lobby players with socket ready status
         let lobbyPlayers = lobby.players.map(player => {
-          // Check if this player has a socket connection with ready status
-          let isReady = false;
-          for (const [connectionId, connection] of activeConnections.entries()) {
-            if (connection.currentLobby === lobbyId && 
-                connection.walletAddress === player.playerId) {
-              isReady = connection.isReady || false;
+          // Normalize identifiers for consistent matching
+          const pid = String(player.playerId || '');
+          const pidLower = pid.toLowerCase();
+          let connectionReady = false;
+          for (const [, connection] of activeConnections.entries()) {
+            const connWallet = String(connection.walletAddress || '').toLowerCase();
+            if (connection.currentLobby === lobbyId && connWallet === pidLower) {
+              connectionReady = !!connection.isReady;
               break;
             }
+          }
+          // Ranked authority: consider a human ready if they have wagered, regardless of socket flag
+          let isReady = connectionReady;
+          if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
+            isReady = Boolean(player.hasWagered) || connectionReady;
           }
           
           return {
@@ -1903,7 +1910,13 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready (uniform policy)
         const minPlayers = lobbyId.includes('tutorial') ? 2 : 2;
-        const readyPlayers = eligiblePlayers.filter(p => p.isReady || (lobby.matchType === 'tutorial' && p.isAi));
+        // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
+        const readyPlayers = eligiblePlayers.filter(p => {
+          if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
+            return Boolean(p.isReady) || Boolean(p.hasWagered);
+          }
+          return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
+        });
         const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = eligiblePlayers.length >= minPlayers && 
                        readyPlayers.length === eligiblePlayers.length && hasHumanReady;
