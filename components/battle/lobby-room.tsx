@@ -235,6 +235,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const handleMatchStarted = () => {
       console.log('🎮 Match started!');
       transitionedToQueueRef.current = true;
+      // Reset local wager/ready flags at round start; next round requires new wager
+      try { setHasWagered(false); } catch {}
+      try { setIsReady(false); } catch {}
       onStartMatch();
     };
 
@@ -259,6 +262,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         if (!payload || payload.lobbyId !== lobby.id) return
         const { action, player } = payload
         const pid = String(player?.playerId || '').toLowerCase()
+        // If this diff is about me, sync local hasWagered flag from server
+        try {
+          const me = getCurrentPlayerId()
+          if (me && pid === String(me).toLowerCase()) {
+            setHasWagered(Boolean(player?.hasWagered))
+            setIsReady(Boolean(player?.isReady))
+          }
+        } catch {}
         setPlayers(prev => {
           const map = new Map(prev.map(p=>[p.playerId,p]))
           if (action === 'remove') {

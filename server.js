@@ -429,6 +429,8 @@ preparePromise.then(() => {
       const connection = activeConnections.get(socket.id);
       if (connection) {
         connection.walletAddress = normalized;
+        // Reset stale ready state on new wallet registration to avoid sticky readiness across rounds
+        try { connection.isReady = false; } catch {}
         console.log(`✅ Wallet ${normalized} registered to socket ${socket.id}`);
         try { socket.emit('wallet_registered', { walletAddress: normalized }); } catch {}
 
@@ -747,9 +749,9 @@ preparePromise.then(() => {
           const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-        if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
+          if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
             const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
-          let hasWagered = !!(me && me.hasWagered);
+            let hasWagered = !!(me && me.hasWagered);
             // Fallback to in-memory roster if API snapshot hasn't updated yet
             if (!hasWagered) {
               try {
@@ -758,8 +760,8 @@ preparePromise.then(() => {
                 hasWagered = !!(prior && prior.hasWagered);
               } catch {}
             }
-          // If we have proof of wager in roster, force ready true
-          if (hasWagered) finalReady = true;
+            // Only allow ready=true if wagered; otherwise force false
+            finalReady = finalReady && hasWagered;
           }
         } catch {}
 
