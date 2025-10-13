@@ -2303,6 +2303,21 @@ preparePromise.then(() => {
                   const c = getLobbyCounts(lobbyId);
                   io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
                 } catch {}
+                // Reset readiness and wagers for this lobby to avoid sticky UI state
+                try {
+                  // Reset socket-only roster entries
+                  const map = getRosterMap(lobbyId);
+                  for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); }
+                  // Reset in-memory API lobby players
+                  const lob = lobbies.find(l => l && l.id === lobbyId);
+                  if (lob && Array.isArray(lob.players)) {
+                    lob.players = lob.players.map(p => ({ ...p, isReady: false, hasWagered: false }));
+                  }
+                  // Emit a fresh snapshot so lobby UIs clear ready states
+                  const version = nextLobbyVersion(lobbyId);
+                  const snap = await buildLobbySnapshot(lobbyId);
+                  if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version });
+                } catch {}
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
                 try { startQueuePhase(lobbyId, io, overrideRoster).catch(() => {}); } catch {}
