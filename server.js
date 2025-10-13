@@ -1248,24 +1248,36 @@ preparePromise.then(() => {
                 matchIdBase = matchRow?.id || null;
               } catch {}
 
-              // Ranked payout orchestrator: if lobby info available and amount > 0, record match_results and trigger payout
+              // Ranked payout orchestrator: prefer captured queue meta; fallback to polling only if missing
               try {
-                // Try to infer lobby from participants' last lobby or from room metadata (not stored here), so fallback to unknown
-                // Here we compute prize pool based on live lobby amounts if we can find a matching lobby; otherwise skip
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-                const lobbyRes = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-                const lobbies = lobbyRes ? await lobbyRes.json().catch(() => []) : [];
-                // Find any ranked lobby with either player wallet present
-                const rankedLobby = Array.isArray(lobbies) ? lobbies.find(l => l.amount > 0 && (l.players || []).some(p => p.playerId === player1Wallet || p.playerId === player2Wallet)) : null;
-                if (rankedLobby && rankedLobby.amount > 0) {
-                  const humans = (rankedLobby.players || []).filter(p => !p.isAi);
-                  const prizePoolLamports = Math.round(rankedLobby.amount * humans.length * 1_000_000_000);
+                const winnerLower = String(winnerWallet || '').toLowerCase();
+                const meta = (global.recentMatchMetaByWallet && global.recentMatchMetaByWallet.get(winnerLower)) || null;
+                let rankedAmount = meta && typeof meta.amount === 'number' ? meta.amount : 0;
+                let humansCount = meta && typeof meta.humansCount === 'number' ? meta.humansCount : 0;
+                let escrowIdVal = meta && meta.escrow ? meta.escrow : null;
+                let rankedLobby: any = null;
+                if (!(rankedAmount > 0 && humansCount > 0)) {
+                  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                  const lobbyRes = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+                  const lobbyList = lobbyRes ? await lobbyRes.json().catch(() => []) : [];
+                  rankedLobby = Array.isArray(lobbyList) ? lobbyList.find(l => l.amount > 0 && (l.players || []).some(p => p.playerId === player1Wallet || p.playerId === player2Wallet)) : null;
+                  if (rankedLobby) {
+                    rankedAmount = rankedLobby.amount || 0;
+                    humansCount = (rankedLobby.players || []).filter(p => !p.isAi).length || 0;
+                    escrowIdVal = rankedLobby.escrowWalletId || null;
+                  }
+                }
+                if (rankedAmount > 0 && humansCount > 0) {
+                  const prizePoolLamports = Math.round(rankedAmount * humansCount * 1_000_000_000);
 
                   // Create match_results row
-                  const participants = humans.map((p) => ({ wallet: p.playerId, wager_amount: rankedLobby.amount }));
+                  const participants = meta && Array.isArray(meta.humans)
+                    ? meta.humans.map((w: string) => ({ wallet: w, wager_amount: rankedAmount }))
+                    : ((Array.isArray(rankedLobby?.players) ? rankedLobby.players.filter((p: any) => !p.isAi) : [])
+                        .map((p: any) => ({ wallet: p.playerId, wager_amount: rankedAmount })));
                   const { data: mr, error: mrErr } = await supabase.from('match_results').insert({
-                    lobby_id: rankedLobby.id,
-                    escrow_wallet_id: rankedLobby.escrowWalletId || null,
+                    lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
+                    escrow_wallet_id: escrowIdVal || null,
                     match_started_at: new Date(room.startTime || Date.now()).toISOString(),
                     match_ended_at: new Date().toISOString(),
                     winner_wallet: winnerWallet,
@@ -1279,8 +1291,8 @@ preparePromise.then(() => {
                     // Also fill in wager amounts on the matches table for history
                     try {
                       await supabase.from('matches').update({
-                        player1_tokens_wagered: rankedLobby.amount,
-                        player2_tokens_wagered: rankedLobby.amount
+                        player1_tokens_wagered: rankedAmount,
+                        player2_tokens_wagered: rankedAmount
                       }).eq('id', matchIdBase);
                     } catch {}
                     // Trigger payout via server-only function (no HTTP)
@@ -1294,7 +1306,7 @@ preparePromise.then(() => {
                         matchId: mr.id,
                         houseWalletAddress,
                         houseCutPercentage,
-                        matchResult: mr,
+                        matchResult: { id: mr.id, escrow_wallet_id: escrowIdVal },
                       });
                       console.log('💸 Ranked payout executed for match_result:', mr.id, { winnerSignature, houseSignature });
                       try { room._payoutTriggered = true; } catch {}
@@ -1311,9 +1323,11 @@ preparePromise.then(() => {
               // Server-side profile updates and transactions (best-effort)
               try {
                 const houseCutPct = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
-                const isRanked = !!(rankedLobby && rankedLobby.amount > 0);
-                const wager = isRanked ? Number(rankedLobby.amount || 0) : 0;
-                const humansCount = isRanked ? ((rankedLobby.players || []).filter(p => !p.isAi).length || 0) : 0;
+                // Prefer queue meta for ledger entries
+                const meta = (global.recentMatchMetaByWallet && global.recentMatchMetaByWallet.get(String(winnerWallet||'').toLowerCase())) || null;
+                const isRanked = !!((meta && meta.amount > 0) || (typeof rankedLobby?.amount === 'number' && rankedLobby.amount > 0));
+                const wager = isRanked ? Number((meta?.amount ?? rankedLobby?.amount) || 0) : 0;
+                const humansCount = isRanked ? (meta?.humansCount ?? ((rankedLobby?.players || []).filter(p => !p.isAi).length || 0)) : 0;
                 const prizePool = (isRanked && humansCount > 0) ? (wager * humansCount) : 0;
                 const winnerCut = prizePool > 0 ? prizePool * (1 - houseCutPct) : 0;
                 const wWallet = winnerWallet;
@@ -2276,6 +2290,17 @@ preparePromise.then(() => {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
         try { io.to(lobbyId).emit('debug_trace', { type: 'arena_lock_roster', lobbyId, matchSessionId, finalRosterWallets: finalRoster.map(r => r.wallet) }); } catch {}
+        // Persist payout meta for this match session so end-of-match payout does not depend on lobby polling
+        try {
+          const humans = finalRoster.filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase());
+          const amount = lobby && typeof lobby.amount === 'number' ? lobby.amount : 0;
+          const escrow = lobby && lobby.escrowWalletId ? lobby.escrowWalletId : null;
+          if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
+          if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
+          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow };
+          try { global.recentMatchMetaBySession.set(matchSessionId, meta); } catch {}
+          try { humans.forEach(w => { global.recentMatchMetaByWallet.set(w, meta); }); } catch {}
+        } catch {}
         // Ensure all humans join the match room immediately
         try {
           const humans = finalRoster.filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase());
