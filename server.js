@@ -754,13 +754,21 @@ preparePromise.then(() => {
           // Derive hasWagered from live lobby (already read above) to persist in roster
           let hasWagered = false;
           try {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const baseUrl = `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
             if (liveLobby) {
               const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
               hasWagered = !!(me && me.hasWagered);
+            }
+          } catch {}
+          // Fallback to in-memory roster
+          try {
+            if (!hasWagered && global.lobbyRoster && global.lobbyRoster.get) {
+              const map = global.lobbyRoster.get(lobbyId);
+              const prior = map && map.get ? map.get(normalizedPlayerId) : null;
+              if (prior && prior.hasWagered) hasWagered = true;
             }
           } catch {}
           const entry = await upsertRoster(lobbyId, normalizedPlayerId, { hasWagered, isReady: finalReady });
@@ -2039,9 +2047,32 @@ preparePromise.then(() => {
             if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSet.add(String(c.walletAddress).toLowerCase());
           }
         } catch {}
-        const eligiblePlayers = lobbyPlayers.filter(p => p.isAi || presenceSet.has(String(p.playerId || '').toLowerCase()));
+        let eligiblePlayers = lobbyPlayers.filter(p => p.isAi || presenceSet.has(String(p.playerId || '').toLowerCase()));
         if (eligiblePlayers.length !== lobbyPlayers.length) {
           console.log(`🧹 Filtered ${lobbyPlayers.length - eligiblePlayers.length} ghost player(s) from ${lobbyId} for readiness check`);
+        }
+
+        // Presence-based fallback when API list is empty/stale
+        if (eligiblePlayers.length === 0 && presenceSet.size > 0) {
+          try {
+            const built = [];
+            for (const addr of presenceSet.values()) {
+              const idLower = String(addr || '').toLowerCase();
+              let readyFlag = false;
+              for (const [, c] of activeConnections.entries()) {
+                if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === idLower) { readyFlag = !!c.isReady; break; }
+              }
+              let hasWageredFlag = false;
+              try {
+                const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
+                const cur = map && map.get ? map.get(idLower) : null;
+                hasWageredFlag = !!(cur && cur.hasWagered);
+              } catch {}
+              built.push({ playerId: addr, username: String(addr).slice(0,8)+'...', chickenName: 'Default', isReady: readyFlag, isAi: false, hasWagered: hasWageredFlag });
+            }
+            eligiblePlayers = built;
+            console.log(`[READY][FALLBACK] Using presence-based roster for ${lobbyId}`, { count: eligiblePlayers.length });
+          } catch {}
         }
 
         // Check if we have minimum players and all are ready (uniform policy)
@@ -2049,7 +2080,7 @@ preparePromise.then(() => {
         // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
-            return Boolean(p.isReady) || Boolean(p.hasWagered);
+            return Boolean(p.isReady) || Boolean((p as any).hasWagered);
           }
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
