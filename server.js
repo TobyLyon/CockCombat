@@ -1753,6 +1753,7 @@ preparePromise.then(() => {
         // Create a match_results row to obtain a matchId for payout validation
         let matchId = null;
         let selectedEscrow = (meta && meta.escrow) ? meta.escrow : null;
+        try { if (!matchId && meta && meta.matchResultId) matchId = meta.matchResultId; } catch {}
         try {
           if (!global.cachedEscrowBySession) global.cachedEscrowBySession = new Map();
           if (!selectedEscrow) selectedEscrow = global.cachedEscrowBySession.get(msid) || null;
@@ -2315,8 +2316,9 @@ preparePromise.then(() => {
                   }
                   // Emit a fresh snapshot so lobby UIs clear ready states
                   const version = nextLobbyVersion(lobbyId);
-                  const snap = await buildLobbySnapshot(lobbyId);
-                  if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version });
+                  buildLobbySnapshot(lobbyId).then((snap) => {
+                    try { if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version }); } catch {}
+                  }).catch(() => {});
                 } catch {}
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 const overrideRoster = majorityRoster.map(p => ({ wallet: p.playerId, isAi: p.isAi, username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'), chickenName: p.chickenName || 'Default' }));
@@ -2534,6 +2536,39 @@ preparePromise.then(() => {
       };
       try { global.queueSessions.set(matchSessionId, session); } catch {}
       try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
+      // Pre-create match_results for ranked matches to guarantee a matchId
+      try {
+        const humans = (expectedRoster || []).filter(r => !r.isAi).map(r => r.wallet);
+        if (!isTutorial && humans.length >= 2) {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (supabaseUrl && supabaseServiceKey) {
+            const { createClient } = require('@supabase/supabase-js');
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const participants = humans.map((w) => ({ wallet: w, wager_amount: Number(lobbyMeta?.amount || 0) }));
+            const { data: mrRow } = await supabase.from('match_results').insert({
+              lobby_id: lobbyId,
+              escrow_wallet_id: escrowIdVal || null,
+              match_started_at: new Date().toISOString(),
+              status: 'in_progress',
+              total_prize_pool: Number(lobbyMeta?.amount || 0) * humans.length,
+              participants,
+              game_data: { matchSessionId },
+              payout_processed: false,
+            }).select('id').single();
+            const mrId = mrRow?.id || null;
+            try {
+              if (mrId) {
+                if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
+                if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
+                const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount: Number(lobbyMeta?.amount || 0), escrow: escrowIdVal, matchResultId: mrId };
+                global.recentMatchMetaBySession.set(matchSessionId, meta);
+                humans.forEach(w => global.recentMatchMetaByWallet.set(String(w).toLowerCase(), meta));
+              }
+            } catch {}
+          }
+        }
+      } catch {}
 
       // Notify clients to begin queue confirmation
         const qbPayload = {
