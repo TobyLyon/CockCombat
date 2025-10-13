@@ -94,9 +94,24 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (tx.from?.toLowerCase() !== playerPublicKey.toLowerCase()) {
         return NextResponse.json({ error: 'Sender mismatch' }, { status: 400 });
       }
+      // Ensure lobby escrow is assigned; if missing, infer from tx.to
+      const txTo = String(tx.to || '').toLowerCase();
       if (!lobby.escrowWalletId) {
-        await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
-        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+        try {
+          const a = (process.env.EVM_ESCROW_A_ADDRESS || '').toLowerCase();
+          const b = (process.env.EVM_ESCROW_B_ADDRESS || '').toLowerCase();
+          const c = (process.env.EVM_ESCROW_C_ADDRESS || '').toLowerCase();
+          const matchId = txTo === a ? 'A' : txTo === b ? 'B' : txTo === c ? 'C' : null;
+          if (matchId) {
+            lobby.escrowWalletId = matchId as any;
+            console.log(`🔐 Inferred escrow ${matchId} for lobby ${lobbyId} from tx recipient`);
+          } else {
+            await auditLogger.logSuspiciousActivity('EVM wager to unknown escrow', playerPublicKey, undefined, { lobbyId, signature, txTo });
+            return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+          }
+        } catch {
+          return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
+        }
       }
       const expectedValue = ethers.parseUnits(lobby.amount.toString(), 18);
       const envKey = `EVM_ESCROW_${lobby.escrowWalletId}_ADDRESS`;
@@ -104,7 +119,7 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (!expectedEscrow) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
       }
-      if (tx.to?.toLowerCase() !== expectedEscrow.toLowerCase()) {
+      if (txTo !== expectedEscrow.toLowerCase()) {
         await auditLogger.logSuspiciousActivity('EVM wager to wrong escrow', playerPublicKey, undefined, { lobbyId, expectedEscrow, actual: tx.to });
         return NextResponse.json({ error: 'Recipient mismatch' }, { status: 400 });
       }

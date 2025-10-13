@@ -41,10 +41,12 @@ export async function POST(request: Request) {
 
     if (isBsc()) {
       // EVM path: return an unsigned tx (player -> escrow)
+      // Assign a single escrow wallet per lobby round and reuse it for all participants
       let w = lobby.escrowWalletId ? evmEscrowService.getWallet(lobby.escrowWalletId as any) : undefined;
       if (!w) {
         w = evmEscrowService.getNextWallet();
         lobby.escrowWalletId = w.id;
+        console.log(`🔐 Assigned EVM Escrow Wallet ${w.id} to lobby ${lobbyId}`);
       }
       const provider = getEvmProvider();
       const valueWei = ethers.parseUnits(lobby.amount.toString(), 18);
