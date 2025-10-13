@@ -5,6 +5,7 @@ import { auditLogger } from '@/lib/audit-logger'
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter'
 import { isBsc } from '@/lib/chain'
 import { evmEscrowService } from '@/lib/evm-escrow-service'
+import { sendIdempotentPayment } from '@/lib/evm-payments'
 import { ethers } from 'ethers'
 
 export async function POST(req: NextRequest) {
@@ -72,16 +73,18 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   if (!escrow) throw new Error('Escrow wallet unavailable')
   const wei = ethers.parseUnits(String(lobby.amount), 18)
   const refundTo = String(((player as any)?.__fundingWallet || playerPublicKey) as string)
-  const txHash = await evmEscrowService.transferNative(refundTo, wei, escrow)
+  const opId = `refund:${lobbyId}:${String(player.playerId).toLowerCase()}`
+  const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
+  const txHash = res.txHash
   console.log('↩️ refund_executed', { lobbyId, player: String(player.playerId), amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
   try { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } catch {}
   try {
     await auditLogger.log({
-      eventType: 'wager_refund',
+      eventType: 'payout_executed',
       actorWallet: playerPublicKey,
       endpoint: 'server:processRefund',
       severity: 'info',
-      metadata: { lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
+      metadata: { kind: 'refund', lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
     })
   } catch {}
   try {

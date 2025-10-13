@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { isBsc } from '@/lib/chain';
 import { evmEscrowService } from '@/lib/evm-escrow-service';
+import { sendIdempotentPayment } from '@/lib/evm-payments';
 import { getEvmExplorerUrl } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 
@@ -308,72 +309,12 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   const walletId = matchResult?.escrow_wallet_id as any | undefined;
   const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
   const from = wallet || evmEscrowService.getNextWallet();
-  // Optional: record idempotent ops in DB if service key configured
-  const canDb = Boolean(supabaseUrl && supabaseServiceKey);
-  const supabase = canDb ? createClient(supabaseUrl, supabaseServiceKey) : null;
-  const opWinnerId = `payout:${matchId || 'na'}:winner:${String(winnerAddress).toLowerCase()}`;
-  const opHouseId = `payout:${matchId || 'na'}:house:${String(house).toLowerCase()}`;
-  // Check idempotency for winner
-  if (supabase) {
-    try {
-      const { data: existing } = await supabase.from('payments').select('op_id, tx_hash, state').eq('op_id', opWinnerId).maybeSingle();
-      if (existing && existing.tx_hash) {
-        console.log('🧾 payout idempotent skip (winner)', opWinnerId);
-      } else {
-        await supabase.from('payments').upsert({
-          op_id: opWinnerId,
-          type: 'payout',
-          from_address: from.address,
-          to_address: winnerAddress,
-          token: 'BNB',
-          amount_wei: winnerCutWei.toString(),
-          state: 'pending',
-          metadata: { matchId }
-        }, { onConflict: 'op_id' });
-      }
-    } catch {}
-  }
-  // Send winner tx
-  const winnerTxHash = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
-  if (supabase) {
-    try {
-      await supabase.from('payments').update({ tx_hash: winnerTxHash, state: 'sent' }).eq('op_id', opWinnerId);
-      await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opWinnerId);
-      // Upsert wallet row
-      await supabase.from('escrow_wallets').upsert({ id: (from as any).id, address: from.address });
-    } catch {}
-  }
-  // Check idempotency for house
-  if (supabase) {
-    try {
-      const { data: existingH } = await supabase.from('payments').select('op_id, tx_hash, state').eq('op_id', opHouseId).maybeSingle();
-      if (existingH && existingH.tx_hash) {
-        console.log('🧾 payout idempotent skip (house)', opHouseId);
-      } else {
-        await supabase.from('payments').upsert({
-          op_id: opHouseId,
-          type: 'payout',
-          from_address: from.address,
-          to_address: house,
-          token: 'BNB',
-          amount_wei: houseCutWei.toString(),
-          state: 'pending',
-          metadata: { matchId }
-        }, { onConflict: 'op_id' });
-      }
-    } catch {}
-  }
-  // Send house tx
-  const houseTxHash = await evmEscrowService.transferNative(house, houseCutWei, from);
-  if (supabase) {
-    try {
-      await supabase.from('payments').update({ tx_hash: houseTxHash, state: 'sent' }).eq('op_id', opHouseId);
-      await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opHouseId);
-      await supabase.from('escrow_wallets').upsert({ id: (from as any).id, address: from.address });
-    } catch {}
-  }
-  const winnerSignature = winnerTxHash;
-  const houseSignature = houseTxHash;
+  const opWinnerId = `payout:${matchId || 'na'}:winner:${String(winnerAddress).toLowerCase()}`
+  const opHouseId = `payout:${matchId || 'na'}:house:${String(house).toLowerCase()}`
+  const winRes = await sendIdempotentPayment({ opId: opWinnerId, type: 'payout', fromEscrowId: (from as any).id, to: winnerAddress, amountWei: winnerCutWei })
+  const houseRes = await sendIdempotentPayment({ opId: opHouseId, type: 'house', fromEscrowId: (from as any).id, to: house, amountWei: houseCutWei })
+  const winnerSignature = winRes.txHash
+  const houseSignature = houseRes.txHash
   console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: Number(ethers.formatUnits(winnerCutWei, 18)), houseAmount: Number(ethers.formatUnits(houseCutWei, 18)), escrow: from?.id, winnerSignature, houseSignature });
   return { winnerSignature, houseSignature };
 }
