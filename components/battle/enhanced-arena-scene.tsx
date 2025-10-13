@@ -252,30 +252,25 @@ function SceneContent({
   const lookAtPosition = useRef<THREE.Vector3 | null>(null);
 
   const lastUpdateTime = useRef(Date.now());
-  // Round start freeze/invulnerability
+  // Round start freeze/invulnerability (driven by server epoch)
   const freezeUntilRef = useRef<number>(0)
   const invulnerableUntilRef = useRef<number>(0)
   const hasArmedCountdownRef = useRef<boolean>(false)
 
-  // Arm freeze/invulnerability immediately on entering battle
+  // Do NOT locally arm countdown; rely on server-provided epoch broadcast
   useEffect(() => {
     if (gameState === 'battle' && !hasArmedCountdownRef.current) {
-      const now = Date.now()
-      freezeUntilRef.current = now + 3000
-      invulnerableUntilRef.current = now + 4000
+      // Keep armed flag to avoid re-initialization loops; actual times set when socket events arrive
       hasArmedCountdownRef.current = true
     }
   }, [gameState])
 
-  // Ensure a visible countdown even if we mounted after match_started
+  // Remove synthesized local countdown; wait for server epoch via socket events
   useEffect(() => {
-    if (gameState === 'battle') {
-      const startAt = roundStartAtMsRef.current || 0
-      if (!(startAt > Date.now())) {
-        roundStartAtMsRef.current = Date.now() + 3000
-        freezeUntilRef.current = roundStartAtMsRef.current
-        invulnerableUntilRef.current = roundStartAtMsRef.current + 1000
-      }
+    // Intentional no-op: countdown will be set from 'arena_lock_roster'/'round_start' events only
+    if (gameState !== 'battle') {
+      roundStartAtMsRef.current = null
+      setSyncedCountdown(null)
     }
   }, [gameState])
 
@@ -676,12 +671,11 @@ function SceneContent({
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
     socket.on('round_start', onRoundStartJoin)
-    // Fallback: if we only get match_started (no epoch), synthesize a 3s countdown
+    // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
     const onMatchStarted = () => {
-      if (!roundStartAtMsRef.current || roundStartAtMsRef.current <= Date.now()) {
-        roundStartAtMsRef.current = Date.now() + 3000
-        freezeUntilRef.current = roundStartAtMsRef.current
-        invulnerableUntilRef.current = roundStartAtMsRef.current + 1000
+      if (!roundStartAtMsRef.current) {
+        freezeUntilRef.current = Date.now()
+        invulnerableUntilRef.current = Date.now() + 1000
       }
     }
     socket.on('match_started', onMatchStarted)
