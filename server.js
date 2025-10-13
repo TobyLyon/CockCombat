@@ -2712,6 +2712,8 @@ preparePromise.then(() => {
       try {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
+        // Also notify the dedicated match room for clients already transitioned
+        try { io.to(matchSessionId).emit('arena_lock_roster', payload); } catch {}
         try {
           const humans = (finalRoster || []).filter(r => !r.isAi).map(r => r.wallet);
           console.log(`[match] arena_lock_roster`, { lobbyId, matchSessionId, humansCount: humans.length, roundStartAtEpochMs });
@@ -2744,10 +2746,12 @@ preparePromise.then(() => {
       let c = 3;
       const interval = setInterval(() => {
         try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+        try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
         c--;
         if (c < 0) {
           clearInterval(interval);
-          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
+          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
+          try { io.to(matchSessionId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
           try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}

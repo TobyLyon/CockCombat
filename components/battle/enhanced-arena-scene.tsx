@@ -672,6 +672,29 @@ function SceneContent({
       } catch {}
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
+    // Server emits per-second countdown aligned to round start; update local ref/UI
+    const onRoundCountdown = (payload: any) => {
+      try {
+        const msid = payload?.matchSessionId
+        if (msid) {
+          try { (window as any).__last_match_session_id = msid } catch {}
+          socket.emit('join_match_room', { matchSessionId: msid })
+        }
+        const startAt = Number((window as any)?.__last_round_start_at || 0)
+        // If server included start time earlier, prefer that for drift-free countdown
+        if (startAt > 0) {
+          roundStartAtMsRef.current = startAt
+          // Ensure freeze follows the same start point
+          freezeUntilRef.current = startAt
+        }
+        // Fall back to numeric count if startAt unknown
+        const count = Number(payload?.count)
+        if (!isNaN(count)) {
+          setSyncedCountdown(count)
+        }
+      } catch {}
+    }
+    socket.on('round_countdown', onRoundCountdown)
     socket.on('round_start', onRoundStartJoin)
     // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
     const onMatchStarted = () => {
@@ -687,20 +710,20 @@ function SceneContent({
       socket.off('player_state', onPlayerState)
       socket.off('player_damage', onRemotePlayerDamage)
       socket.off('arena_lock_roster', onArenaLockJoin)
+      socket.off('round_countdown', onRoundCountdown)
       socket.off('round_start', onRoundStartJoin)
       socket.off('match_started', onMatchStarted)
       socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])
 
-  // Synced countdown updater
+  // Synced countdown updater: prefer absolute start time, else keep last server count
   useEffect(() => {
     const id = setInterval(() => {
       const startAt = roundStartAtMsRef.current
       if (typeof startAt === 'number' && startAt > Date.now()) {
-        setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
-      } else {
-        if (syncedCountdown !== null) setSyncedCountdown(null)
+        const next = Math.max(0, Math.ceil((startAt - Date.now()) / 1000))
+        if (syncedCountdown !== next) setSyncedCountdown(next)
       }
     }, 100)
     return () => clearInterval(id)
@@ -736,11 +759,13 @@ function SceneContent({
     // Skip if game is not in battle state
     if (gameState !== 'battle') return; // Note: 'battle' might need to be GameState.PLAYING or similar
 
-    // Arm a 3s freeze and 4s invulnerability once at mount
+    // Arm a 3s freeze and 4s invulnerability at round start (server-synced when available)
     if (!hasArmedCountdownRef.current) {
-      const nowMs = Date.now()
-      freezeUntilRef.current = nowMs + 3000
-      invulnerableUntilRef.current = nowMs + 4000
+      const startAt = roundStartAtMsRef.current && roundStartAtMsRef.current > Date.now()
+        ? roundStartAtMsRef.current
+        : Date.now() + 3000
+      freezeUntilRef.current = startAt
+      invulnerableUntilRef.current = startAt + 1000
       hasArmedCountdownRef.current = true
     }
     
