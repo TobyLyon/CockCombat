@@ -1497,7 +1497,7 @@ preparePromise.then(() => {
                       if (secret) {
                         console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
                         try {
-                          const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+                          const { processPayoutServerOnly } = require('./lib/payout-service.js');
                           const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined });
                           console.log('💸 Ranked payout executed (server)', { matchId: mr.id, tx: res?.winnerSignature });
                           try { room._payoutTriggered = true; } catch {}
@@ -1831,7 +1831,7 @@ preparePromise.then(() => {
 
         console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
         try {
-          const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+          const { processPayoutServerOnly } = require('./lib/payout-service.js');
           const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined });
           console.log('💸 Ranked payout executed (server, client-declared end)', { matchId, tx: res?.winnerSignature });
         } catch (e) {
