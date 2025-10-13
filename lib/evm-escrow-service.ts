@@ -94,6 +94,13 @@ class EvmEscrowService {
   public async transferNative(to: string, wei: bigint, from?: EvmEscrowWallet): Promise<string> {
     const w = from || this.getNextWallet();
     return this.withWalletLock(w.id, async () => {
+      // Non-blocking chainId warning to catch misconfig
+      try {
+        const network = await w.wallet.provider!.getNetwork();
+        if (Number(network?.chainId) !== 56) {
+          console.warn(`[EVM][WARN] Sending on non-mainnet chainId=${String(network?.chainId)} to=${to} valueWei=${wei.toString()}`);
+        }
+      } catch {}
       const tx = await w.wallet.sendTransaction({ to, value: wei });
       const receipt = await tx.wait(1);
       if (!receipt || receipt.status !== 1) {

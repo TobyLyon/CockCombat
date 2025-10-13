@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       winnerAddress: z.string().min(32),
       prizePool: z.number().positive(), // in BNB
       matchId: z.string().optional(),
+      matchSessionId: z.string().optional(),
       escrowWalletId: z.string().optional(),
     });
 
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { winnerAddress, prizePool, matchId, escrowWalletId } = parsed.data;
+    const { winnerAddress, prizePool, matchId, matchSessionId, escrowWalletId } = parsed.data;
 
     if (!winnerAddress || !prizePool) {
       return NextResponse.json({ error: "Winner address and prize pool are required" }, { status: 400 });
@@ -185,7 +186,7 @@ export async function POST(request: Request) {
     }
 
     // Perform the payout via server-only helper
-    const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
+    const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
@@ -303,8 +304,8 @@ export async function POST(request: Request) {
 }
 
 // Server-only entrypoint to execute payout logic without HTTP
-export async function processPayoutServerOnly(args: { winnerAddress: string; prizePool: number; matchId?: string | null; houseWalletAddress?: string; houseCutPercentage?: number; matchResult?: any; escrowWalletId?: string }) {
-  const { winnerAddress, prizePool, matchId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04'), matchResult, escrowWalletId } = args;
+export async function processPayoutServerOnly(args: { winnerAddress: string; prizePool: number; matchId?: string | null; matchSessionId?: string | null; houseWalletAddress?: string; houseCutPercentage?: number; matchResult?: any; escrowWalletId?: string }) {
+  const { winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04'), matchResult, escrowWalletId } = args;
   if (!isBsc()) throw new Error('Unsupported chain');
   if (!houseWalletAddress && !process.env.NEXT_PUBLIC_ADMIN_WALLET) throw new Error('House wallet not configured');
   const house = houseWalletAddress || process.env.NEXT_PUBLIC_ADMIN_WALLET!;
@@ -316,8 +317,9 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   const walletId = (escrowWalletId as any) || (matchResult?.escrow_wallet_id as any) || undefined;
   const wallet = walletId ? evmEscrowService.getWallet(walletId as any) : undefined;
   const from = wallet || evmEscrowService.getNextWallet();
-  const opWinnerId = `payout:${matchId || 'na'}:winner:${String(winnerAddress).toLowerCase()}`
-  const opHouseId = `payout:${matchId || 'na'}:house:${String(house).toLowerCase()}`
+  const idScope = (matchId && matchId.length > 0) ? matchId : ((matchSessionId && matchSessionId.length > 0) ? matchSessionId : `ts-${Date.now()}`)
+  const opWinnerId = `payout:${idScope}:winner:${String(winnerAddress).toLowerCase()}`
+  const opHouseId = `payout:${idScope}:house:${String(house).toLowerCase()}`
   console.log('[PAYOUT][REQUEST]', {
     matchId,
     opWinnerId,

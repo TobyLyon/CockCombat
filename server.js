@@ -1785,11 +1785,11 @@ preparePromise.then(() => {
           console.warn('match_results insert (fast path) failed:', e?.message || e);
         }
 
-        console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, winner: winnerWallet, prizePool: (amount * humansCount) });
+        console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
         const resp = await fetch(`${baseUrl}/api/payout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, escrowWalletId: selectedEscrow || undefined })
+          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined })
         }).catch(() => null);
         if (resp && resp.ok) {
           console.log('💸 Ranked payout executed via HTTP (client-declared end)');
