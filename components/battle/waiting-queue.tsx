@@ -462,6 +462,28 @@ export default function WaitingQueue({
                     </div>
                   </motion.li>
                 ))}
+
+                {/* Placeholder slots up to capacity (max 8) */}
+                {Array.from({ length: Math.max(0, Math.min(currentLobby.capacity || 8, 8) - players.length) }).map((_, i) => (
+                  <li key={`slot-${i}`} className="flex items-center justify-between rounded-lg p-2 lg:p-3 bg-[#1a1a1a] border border-dashed border-gray-600/50">
+                    <div className="flex items-center min-w-0">
+                      <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full mr-2 flex items-center justify-center bg-gray-600 flex-shrink-0">
+                        <span className="text-white text-xs lg:text-sm">🐔</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center">
+                          <span className="text-gray-500 text-xs lg:text-sm mr-1 truncate">Empty Slot</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <Badge variant="outline" className="border-gray-600 text-gray-500 text-xs px-2 py-1">
+                        <Clock className="mr-1 h-3 w-3" />
+                        Open
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>

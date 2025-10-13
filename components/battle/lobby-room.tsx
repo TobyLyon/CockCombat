@@ -718,6 +718,28 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             </motion.div>
           ))}
           
+          {/* Placeholder slots up to capacity (max 8) */}
+          {Array.from({ length: Math.max(0, Math.min(lobby.capacity || 8, 8) - players.length) }).map((_, i) => (
+            <div key={`slot-${i}`} className="flex items-center justify-between p-2 rounded border border-dashed border-gray-600/50 bg-gray-800/20">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold bg-gray-600">?
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-semibold truncate text-gray-400">Empty Slot</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 truncate">Waiting for player...</p>
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                <Badge variant="outline" className="border-gray-600 text-gray-500 text-[10px] px-1.5 py-0.5">
+                  <Clock className="mr-0.5 h-2.5 w-2.5" />
+                  Open
+                </Badge>
+              </div>
+            </div>
+          ))}
+          
           {/* No AI placeholders */}
         </div>
       </div>
