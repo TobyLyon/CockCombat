@@ -16,6 +16,8 @@ class EvmEscrowService {
   private static instance: EvmEscrowService | null = null;
   private wallets: Map<EscrowId, EvmEscrowWallet> = new Map();
   private currentIndex = 0;
+  // Serialize transactions per escrow wallet to prevent nonce races
+  private locks: Map<EscrowId, Promise<any>> = new Map();
 
   private constructor() {
     const provider = getEvmProvider();
@@ -71,14 +73,34 @@ class EvmEscrowService {
     return w;
     }
 
+  private withWalletLock<T>(id: EscrowId, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(id) || Promise.resolve();
+    let resultPromise: Promise<T>;
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        resultPromise = fn();
+        return resultPromise;
+      });
+    // Ensure we clear the lock when this operation chain settles
+    const settled = next.finally(() => {
+      try { if (this.locks.get(id) === settled) this.locks.delete(id); } catch {}
+    });
+    this.locks.set(id, settled);
+    // @ts-expect-error resultPromise is assigned in then
+    return next as Promise<T>;
+  }
+
   public async transferNative(to: string, wei: bigint, from?: EvmEscrowWallet): Promise<string> {
     const w = from || this.getNextWallet();
-    const tx = await w.wallet.sendTransaction({ to, value: wei });
-    const receipt = await tx.wait(1);
-    if (!receipt || receipt.status !== 1) {
-      throw new Error('BNB transfer failed');
-    }
-    return tx.hash;
+    return this.withWalletLock(w.id, async () => {
+      const tx = await w.wallet.sendTransaction({ to, value: wei });
+      const receipt = await tx.wait(1);
+      if (!receipt || receipt.status !== 1) {
+        throw new Error('BNB transfer failed');
+      }
+      return tx.hash;
+    });
   }
 }
 
