@@ -20,8 +20,9 @@ class EvmEscrowService {
   private constructor() {
     const provider = getEvmProvider();
     (['A','B','C'] as EscrowId[]).forEach((id) => {
-      const pub = process.env[`EVM_ESCROW_${id}_ADDRESS`];
-      const pk = process.env[`EVM_ESCROW_${id}_PRIVATE_KEY`];
+      // Support both new and legacy env var names
+      const pub = process.env[`EVM_ESCROW_${id}_ADDRESS`] || process.env[`ESCROW_WALLET_${id}_PUBLIC_KEY` as any];
+      const pk = process.env[`EVM_ESCROW_${id}_PRIVATE_KEY`] || process.env[`ESCROW_WALLET_${id}_PRIVATE_KEY` as any];
       if (!pub || !pk) return;
       try {
         const wallet = new ethers.Wallet(pk, provider);
@@ -39,6 +40,14 @@ class EvmEscrowService {
         });
       } catch {}
     });
+    try {
+      if (this.wallets.size === 0) {
+        console.warn('⚠️ No EVM escrow wallets configured. Set EVM_ESCROW_A_ADDRESS/EVM_ESCROW_A_PRIVATE_KEY (or legacy ESCROW_WALLET_A_PUBLIC_KEY/ESCROW_WALLET_A_PRIVATE_KEY).');
+      } else {
+        const loaded = Array.from(this.wallets.values()).map(w => `${w.id}:${w.address.slice(0,6)}…${w.address.slice(-4)}`).join(', ');
+        console.log(`🔐 Loaded EVM escrow wallets: ${loaded}`);
+      }
+    } catch {}
   }
 
   public static getInstance(): EvmEscrowService {
