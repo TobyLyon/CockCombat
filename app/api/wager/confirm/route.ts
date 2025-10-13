@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { lobbies } from '@/lib/lobbies';
+// Use server-held state not API/lib
 // Solana imports removed in EVM-only build
 import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
@@ -36,27 +36,21 @@ async function handleWagerConfirmation(req: NextRequest) {
 
   // EVM-only build: validate EVM address format lightly if needed (skipped here)
 
-    const lobby = lobbies.find(l => l.id === lobbyId);
-    if (!lobby) {
+    const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : null;
+    if (!lobbyMeta) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
+    // Read/initialize roster entry from server memory
+    const rosterMap = (global as any).lobbyRoster?.get(lobbyId) || new Map();
+    if (!(global as any).lobbyRoster?.has?.(lobbyId)) { try { (global as any).lobbyRoster.set(lobbyId, rosterMap) } catch {}
+    }
 
-    let player = lobby.players.find(p => {
-      const a = String(p.playerId || '').toLowerCase();
-      const b = String(playerPublicKey || '').toLowerCase();
-      return a === b;
-    });
+    const pidNorm = String(playerPublicKey || '').toLowerCase();
+    let player = rosterMap.get(pidNorm) || null;
     if (!player) {
-      // Fallback: add the wallet into this lobby roster to ensure confirm can proceed (server will enforce payouts)
-      try {
-        const username = (playerPublicKey || '').slice(0, 8) + '...';
-        const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
-        lobby.players.push(newP);
-        player = newP;
-      } catch {}
-      if (!player) {
-        return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
-      }
+      const username = (playerPublicKey || '').slice(0, 8) + '...';
+      player = { playerId: playerPublicKey, chickenName: 'Default', username, hasWagered: false, isReady: false } as any;
+      try { rosterMap.set(pidNorm, player); } catch {}
     }
 
     // Verify the transaction moved the exact wager to the escrow wallet
@@ -94,12 +88,12 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (tx.from?.toLowerCase() !== playerPublicKey.toLowerCase()) {
         return NextResponse.json({ error: 'Sender mismatch' }, { status: 400 });
       }
-      if (!lobby.escrowWalletId) {
+      if (!lobbyMeta.escrowWalletId) {
         await auditLogger.logSuspiciousActivity('EVM wager without assigned escrow', playerPublicKey, undefined, { lobbyId, signature });
         return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 });
       }
-      const expectedValue = ethers.parseUnits(lobby.amount.toString(), 18);
-      const envKey = `EVM_ESCROW_${lobby.escrowWalletId}_ADDRESS`;
+      const expectedValue = ethers.parseUnits(String(lobbyMeta.amount), 18);
+      const envKey = `EVM_ESCROW_${lobbyMeta.escrowWalletId}_ADDRESS`;
       const expectedEscrow = process.env[envKey];
       if (!expectedEscrow) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
@@ -122,7 +116,7 @@ async function handleWagerConfirmation(req: NextRequest) {
       signature,
       playerPublicKey,
       '/api/wager/confirm',
-      { lobbyId, amount: lobby.amount }
+      { lobbyId, amount: lobbyMeta.amount }
     );
 
     player.hasWagered = true;
@@ -133,26 +127,7 @@ async function handleWagerConfirmation(req: NextRequest) {
     } catch {}
     // De-duplicate any existing entries for this wallet (prefer the one with hasWagered=true)
     try {
-      const pidNorm = String(playerPublicKey || '').toLowerCase();
-      const keep = lobby.players.reduce((best: any | null, p: any) => {
-        const id = String(p.playerId || '').toLowerCase();
-        if (id !== pidNorm) return best;
-        if (!best) return p;
-        // Prefer entry that is wagered/ready; otherwise keep the latest
-        if (!!p.hasWagered && !best.hasWagered) return p;
-        return p; // last-writer-wins
-      }, null);
-      const next: any[] = [];
-      const seen = new Set<string>();
-      for (const p of lobby.players) {
-        const id = String(p.playerId || '').toLowerCase();
-        if (id === pidNorm) {
-          if (!seen.has(id)) { next.push(keep || p); seen.add(id); }
-        } else {
-          next.push(p);
-        }
-      }
-      lobby.players = next;
+      try { rosterMap.set(pidNorm, player); } catch {}
     } catch {}
     
     console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
@@ -202,12 +177,11 @@ async function handleWagerConfirmation(req: NextRequest) {
       severity: 'info',
       metadata: {
         lobbyId,
-        amount: lobby.amount,
+        amount: lobbyMeta.amount,
         signature,
       },
     });
-
-    return NextResponse.json({ message: "Player status updated to ready", lobby });
+    return NextResponse.json({ message: "Player status updated to ready" });
 
   } catch (error) {
     console.error("Error confirming wager:", error);
