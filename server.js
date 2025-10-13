@@ -1496,15 +1496,11 @@ preparePromise.then(() => {
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
                         console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
-                        const resp = await fetch(`${baseUrl}/api/payout`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
-                        }).catch(() => null);
-                        if (resp && (resp.ok || resp.status === 202)) {
-                          console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
+                        try {
+                          const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+                          const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined });
+                          console.log('💸 Ranked payout executed (server)', { matchId: mr.id, tx: res?.winnerSignature });
                           try { room._payoutTriggered = true; } catch {}
-                          // Also mark by session to block client-declared path
                           try {
                             const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
                             if (msid && winnerWallet) {
@@ -1514,10 +1510,8 @@ preparePromise.then(() => {
                             }
                           } catch {}
                           return;
-                        } else {
-                          const status = resp ? resp.status : 'no_response';
-                          const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                          console.warn('⚠️ HTTP payout failed', { matchId: mr.id, status, details: txt });
+                        } catch (eh) {
+                          console.warn('Server payout error:', eh?.message || eh);
                         }
                       } else {
                         console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
@@ -1836,18 +1830,12 @@ preparePromise.then(() => {
         }
 
         console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
-        const resp = await fetch(`${baseUrl}/api/payout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined })
-        }).catch(() => null);
-        if (resp && (resp.ok || resp.status === 202)) {
-          console.log('💸 Ranked payout executed via HTTP (client-declared end)');
-          // reservation already added above
-        } else {
-          const status = resp ? resp.status : 'no_response';
-          const txt = resp ? await resp.text().catch(() => '') : 'no response';
-          console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
+        try {
+          const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+          const res = await processPayoutServerOnly({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined });
+          console.log('💸 Ranked payout executed (server, client-declared end)', { matchId, tx: res?.winnerSignature });
+        } catch (e) {
+          console.warn('⚠️ Server payout failed (client-declared end)', e?.message || e);
           // Release to allow retry later
           try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.delete(idempoKey); } catch {}
         }
