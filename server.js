@@ -1367,7 +1367,7 @@ preparePromise.then(() => {
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
                         body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
                       }).catch(() => null);
-                      if (resp && resp.ok) {
+                        if (resp && (resp.ok || resp.status === 202)) {
                         console.log('💸 Ranked payout executed via HTTP (fast path)');
                         try { room._payoutTriggered = true; } catch {}
                         return;
@@ -1501,7 +1501,7 @@ preparePromise.then(() => {
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
                           body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
                         }).catch(() => null);
-                        if (resp && resp.ok) {
+                        if (resp && (resp.ok || resp.status === 202)) {
                           console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
                           try { room._payoutTriggered = true; } catch {}
                           // Also mark by session to block client-declared path
@@ -1839,7 +1839,7 @@ preparePromise.then(() => {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
           body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined })
         }).catch(() => null);
-        if (resp && resp.ok) {
+        if (resp && (resp.ok || resp.status === 202)) {
           console.log('💸 Ranked payout executed via HTTP (client-declared end)');
           try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
         } else {

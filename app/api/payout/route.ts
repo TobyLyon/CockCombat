@@ -186,7 +186,20 @@ export async function POST(request: Request) {
     }
 
     // Perform the payout via server-only helper
-    const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
+    let winnerSignature: string | null = null;
+    let houseSignature: string | null = null;
+    try {
+      const res = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
+      winnerSignature = res.winnerSignature;
+      houseSignature = res.houseSignature;
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      // If another process already claimed/sending the payout, treat as Accepted (idempotent in-progress)
+      if (msg.includes('Payment already in progress')) {
+        return NextResponse.json({ success: true, inProgress: true }, { status: 202 });
+      }
+      throw err;
+    }
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
@@ -280,7 +293,7 @@ export async function POST(request: Request) {
       }
     } catch {}
 
-    return NextResponse.json({
+    return NextResponse.json({ 
       success: true,
       message: "Payout successful!",
       winnerTransaction: winnerSignature,
