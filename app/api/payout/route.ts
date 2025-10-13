@@ -300,14 +300,16 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   if (!isBsc()) throw new Error('Unsupported chain');
   if (!houseWalletAddress && !process.env.NEXT_PUBLIC_ADMIN_WALLET) throw new Error('House wallet not configured');
   const house = houseWalletAddress || process.env.NEXT_PUBLIC_ADMIN_WALLET!;
-  const poolBnb = prizePool;
-  const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
-  const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
+  // Integer math in wei for precise splits
+  const poolWei = ethers.parseUnits(prizePool.toString(), 18);
+  const houseBps = Math.min(10000, Math.max(0, Math.round(houseCutPercentage * 10000)));
+  const houseCutWei = (poolWei * BigInt(houseBps)) / 10000n;
+  const winnerCutWei = poolWei - houseCutWei;
   const walletId = matchResult?.escrow_wallet_id as any | undefined;
   const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
   const from = wallet || evmEscrowService.getNextWallet();
   const winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
   const houseSignature = await evmEscrowService.transferNative(house, houseCutWei, from);
-  console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: poolBnb * (1 - houseCutPercentage), houseAmount: poolBnb * houseCutPercentage, escrow: from?.id, winnerSignature, houseSignature });
+  console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: Number(ethers.formatUnits(winnerCutWei, 18)), houseAmount: Number(ethers.formatUnits(houseCutWei, 18)), escrow: from?.id, winnerSignature, houseSignature });
   return { winnerSignature, houseSignature };
 }

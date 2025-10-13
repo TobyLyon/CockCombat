@@ -1395,8 +1395,13 @@ preparePromise.then(() => {
                 const isRanked = !!((meta && meta.amount > 0) || (typeof rankedLobby?.amount === 'number' && rankedLobby.amount > 0));
                 const wager = isRanked ? Number((meta?.amount ?? rankedLobby?.amount) || 0) : 0;
                 const humansCount = isRanked ? (meta?.humansCount ?? ((rankedLobby?.players || []).filter(p => !p.isAi).length || 0)) : 0;
-                const prizePool = (isRanked && humansCount > 0) ? (wager * humansCount) : 0;
-                const winnerCut = prizePool > 0 ? prizePool * (1 - houseCutPct) : 0;
+                // Use integer math in wei to avoid float drift
+                const poolWei = (wager > 0 && humansCount > 0) ? BigInt(Math.round(wager * 1_000_000_000)) * BigInt(humansCount) : 0n;
+                const houseBps = Math.min(10000, Math.max(0, Math.round(houseCutPct * 10000)));
+                const houseWei = (poolWei * BigInt(houseBps)) / 10000n;
+                const winnerWei = poolWei - houseWei;
+                const prizePool = Number(poolWei) / 1_000_000_000;
+                const winnerCut = Number(winnerWei) / 1_000_000_000;
                 const wWallet = winnerWallet;
                 const lWallet = (wWallet && player1Wallet && player2Wallet) ? (wWallet === player1Wallet ? player2Wallet : player1Wallet) : null;
                 // Record transactions (wagers) for both humans

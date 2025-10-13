@@ -47,7 +47,9 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   // Derived match details
   const totalPlayers = players.length;
-  const humanCount = matchMeta?.humanCount || 0;
+  // Derive humans from actual roster in battle scene; fallback to matchMeta
+  const derivedHumans = Math.max(0, players.filter(p => !p.isAi).length);
+  const humanCount = (derivedHumans > 0 ? derivedHumans : (matchMeta?.humanCount || 0));
   const aiCount = Math.max(0, totalPlayers - humanCount);
   const entryPerPlayer = matchMeta?.amount || 0;
   const currency = matchMeta?.currency || (isBsc() ? 'BNB' : 'SOL');
@@ -172,11 +174,11 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             <p className="font-semibold">{formatAmount(entryPerPlayer, currency)} {currency}</p>
           </div>
           {/* Removed Humans vs AI breakdown per request */}
-          <div>
+          <div className="text-center">
             <p className="text-white/60 text-[11px]">Gross Pool</p>
             <p className="font-semibold">{formatAmount(grossPool, currency)} {currency}</p>
           </div>
-          <div>
+          <div className="text-center">
             <p className="text-white/60 text-[11px]">Winner (net)</p>
             <p className="font-semibold text-yellow-300">{formatAmount(netWinner, currency)} {currency}</p>
           </div>
