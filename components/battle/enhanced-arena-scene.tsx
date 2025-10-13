@@ -690,7 +690,8 @@ function SceneContent({
         // Fall back to numeric count if startAt unknown
         const count = Number(payload?.count)
         if (!isNaN(count)) {
-          setSyncedCountdown(count)
+          // Only show 3..2..1, never 0
+          setSyncedCountdown(Math.max(1, count))
         }
       } catch {}
     }

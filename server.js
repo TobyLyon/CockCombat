@@ -2745,10 +2745,13 @@ preparePromise.then(() => {
       // Emit 3..0 countdown aligned to round start (synced across clients)
       let c = 3;
       const interval = setInterval(() => {
-        try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
-        try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+        // Emit only 3..2..1 (no zero)
+        if (c > 0) {
+          try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+          try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+        }
         c--;
-        if (c < 0) {
+        if (c <= 0) {
           clearInterval(interval);
           try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
           try { io.to(matchSessionId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
