@@ -251,7 +251,7 @@ export default function HowToPlayPage() {
               { 
                 num: '03', 
                 title: 'Win & Earn', 
-                desc: 'Battle or spectate for $COCK', 
+                desc: 'Battle or spectate for $COCK or $BNB', 
                 icon: '💰',
                 color: 'from-yellow-500 to-amber-500'
               },
@@ -306,6 +306,7 @@ export default function HowToPlayPage() {
                 icon: '🪙',
                 items: [
                   { key: '$COCK', desc: 'In-game currency' },
+                  { key: '$BNB', desc: 'Chain native wagers/payouts' },
                   { key: 'Wagers', desc: 'Pool into prizes' },
                   { key: 'Winners', desc: 'Take 96% cut' },
                 ]
