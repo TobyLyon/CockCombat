@@ -1910,7 +1910,7 @@ preparePromise.then(() => {
               // Ensure escrow is assigned if missing (best-effort)
               if (!liveLobby.escrowWalletId) {
                 try {
-                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
+                  const { evmEscrowService } = require('./lib/evm-escrow-service.js');
                   const wallet = evmEscrowService.getNextWallet();
                   if (wallet && wallet.id) {
                     const mem = lobbies.find(l => l && l.id === lobbyId);
