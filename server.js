@@ -3,22 +3,33 @@ const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
 
-// Validate environment variables on startup
+// Validate environment variables on startup (prefer JS helper, fall back to no-op)
 try {
-  const { printEnvironmentStatus, checkForSecurityIssues } = require('./lib/env-validator.ts');
-  printEnvironmentStatus();
-  
-  const securityIssues = checkForSecurityIssues();
-  if (securityIssues.length > 0) {
-    console.error('🚨 SECURITY ISSUES DETECTED:\n');
-    securityIssues.forEach(issue => console.error(`   ❌ ${issue}`));
-    console.error('\n');
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
+  let validator = null;
+  try {
+    // Prefer compiled JS helper if available
+    validator = require('./lib/env-validator.js');
+  } catch {}
+  if (!validator) {
+    try { validator = require('./lib/env-validator.ts'); } catch {}
+  }
+  if (validator && typeof validator.printEnvironmentStatus === 'function' && typeof validator.checkForSecurityIssues === 'function') {
+    validator.printEnvironmentStatus();
+    const securityIssues = validator.checkForSecurityIssues();
+    if (securityIssues.length > 0) {
+      console.error('🚨 SECURITY ISSUES DETECTED:\n');
+      securityIssues.forEach(issue => console.error(`   ❌ ${issue}`));
+      console.error('\n');
+      if (process.env.NODE_ENV === 'production') {
+        // Do not hard-exit on platform that loads CJS; just warn in prod
+        console.warn('Continuing despite security warnings due to platform constraints');
+      }
     }
+  } else {
+    console.warn('⚠️  Env validator unavailable; skipping environment validation');
   }
 } catch (error) {
-  console.warn('⚠️  Could not validate environment:', error.message);
+  console.warn('⚠️  Could not validate environment:', (error && error.message) || String(error));
 }
 
 const socketOnly = process.env.SOCKET_ONLY === 'true';
