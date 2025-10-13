@@ -1270,6 +1270,58 @@ preparePromise.then(() => {
               // Already recorded/triggered payout for this room
               return;
             }
+            // If we have a queue session meta for the winner, prefer that
+            try {
+              const winnerConn = activeConnections.get(result.winner);
+              const winnerWallet = winnerConn?.walletAddress || null;
+              const meta = (winnerWallet && global.recentMatchMetaByWallet) ? global.recentMatchMetaByWallet.get(String(winnerWallet).toLowerCase()) : null;
+              if (meta && (meta.amount > 0) && (meta.humansCount > 0)) {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const secret = process.env.PAYOUT_SERVER_SECRET;
+                const prizePool = (meta.amount || 0) * (meta.humansCount || 0);
+                if (secret && winnerWallet) {
+                  // Insert into match_results early if not present to obtain an id
+                  try {
+                    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+                    if (supabaseUrl && supabaseServiceKey) {
+                      const { createClient } = require('@supabase/supabase-js');
+                      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+                      const participants = Array.isArray(meta.humans) ? meta.humans.map((w)=>({ wallet: w, wager_amount: meta.amount })) : [];
+                      const { data: mrRow } = await supabase.from('match_results').insert({
+                        lobby_id: meta.lobbyId || null,
+                        escrow_wallet_id: meta.escrow || null,
+                        match_started_at: room.startTime ? new Date(room.startTime).toISOString() : new Date().toISOString(),
+                        match_ended_at: new Date().toISOString(),
+                        winner_wallet: winnerWallet,
+                        total_prize_pool: prizePool,
+                        participants,
+                        game_data: { roomId },
+                        status: 'completed',
+                        payout_processed: false,
+                      }).select('id').single();
+                      const matchId = mrRow?.id || null;
+                      console.log('[PAYOUT][REQUEST][HTTP][FAST]', { matchId, winner: winnerWallet, prizePool });
+                      const resp = await fetch(`${baseUrl}/api/payout`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId })
+                      }).catch(() => null);
+                      if (resp && resp.ok) {
+                        console.log('💸 Ranked payout executed via HTTP (fast path)');
+                        try { room._payoutTriggered = true; } catch {}
+                      } else {
+                        const status = resp ? resp.status : 'no_response';
+                        const txt = resp ? await resp.text().catch(() => '') : 'no response';
+                        console.warn('⚠️ HTTP payout failed (fast path)', { matchId, status, details: txt });
+                      }
+                    }
+                  } catch (fpErr) {
+                    console.warn('Fast payout path error:', fpErr?.message || fpErr);
+                  }
+                }
+              }
+            } catch {}
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
             const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
             if (supabaseUrl && supabaseServiceKey) {
@@ -1612,6 +1664,92 @@ preparePromise.then(() => {
           io.to(lobbyId).emit('queue_assets_update', { wallet });
         } catch {}
       } catch {}
+    });
+
+    // Client-declared match end (fast path payout trigger using queued meta)
+    socket.on('match_end', async (payload) => {
+      try {
+        const msid = String(payload?.matchSessionId || '');
+        if (!msid) return;
+        // Idempotency per session
+        try { if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set(); } catch {}
+        if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(msid)) return;
+
+        const meta = global.recentMatchMetaBySession ? global.recentMatchMetaBySession.get(msid) : null;
+        if (!meta) return;
+        const amount = Number(meta.amount || 0);
+        const humans = Array.isArray(meta.humans) ? meta.humans.slice() : [];
+        const humansCount = Number(meta.humansCount || humans.length || 0);
+        if (!(amount > 0 && humansCount > 0)) {
+          // Free/tutorial: no payout required
+          return;
+        }
+
+        // Determine winner wallet
+        const fromPayload = String(payload?.winnerWallet || '');
+        let winnerWallet = fromPayload && fromPayload.startsWith('0x') ? fromPayload : null;
+        if (!winnerWallet) {
+          const conn = activeConnections.get(socket.id);
+          if (conn && conn.walletAddress) winnerWallet = conn.walletAddress;
+        }
+        if (!winnerWallet) return;
+        const winnerLower = String(winnerWallet).toLowerCase();
+        if (!humans.map((w) => String(w).toLowerCase()).includes(winnerLower)) {
+          // Winner must be one of the expected humans
+          return;
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const secret = process.env.PAYOUT_SERVER_SECRET;
+        if (!secret) {
+          console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
+          return;
+        }
+
+        // Create a match_results row to obtain a matchId for payout validation
+        let matchId = null;
+        try {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (supabaseUrl && supabaseServiceKey) {
+            const { createClient } = require('@supabase/supabase-js');
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
+            const { data: mrRow } = await supabase.from('match_results').insert({
+              lobby_id: meta.lobbyId || null,
+              escrow_wallet_id: meta.escrow || null,
+              match_started_at: meta.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
+              match_ended_at: new Date().toISOString(),
+              winner_wallet: winnerWallet,
+              total_prize_pool: (amount * humansCount),
+              participants,
+              game_data: { matchSessionId: msid },
+              status: 'completed',
+              payout_processed: false,
+            }).select('id').single();
+            matchId = mrRow?.id || null;
+          }
+        } catch (e) {
+          console.warn('match_results insert (fast path) failed:', e?.message || e);
+        }
+
+        console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, winner: winnerWallet, prizePool: (amount * humansCount) });
+        const resp = await fetch(`${baseUrl}/api/payout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId })
+        }).catch(() => null);
+        if (resp && resp.ok) {
+          console.log('💸 Ranked payout executed via HTTP (client-declared end)');
+          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(msid); } catch {}
+        } else {
+          const status = resp ? resp.status : 'no_response';
+          const txt = resp ? await resp.text().catch(() => '') : 'no response';
+          console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
+        }
+      } catch (err) {
+        console.warn('match_end handler error:', err?.message || err);
+      }
     });
 
     // Handle spectate match
@@ -2413,7 +2551,7 @@ preparePromise.then(() => {
           const escrow = lobby && lobby.escrowWalletId ? lobby.escrowWalletId : null;
           if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
           if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
-          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow };
+          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs };
           try { global.recentMatchMetaBySession.set(matchSessionId, meta); } catch {}
           try { humans.forEach(w => { global.recentMatchMetaByWallet.set(w, meta); }); } catch {}
         } catch {}
