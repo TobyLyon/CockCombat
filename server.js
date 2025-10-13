@@ -2422,6 +2422,22 @@ preparePromise.then(() => {
                     }
                   }
                 } catch {}
+                // Reset readiness and wagers for this lobby to avoid sticky UI state into the next round (ranked)
+                try {
+                  // Reset socket-only roster entries
+                  const map = getRosterMap(lobbyId);
+                  for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); }
+                  // Reset in-memory API lobby players
+                  const lob = lobbies.find(l => l && l.id === lobbyId);
+                  if (lob && Array.isArray(lob.players)) {
+                    lob.players = lob.players.map(p => ({ ...p, isReady: false, hasWagered: false }));
+                  }
+                  // Emit a fresh snapshot so lobby UIs clear ready states
+                  const version = nextLobbyVersion(lobbyId);
+                  buildLobbySnapshot(lobbyId).then((snap) => {
+                    try { if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version }); } catch {}
+                  }).catch(() => {});
+                } catch {}
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
@@ -2762,6 +2778,19 @@ preparePromise.then(() => {
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+          // Reset readiness and wagers to ensure re-entry requires paying again
+          try {
+            const map = getRosterMap(lobbyId);
+            for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); }
+            const lob = lobbies.find(l => l && l.id === lobbyId);
+            if (lob && Array.isArray(lob.players)) {
+              lob.players = lob.players.map(p => ({ ...p, isReady: false, hasWagered: false }));
+            }
+            const version = nextLobbyVersion(lobbyId);
+            buildLobbySnapshot(lobbyId).then((snap) => {
+              try { if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version }); } catch {}
+            }).catch(() => {});
+          } catch {}
           // Release per-lobby lock on successful round start
           try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
         }
