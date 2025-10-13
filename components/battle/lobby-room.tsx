@@ -552,7 +552,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             className="absolute inset-0 bg-black/80 flex items-center justify-center z-50"
           >
             <div className="flex flex-col items-center">
-              <div className="text-2xl sm:text-4xl font-extrabold text-white pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.85)] tracking-widest mb-2">
+              <div className="text-base sm:text-xl md:text-2xl font-extrabold text-white pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.85)] whitespace-nowrap text-center mb-1">
                 MATCH STARTING
               </div>
               <motion.div

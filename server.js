@@ -245,6 +245,9 @@ preparePromise.then(() => {
   if (!global.activeQueueForLobby) {
     global.activeQueueForLobby = new Map();
   }
+  if (!global.queueLocks) {
+    global.queueLocks = new Map();
+  }
   if (!global.lobbyVersions) {
     global.lobbyVersions = new Map();
   }
@@ -411,6 +414,16 @@ preparePromise.then(() => {
     socket.on('register_wallet', (walletAddress) => {
       // Normalize to lowercase for consistent identity matching
       const normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
+      // Suppress rapid duplicate logs/updates from the same socket
+      try {
+        const now = Date.now();
+        if (!global.__lastWalletRegisterTs) global.__lastWalletRegisterTs = Object.create(null);
+        const lastTs = global.__lastWalletRegisterTs[socket.id] || 0;
+        if (now - lastTs < 250) {
+          return;
+        }
+        global.__lastWalletRegisterTs[socket.id] = now;
+      } catch {}
       console.log(`🔗 Linking wallet ${normalized} to socket ${socket.id}`);
       
       const connection = activeConnections.get(socket.id);
@@ -2497,6 +2510,16 @@ preparePromise.then(() => {
   // Begin queue confirmation phase for a lobby
   async function startQueuePhase(lobbyId, io, rosterOverride = null) {
     try {
+      // Per-lobby lock to avoid concurrent queue sessions
+      try {
+        if (global.queueLocks && global.queueLocks.has(lobbyId)) {
+          const heldAt = global.queueLocks.get(lobbyId);
+          console.log(`[queue] lock held for ${lobbyId} since ${heldAt}; skipping startQueuePhase`);
+          return;
+        }
+        global.queueLocks.set(lobbyId, Date.now());
+      } catch {}
+
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
       let expectedRoster;
       let isTutorial = false;
@@ -2539,7 +2562,7 @@ preparePromise.then(() => {
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
       }
 
-      // Guard against duplicate sessions for the same lobby
+      // Guard against duplicate sessions for the same lobby (secondary guard in addition to lock)
       try {
         const existingMs = global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId);
         if (existingMs) {
@@ -2639,6 +2662,10 @@ preparePromise.then(() => {
     } catch (e) {
       console.warn('startQueuePhase error:', e?.message || e);
     }
+    finally {
+      // Always release the lock if we didn't get to queue begin
+      try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
+    }
   }
 
   // Finalize a queue session: lock roster and schedule round start (or cancel/refund)
@@ -2669,6 +2696,8 @@ preparePromise.then(() => {
         try { io.to(lobbyId).emit('match_cancelled', { reason: 'insufficient_players' }); } catch {}
         try { global.queueSessions.delete(matchSessionId); } catch {}
         try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+        // Release per-lobby lock on cancellation
+        try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
         return;
       }
 
@@ -2733,6 +2762,8 @@ preparePromise.then(() => {
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
           try { global.queueSessions.delete(matchSessionId); } catch {}
           try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+          // Release per-lobby lock on successful round start
+          try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
         }
       }, 1000);
     } catch (e) {
