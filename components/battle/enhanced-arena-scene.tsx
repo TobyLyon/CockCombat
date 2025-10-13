@@ -669,35 +669,9 @@ function SceneContent({
           freezeUntilRef.current = startAt
           invulnerableUntilRef.current = startAt + 1000
         }
-        // Hide countdown immediately on round start
-        setSyncedCountdown(null)
       } catch {}
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
-    // Server emits per-second countdown aligned to round start; update local ref/UI
-    const onRoundCountdown = (payload: any) => {
-      try {
-        const msid = payload?.matchSessionId
-        if (msid) {
-          try { (window as any).__last_match_session_id = msid } catch {}
-          socket.emit('join_match_room', { matchSessionId: msid })
-        }
-        const startAt = Number(payload?.roundStartAtEpochMs || (window as any)?.__last_round_start_at || 0)
-        // If server included start time earlier, prefer that for drift-free countdown
-        if (startAt > 0) {
-          roundStartAtMsRef.current = startAt
-          // Ensure freeze follows the same start point
-          freezeUntilRef.current = startAt
-        }
-        // Fall back to numeric count if startAt unknown
-        const count = Number(payload?.count)
-        if (!isNaN(count)) {
-          // Only show 3..2..1, never 0
-          setSyncedCountdown(Math.max(1, count))
-        }
-      } catch {}
-    }
-    socket.on('round_countdown', onRoundCountdown)
     socket.on('round_start', onRoundStartJoin)
     // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
     const onMatchStarted = () => {
@@ -705,8 +679,6 @@ function SceneContent({
         freezeUntilRef.current = Date.now()
         invulnerableUntilRef.current = Date.now() + 1000
       }
-      // Ensure overlay is cleared on generic start signal
-      setSyncedCountdown(null)
     }
     socket.on('match_started', onMatchStarted)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
@@ -715,24 +687,18 @@ function SceneContent({
       socket.off('player_state', onPlayerState)
       socket.off('player_damage', onRemotePlayerDamage)
       socket.off('arena_lock_roster', onArenaLockJoin)
-      socket.off('round_countdown', onRoundCountdown)
       socket.off('round_start', onRoundStartJoin)
       socket.off('match_started', onMatchStarted)
       socket.off('debug_trace', onDebug)
     }
   }, [socket, onPlayerDamage])
 
-  // Synced countdown updater: prefer absolute start time; hide at zero or after
+  // Synced countdown updater
   useEffect(() => {
     const id = setInterval(() => {
       const startAt = roundStartAtMsRef.current
       if (typeof startAt === 'number' && startAt > Date.now()) {
-        const next = Math.ceil((startAt - Date.now()) / 1000)
-        if (next <= 0) {
-          if (syncedCountdown !== null) setSyncedCountdown(null)
-        } else if (syncedCountdown !== next) {
-          setSyncedCountdown(next)
-        }
+        setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
       } else {
         if (syncedCountdown !== null) setSyncedCountdown(null)
       }
@@ -770,12 +736,11 @@ function SceneContent({
     // Skip if game is not in battle state
     if (gameState !== 'battle') return; // Note: 'battle' might need to be GameState.PLAYING or similar
 
-  // Arm a 3s freeze and 4s invulnerability at round start (server-synced when available)
+    // Arm a 3s freeze and 4s invulnerability once at mount
     if (!hasArmedCountdownRef.current) {
-      const startAt = (roundStartAtMsRef.current && roundStartAtMsRef.current > Date.now()) ? roundStartAtMsRef.current : (Date.now() + 3000)
-      // Always clamp to exactly 3 seconds from now if no server time yet; will be overwritten when 'round_countdown' with startAt arrives
-      freezeUntilRef.current = startAt
-      invulnerableUntilRef.current = startAt + 1000
+      const nowMs = Date.now()
+      freezeUntilRef.current = nowMs + 3000
+      invulnerableUntilRef.current = nowMs + 4000
       hasArmedCountdownRef.current = true
     }
     

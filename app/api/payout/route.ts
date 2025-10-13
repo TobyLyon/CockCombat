@@ -185,17 +185,6 @@ export async function POST(request: Request) {
       // Proceed with payout; matchResult stays null and processPayoutServerOnly will select wallet round-robin
     }
 
-    // In-flight lock (route level) to prevent back-to-back duplicates per match or session
-    try {
-      (global as any).__payoutInFlight = (global as any).__payoutInFlight || new Set<string>();
-      const key = (matchId && matchId.length > 0) ? `match:${matchId}` : ((matchSessionId && matchSessionId.length > 0) ? `session:${matchSessionId}:${String(winnerAddress).toLowerCase()}` : `session:unknown:${String(winnerAddress).toLowerCase()}`);
-      if ((global as any).__payoutInFlight.has(key)) {
-        return NextResponse.json({ error: 'Payout already processing' }, { status: 409 });
-      }
-      (global as any).__payoutInFlight.add(key);
-      setTimeout(() => { try { (global as any).__payoutInFlight.delete(key) } catch {} }, 30000);
-    } catch {}
-
     // Perform the payout via server-only helper
     const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
 
@@ -328,7 +317,7 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   const walletId = (escrowWalletId as any) || (matchResult?.escrow_wallet_id as any) || undefined;
   const wallet = walletId ? evmEscrowService.getWallet(walletId as any) : undefined;
   const from = wallet || evmEscrowService.getNextWallet();
-  const idScope = (matchId && matchId.length > 0) ? matchId : ((matchSessionId && matchSessionId.length > 0) ? matchSessionId : `ts-${Date.now()}`)
+  const idScope = (matchSessionId && matchSessionId.length > 0) ? matchSessionId : ((matchId && matchId.length > 0) ? matchId : `ts-${Date.now()}`)
   const opWinnerId = `payout:${idScope}:winner:${String(winnerAddress).toLowerCase()}`
   const opHouseId = `payout:${idScope}:house:${String(house).toLowerCase()}`
   console.log('[PAYOUT][REQUEST]', {

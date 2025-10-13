@@ -45,7 +45,6 @@ export default function WaitingQueue({
   const matchSessionIdRef = useRef<string | null>(null)
   const scheduledStartRef = useRef<number | null>(null)
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const startedRef = useRef<boolean>(false)
   const assetsReadyRef = useRef<boolean>(false)
   const lastAssetsAckMsIdRef = useRef<string | null>(null)
   const finalizeFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -149,7 +148,7 @@ export default function WaitingQueue({
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         try { if (startAt > 0) (window as any).__last_round_start_at = startAt } catch {}
-        if (startAt > 0 && !startedRef.current) {
+        if (startAt > 0) {
           // Enter the battle scene ~3s before start so the synced countdown displays
           const delay = Math.max(0, startAt - Date.now() - 3000)
           scheduledStartRef.current = Date.now() + delay
@@ -159,20 +158,6 @@ export default function WaitingQueue({
           }, delay)
         }
         if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
-      } catch {}
-    }
-    const onRoundCountdown = (payload: any) => {
-      try {
-        const msid = payload?.matchSessionId
-        if (msid) socket.emit('join_match_room', { matchSessionId: msid })
-        const startAt = Number(payload?.roundStartAtEpochMs) || Number((window as any)?.__last_round_start_at) || 0
-        if (startAt > 0) { try { (window as any).__last_round_start_at = startAt } catch {} }
-        // If we haven't transitioned yet, go to battle immediately so the arena can show the synced countdown
-        if (!startedRef.current) {
-          startedRef.current = true
-          if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
-          onStartBattle()
-        }
       } catch {}
     }
     const onStarted = (payload?: any) => {
@@ -205,16 +190,15 @@ export default function WaitingQueue({
           const override = (cached.length > 0
             ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
             : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) : []))
-          if (!startedRef.current) { startedRef.current = true; onStartBattle(override) }
+          onStartBattle(override)
         } catch {
-          if (!startedRef.current) { startedRef.current = true; onStartBattle() }
+          onStartBattle()
         }
       }
       startWithOverride()
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
-    socket.on('round_countdown', onRoundCountdown)
     socket.on('round_start', onStarted)
     socket.on('match_started', onStarted)
     // Presence/latency updates
@@ -283,7 +267,6 @@ export default function WaitingQueue({
       socket.off('queue_begin', onQueueBeginJoin)
       socket.off('arena_lock_roster', onArenaLockJoinRoom)
       socket.off('arena_lock_roster', onArenaLock)
-      socket.off('round_countdown', onRoundCountdown)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
       socket.off('debug_trace', onDebug)

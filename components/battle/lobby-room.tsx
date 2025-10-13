@@ -229,18 +229,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
     const handleMatchStarting = (data: { countdown: number }) => {
       console.log('🚀 Match starting in:', data.countdown);
-      // Restore visible 5s lobby countdown and lock leaving during this window
-      try {
-        const value = typeof (data as any)?.countdown === 'number' ? (data as any).countdown : 5
-        setCountdown(value)
-      } catch {
-        setCountdown(5)
-      }
+      setCountdown(data.countdown);
     };
 
     const handleMatchStarted = () => {
       console.log('🎮 Match started!');
-      setCountdown(null);
       transitionedToQueueRef.current = true;
       onStartMatch();
     };
@@ -311,7 +304,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   // Removed snapshot-based HTTP fallbacks and initial snapshot; server events are authoritative
 
-  // Removed local countdown effect to avoid conflicting timers
+  // Countdown effect
+  useEffect(() => {
+    if (countdown !== null && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [countdown])
 
   // Majority grace seconds left (server-driven)
   const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
@@ -541,23 +542,28 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
-      {/* Lobby 5s countdown banner and overlay (joining/leaving locked) */}
-      {typeof countdown === 'number' && countdown >= 0 && (
-        <div className="absolute top-0 left-0 right-0 bg-blue-600/90 backdrop-blur-sm p-3 z-50">
-          <div className="text-center">
-            <div className="text-white text-sm font-bold pixel-font">
-              Match starting in {Math.max(1, countdown)}s — joining/leaving locked
-            </div>
-          </div>
-        </div>
-      )}
-      {typeof countdown === 'number' && countdown >= 0 && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="text-7xl sm:text-8xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.85)]">
-            {Math.max(1, countdown)}
-          </div>
-        </div>
-      )}
+      {/* Countdown Overlay - restored retro minimal style */}
+      <AnimatePresence>
+        {countdown !== null && countdown > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/80 flex items-center justify-center z-50"
+          >
+            <motion.div
+              key={countdown}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.1, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="text-7xl sm:text-9xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.8)]"
+            >
+              {countdown}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Majority-ready grace small notice (non-blocking) */}
       {typeof majoritySeconds === 'number' && majoritySeconds > 0 && (
@@ -730,7 +736,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
-          disabled={isProcessingWager || typeof countdown === 'number'}
+          disabled={isProcessingWager}
           className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
             isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'
@@ -852,7 +858,6 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         {/* Leave Lobby Button */}
         <Button
           onClick={onLeaveLobby}
-          disabled={typeof countdown === 'number'}
           variant="outline"
           className="w-full h-8 text-xs font-semibold border-2 border-red-500 text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-all pixel-font mt-1"
         >

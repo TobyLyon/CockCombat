@@ -30,24 +30,22 @@ export async function sendIdempotentPayment(args: SendArgs) {
   const canDb = Boolean(supabaseUrl && supabaseServiceKey)
   const supabase = canDb ? createClient(supabaseUrl!, supabaseServiceKey!) : null
 
-  // Process-wide in-flight guard to prevent duplicate sends for the same opId.
-  // IMPORTANT: place a placeholder promise in the map BEFORE any awaits to avoid races.
+  // Process-wide in-flight guard to prevent duplicate sends for the same opId
+  // even if multiple callers race. Ensures only one transferNative executes.
   ;(global as any).__paymentsInFlight = (global as any).__paymentsInFlight || new Map<string, Promise<{ txHash: string }>>()
   const inFlight: Map<string, Promise<{ txHash: string }>> = (global as any).__paymentsInFlight
-  const existing = inFlight.get(opId)
-  if (existing) {
+
+  // If an identical op is already executing, wait for it and return the same result
+  const existingPromise = inFlight.get(opId)
+  if (existingPromise) {
     try {
-      const res = await existing
+      const res = await existingPromise
       console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: res.txHash })
       return res
-    } catch {
-      // if the existing promise failed, continue to try fresh execution
+    } catch (e) {
+      // fall through to attempt fresh execution; entry should be cleared by finally below
     }
   }
-  let resolveGate: ((v: { txHash: string }) => void) | undefined
-  let rejectGate: ((e: any) => void) | undefined
-  const gate = new Promise<{ txHash: string }>((resolve, reject) => { resolveGate = resolve; rejectGate = reject })
-  inFlight.set(opId, gate)
 
   // Resolve escrow wallet
   const from = evmEscrowService.getWallet(fromEscrowId)
@@ -137,7 +135,7 @@ export async function sendIdempotentPayment(args: SendArgs) {
     }
   }
 
-  // Define the execution. The gate promise has already been placed in the map.
+  // Define the execution as a promise and store it in in-flight map before sending
   const execPromise = (async () => {
     // Re-check DB just before sending to reduce race window (two processes)
     if (supabase) {
@@ -149,9 +147,7 @@ export async function sendIdempotentPayment(args: SendArgs) {
           .maybeSingle()
         if (existing && existing.tx_hash) {
           console.log('[PAYMENTS][IDEMPOTENT_HIT_BEFORE_SEND]', { opId, txHash: existing.tx_hash })
-          const val = { txHash: existing.tx_hash as string }
-          try { resolveGate && resolveGate(val) } catch {}
-          return val
+          return { txHash: existing.tx_hash as string }
         }
       } catch {}
     }
@@ -170,16 +166,16 @@ export async function sendIdempotentPayment(args: SendArgs) {
       } catch {}
     }
 
-    const val = { txHash }
-    try { resolveGate && resolveGate(val) } catch {}
-    return val
+    return { txHash }
   })()
+
+  inFlight.set(opId, execPromise)
   try {
     const result = await execPromise
     return result
   } finally {
     // Clear in-flight regardless of success/failure to avoid leaks
-    try { if (inFlight.get(opId) === gate) inFlight.delete(opId) } catch {}
+    try { if (inFlight.get(opId) === execPromise) inFlight.delete(opId) } catch {}
   }
 }
 
