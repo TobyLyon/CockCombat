@@ -1327,6 +1327,17 @@ preparePromise.then(() => {
                 }
                 if (rankedAmount > 0 && humansCount > 0) {
                   const prizePoolLamports = Math.round(rankedAmount * humansCount * 1_000_000_000);
+                  console.log('[MATCH][WIN]', {
+                    roomId,
+                    lobbyId: meta?.lobbyId || (rankedLobby?.id || null),
+                    matchSessionId: meta?.matchSessionId || null,
+                    winnerWallet,
+                    rankedAmount,
+                    humansCount,
+                    prizePoolBNB: (rankedAmount * humansCount),
+                    escrowId: escrowIdVal || null,
+                    participants
+                  });
 
                   // Create match_results row
                   const participants = meta && Array.isArray(meta.humans)
@@ -1358,6 +1369,7 @@ preparePromise.then(() => {
                       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
+                        console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
                         const resp = await fetch(`${baseUrl}/api/payout`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },

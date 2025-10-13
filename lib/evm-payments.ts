@@ -43,6 +43,7 @@ export async function sendIdempotentPayment(args: SendArgs) {
         .eq('op_id', opId)
         .maybeSingle()
       if (existing && existing.tx_hash) {
+        console.log('[PAYMENTS][IDEMPOTENT_HIT]', { opId, txHash: existing.tx_hash })
         return { txHash: existing.tx_hash as string }
       }
     } catch {}
@@ -60,17 +61,20 @@ export async function sendIdempotentPayment(args: SendArgs) {
         amount_wei: amountWei.toString(),
         state: 'pending',
       }, { onConflict: 'op_id' })
+      console.log('[PAYMENTS][PENDING]', { opId, from: from.address, to, amountWei: amountWei.toString() })
     } catch {}
   }
 
   // Send via escrow service (per-wallet serialized)
   const txHash = await evmEscrowService.transferNative(to, amountWei, from)
+  console.log('[PAYMENTS][SENT]', { opId, txHash })
 
   // Mark sent + soft confirm, and upsert wallet row
   if (supabase) {
     try {
       await supabase.from('payments').update({ tx_hash: txHash, state: 'sent' }).eq('op_id', opId)
       await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opId)
+      console.log('[PAYMENTS][SOFT_CONFIRMED]', { opId, txHash })
       await supabase.from('escrow_wallets').upsert({ id: from.id, address: from.address })
     } catch {}
   }

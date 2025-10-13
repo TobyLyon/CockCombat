@@ -74,8 +74,10 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const wei = ethers.parseUnits(String(lobby.amount), 18)
   const refundTo = String(((player as any)?.__fundingWallet || playerPublicKey) as string)
   const opId = `refund:${lobbyId}:${String(player.playerId).toLowerCase()}`
+  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: String(player.playerId).toLowerCase(), escrowId: escrow.id, refundTo, wei: wei.toString() })
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash
+  console.log('[REFUND][SENT]', { opId, txHash })
   console.log('↩️ refund_executed', { lobbyId, player: String(player.playerId), amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
   try { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } catch {}
   try {

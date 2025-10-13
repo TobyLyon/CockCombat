@@ -311,10 +311,23 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   const from = wallet || evmEscrowService.getNextWallet();
   const opWinnerId = `payout:${matchId || 'na'}:winner:${String(winnerAddress).toLowerCase()}`
   const opHouseId = `payout:${matchId || 'na'}:house:${String(house).toLowerCase()}`
+  console.log('[PAYOUT][REQUEST]', {
+    matchId,
+    opWinnerId,
+    opHouseId,
+    escrowId: (from as any).id,
+    from: from.address,
+    winner: winnerAddress,
+    house,
+    winnerWei: winnerCutWei.toString(),
+    houseWei: houseCutWei.toString()
+  })
   const winRes = await sendIdempotentPayment({ opId: opWinnerId, type: 'payout', fromEscrowId: (from as any).id, to: winnerAddress, amountWei: winnerCutWei })
   const houseRes = await sendIdempotentPayment({ opId: opHouseId, type: 'house', fromEscrowId: (from as any).id, to: house, amountWei: houseCutWei })
   const winnerSignature = winRes.txHash
   const houseSignature = houseRes.txHash
+  console.log('[PAYOUT][SENT]', { opId: opWinnerId, txHash: winnerSignature })
+  console.log('[PAYOUT][SENT]', { opId: opHouseId, txHash: houseSignature })
   console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: Number(ethers.formatUnits(winnerCutWei, 18)), houseAmount: Number(ethers.formatUnits(houseCutWei, 18)), escrow: from?.id, winnerSignature, houseSignature });
   return { winnerSignature, houseSignature };
 }
