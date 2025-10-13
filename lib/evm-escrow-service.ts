@@ -102,10 +102,9 @@ class EvmEscrowService {
         }
       } catch {}
       const tx = await w.wallet.sendTransaction({ to, value: wei });
-      const receipt = await tx.wait(1);
-      if (!receipt || receipt.status !== 1) {
-        throw new Error('BNB transfer failed');
-      }
+      // Do not block on confirmations; return immediately with hash
+      // Optionally kick off a background wait to log status
+      try { w.wallet.provider?.waitForTransaction(tx.hash, 1).then(() => { try { console.log('[EVM][CONFIRMED]', { hash: tx.hash }) } catch {} }).catch(() => {}) } catch {}
       return tx.hash;
     });
   }

@@ -300,7 +300,7 @@ export async function POST(request: Request) {
       houseTransaction: houseSignature,
       winnerAmount: prizePool * (1 - houseCutPercentage),
       houseAmount: prizePool * houseCutPercentage,
-      explorerUrls: { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) },
+      explorerUrls: { winner: winnerSignature ? getEvmExplorerUrl(winnerSignature) : null, house: houseSignature ? getEvmExplorerUrl(houseSignature) : null },
     });
 
   } catch (error) {
