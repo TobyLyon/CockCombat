@@ -363,6 +363,9 @@ preparePromise.then(() => {
     }
   }
 
+  // Expose helpers for API routes
+  try { (global).__buildLobbySnapshot = buildLobbySnapshot } catch {}
+
   function getRosterMap(lobbyId) {
     let map = global.lobbyRoster.get(lobbyId);
     if (!map) { map = new Map(); global.lobbyRoster.set(lobbyId, map); }
@@ -723,9 +726,9 @@ preparePromise.then(() => {
           const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-          if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
+        if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
             const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
-            let hasWagered = !!(me && me.hasWagered);
+          let hasWagered = !!(me && me.hasWagered);
             // Fallback to in-memory roster if API snapshot hasn't updated yet
             if (!hasWagered) {
               try {
@@ -734,10 +737,8 @@ preparePromise.then(() => {
                 hasWagered = !!(prior && prior.hasWagered);
               } catch {}
             }
-            if (!hasWagered && finalReady) {
-              // Gate: cannot mark ready true without wager in paid lobbies
-              finalReady = false;
-            }
+          // If we have proof of wager in roster, force ready true
+          if (hasWagered) finalReady = true;
           }
         } catch {}
 
@@ -757,7 +758,7 @@ preparePromise.then(() => {
           }
         } catch {}
         
-        // Update socket-level roster so late joiners see accurate readiness in paid lobbies
+        // Update socket-level roster and flip connection readiness
         try {
           // Derive hasWagered from live lobby (already read above) to persist in roster
           let hasWagered = false;
@@ -780,6 +781,7 @@ preparePromise.then(() => {
             }
           } catch {}
           const entry = await upsertRoster(lobbyId, normalizedPlayerId, { hasWagered, isReady: finalReady });
+          try { const conn2 = activeConnections.get(socket.id); if (conn2) conn2.isReady = finalReady; } catch {}
           emitRosterDiff(io, lobbyId, 'upsert', entry);
         } catch {}
 

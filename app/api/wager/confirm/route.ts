@@ -168,8 +168,24 @@ async function handleWagerConfirmation(req: NextRequest) {
             map.set(key, { ...cur, hasWagered: true, isReady: true });
           }
         } catch {}
+        // Flip any active socket connection to ready for this lobby
+        try {
+          const active = (global as any).activeConnections;
+          for (const [, conn] of (active && active.entries && active.entries()) || []) {
+            if (conn && String(conn.walletAddress || '').toLowerCase() === String(playerPublicKey).toLowerCase()) {
+              if (!conn.currentLobby) conn.currentLobby = lobbyId;
+              conn.isReady = true;
+            }
+          }
+        } catch {}
         socketIo.to(lobbyId).emit('roster_diff', { lobbyId, action: 'upsert', player: { playerId: playerPublicKey, hasWagered: true, isReady: true } });
         socketIo.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: true });
+        // Emit a full lobby_synced snapshot for instant UI update
+        try {
+          const build = (global as any).__buildLobbySnapshot;
+          const snap = build ? await build(lobbyId) : null;
+          if (snap) socketIo.to(lobbyId).emit('lobby_synced', snap);
+        } catch {}
       }
     } catch {}
 
