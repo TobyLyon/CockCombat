@@ -551,16 +551,21 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/80 flex items-center justify-center z-50"
           >
-            <motion.div
-              key={countdown}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.1, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="text-7xl sm:text-9xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.8)]"
-            >
-              {countdown}
-            </motion.div>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl sm:text-4xl font-extrabold text-white pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.85)] tracking-widest mb-2">
+                MATCH STARTING
+              </div>
+              <motion.div
+                key={countdown}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.1, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="text-7xl sm:text-9xl font-bold text-yellow-400 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,0.8)]"
+              >
+                {countdown}
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
