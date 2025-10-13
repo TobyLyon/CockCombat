@@ -805,119 +805,12 @@ preparePromise.then(() => {
         }
       } catch {}
       try {
-        // Fetch lobby data from API to get real usernames and player list
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-        const inflight = fetch(`${baseUrl}/api/lobbies`).then(r => r.json()).finally(() => { try { delete global.__lobbyStateInflight[lobbyId] } catch {} });
-        global.__lobbyStateInflight[lobbyId] = inflight;
-        const lobbies = await inflight;
-        const lobby = lobbies.find(l => l.id === lobbyId);
-        
-        if (lobby) {
-          // Merge API lobby players with socket ready status
-          let lobbyPlayers = [];
-          for (const player of lobby.players) {
-            const pid = String(player.playerId || '').toLowerCase();
-            let isReady = false;
-            // Ranked authority: if paid lobby, derive readiness from hasWagered for humans; tutorial uses connection state
-            if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
-              isReady = !!player.hasWagered;
-            } else {
-              for (const [, connection] of activeConnections.entries()) {
-                if (connection.currentLobby === lobbyId && String(connection.walletAddress || '').toLowerCase() === pid) {
-                  isReady = !!connection.isReady;
-                  break;
-                }
-              }
-            }
-            const displayName = player.username && player.username.trim().length > 0
-              ? player.username
-              : await getUsernameForWallet(player.playerId);
-            try { if (!player.username || player.username !== displayName) player.username = displayName } catch {}
-            lobbyPlayers.push({
-              playerId: player.playerId,
-              username: displayName,
-              chickenName: player.chickenId || 'Default',
-              isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
-              isAi: player.isAi || false
-            });
-          }
-
-          // Presence-based fallback if API is empty
-          try {
-            const presence = global.lobbyPresence?.get(lobbyId) || new Set();
-            if (lobbyPlayers.length === 0 && presence.size > 0) {
-              lobbyPlayers = [];
-              for (const addr of presence.values()) {
-                let ready = false;
-                for (const [, c] of activeConnections.entries()) {
-                  if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(addr).toLowerCase()) { ready = !!c.isReady; break; }
-                }
-                lobbyPlayers.push({
-                  playerId: addr,
-                  username: addr.slice(0, 8) + '...',
-                  chickenName: 'Default',
-                  isReady: ready,
-                  isAi: false,
-                });
-              }
-            }
-          } catch {}
-          
-          // Increment version for this on-demand snapshot
-          let version = 1;
-          try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
-          console.log(`📋 Sending lobby state for ${lobbyId} v${version}:`, lobbyPlayers);
-          
-          try {
-            const snap = await buildLobbySnapshot(lobbyId);
-            if (snap) socket.emit('lobby_updated', { ...snap, version });
-          } catch {}
-        } else {
-          console.log(`⚠️ Lobby ${lobbyId} not found in API, using fallback`);
-          // Fallback to socket-only method
-          let version = 1; try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
-          const lobbyPlayers = [];
-          
-          for (const [id, connection] of activeConnections.entries()) {
-            if (connection.currentLobby === lobbyId) {
-              const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-              const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-              
-              lobbyPlayers.push({
-                playerId: id,
-                username: `Player_${id.slice(0, 6)}`,
-                chickenName: randomChicken,
-                isReady: connection.isReady || false,
-                isAi: false
-              });
-            }
-          }
-          
-          try { const snap = await buildLobbySnapshot(lobbyId); if (snap) socket.emit('lobby_updated', { ...snap, version }); } catch {}
+        const snap = await buildLobbySnapshot(lobbyId);
+        if (snap) {
+          const version = nextLobbyVersion(lobbyId);
+          socket.emit('lobby_updated', { ...snap, version });
         }
-      } catch (error) {
-        console.error('❌ Error fetching lobby state:', error);
-        // Fallback to socket-only method
-        let version = 1; try { const cur = (global.lobbyVersions.get(lobbyId) || 0) + 1; global.lobbyVersions.set(lobbyId, cur); version = cur; } catch {}
-        const lobbyPlayers = [];
-        
-        for (const [id, connection] of activeConnections.entries()) {
-          if (connection.currentLobby === lobbyId) {
-            const randomChickens = ['Warrior', 'Ninja', 'Berserker', 'Mage', 'Tank', 'Assassin', 'Paladin', 'Archer'];
-            const randomChicken = randomChickens[Math.floor(Math.random() * randomChickens.length)];
-            
-            lobbyPlayers.push({
-              playerId: id,
-              username: `Player_${id.slice(0, 6)}`,
-              chickenName: randomChicken,
-              isReady: connection.isReady || false,
-              isAi: false
-            });
-          }
-        }
-        
-        try { const snap = await buildLobbySnapshot(lobbyId); if (snap) socket.emit('lobby_updated', { ...snap, version }); } catch {}
-      }
+      } catch {}
     });
 
     // Client nudge: ensure queue moves forward by finalizing or starting queue phase
@@ -947,16 +840,16 @@ preparePromise.then(() => {
         return;
       }
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-        const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-        const all = res ? await res.json().catch(() => []) : [];
         const counts = {};
-        for (const l of Array.isArray(all) ? all : []) {
-          const lid = l && l.id ? l.id : null;
-          if (!lid) continue;
-          const c = getLobbyCounts(lid);
-          counts[lid] = { liveHumans: c.humans, liveTotal: c.total };
-        }
+        try {
+          const catalog = (global && global.lobbyCatalog) ? global.lobbyCatalog : null;
+          if (catalog && typeof catalog.forEach === 'function') {
+            catalog.forEach((_, lid) => {
+              const c = getLobbyCounts(lid);
+              counts[lid] = { liveHumans: c.humans, liveTotal: c.total };
+            });
+          }
+        } catch {}
         socket.emit('lobby_counts_snapshot', { counts });
       } catch (e) {
         socket.emit('lobby_counts_snapshot', { counts: {} });
@@ -974,19 +867,25 @@ preparePromise.then(() => {
       if (!checkRateLimit('prune_ghosts', 5)) return;
       try {
         if (!lobbyId) return;
-        const lob = lobbies.find(l => l && l.id === lobbyId);
-        if (!lob || lob.matchType !== 'tutorial') return;
+        const meta = getLobbyMeta(lobbyId);
+        if (!meta || meta.matchType !== 'tutorial') return;
         const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-        const beforeCount = Array.isArray(lob.players) ? lob.players.length : 0;
-        if (!Array.isArray(lob.players)) lob.players = [];
-        lob.players = lob.players.filter(p => p.isAi || presence.has(String(p.playerId || '').toLowerCase()));
-        const afterCount = lob.players.length;
+        const map = getRosterMap(lobbyId);
+        const beforeCount = map.size;
+        // Keep AI or present humans
+        const next = new Map();
+        for (const [key, p] of map.entries()) {
+          const keep = p.isAi || presence.has(String(p.playerId || '').toLowerCase());
+          if (keep) next.set(key, p);
+        }
+        try { (global && global.lobbyRoster) ? global.lobbyRoster.set(lobbyId, next) : null } catch {}
+        const afterCount = next.size;
         if (afterCount !== beforeCount) {
           // Broadcast pruned roster
-          const lobbyPlayers = lob.players.map(p => ({
+          const lobbyPlayers = Array.from(next.values()).map((p) => ({
             playerId: p.playerId,
             username: p.username || (p.playerId ? String(p.playerId).slice(0,8)+'...' : 'Player'),
-            chickenName: p.chickenId || 'Default',
+            chickenName: p.chickenName || 'Default',
             isReady: p.isAi ? true : Boolean(p.isReady),
             isAi: !!p.isAi,
           }));
@@ -994,10 +893,10 @@ preparePromise.then(() => {
           io.to(lobbyId).emit('lobby_updated', {
             id: lobbyId,
             players: lobbyPlayers,
-            capacity: lob.capacity,
-            amount: lob.amount,
-            currency: lob.currency,
-            matchType: lob.matchType,
+            capacity: meta.capacity,
+            amount: meta.amount,
+            currency: meta.currency,
+            matchType: meta.matchType,
             version,
           });
         }

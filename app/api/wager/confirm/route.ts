@@ -9,6 +9,17 @@ import { isBsc, toNativeUnits } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 
+// Local fallback catalog to avoid any HTTP dependency if global server catalog isn't available
+function getLobbyMetaLocal(lobbyId: string) {
+  const CATALOG = [
+    { id: 'tutorial-1', amount: 0, currency: 'FREE', capacity: 8, matchType: 'tutorial', escrowWalletId: null as any },
+    { id: 'lobby-0p005', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+    { id: 'lobby-0p005-2', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+    { id: 'lobby-0.01', amount: 0.01, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+  ];
+  return CATALOG.find(l => l.id === lobbyId) || null;
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
     return handleWagerConfirmation(req);
@@ -36,14 +47,13 @@ async function handleWagerConfirmation(req: NextRequest) {
 
   // EVM-only build: validate EVM address format lightly if needed (skipped here)
 
-    const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : null;
+    const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : getLobbyMetaLocal(lobbyId);
     if (!lobbyMeta) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
     // Read/initialize roster entry from server memory
     const rosterMap = (global as any).lobbyRoster?.get(lobbyId) || new Map();
-    if (!(global as any).lobbyRoster?.has?.(lobbyId)) { try { (global as any).lobbyRoster.set(lobbyId, rosterMap) } catch {}
-    }
+    try { if (!(global as any).lobbyRoster?.has?.(lobbyId)) { (global as any).lobbyRoster.set(lobbyId, rosterMap) } } catch {}
 
     const pidNorm = String(playerPublicKey || '').toLowerCase();
     let player = rosterMap.get(pidNorm) || null;

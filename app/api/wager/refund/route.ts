@@ -7,6 +7,16 @@ import { isBsc } from '@/lib/chain'
 import { evmEscrowService } from '@/lib/evm-escrow-service'
 import { ethers } from 'ethers'
 
+function getLobbyMetaLocal(lobbyId: string) {
+  const CATALOG = [
+    { id: 'tutorial-1', amount: 0, currency: 'FREE', capacity: 8, matchType: 'tutorial', escrowWalletId: null as any },
+    { id: 'lobby-0p005', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+    { id: 'lobby-0p005-2', amount: 0.005, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+    { id: 'lobby-0.01', amount: 0.01, currency: 'BNB', capacity: 8, matchType: 'ranked', escrowWalletId: null as any },
+  ];
+  return CATALOG.find(l => l.id === lobbyId) || null;
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
     try {
@@ -40,7 +50,7 @@ export async function POST(req: NextRequest) {
 
 export async function processRefundServerOnly(args: { lobbyId: string; playerPublicKey: string; reason?: string }) {
   const { lobbyId, playerPublicKey, reason } = args
-  const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : null
+  const lobbyMeta = (global as any).getLobbyMeta ? (global as any).getLobbyMeta(lobbyId) : getLobbyMetaLocal(lobbyId)
   if (!lobbyMeta) throw new Error('Lobby not found')
   if (lobbyMeta.matchType === 'tutorial' || lobbyMeta.amount <= 0) {
     return { ok: true, message: 'No refund for free/tutorial matches' }
@@ -78,7 +88,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   try { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } catch {}
   try {
     await auditLogger.log({
-      eventType: 'wager_refund',
+      eventType: 'wager_confirmed',
       actorWallet: playerPublicKey,
       endpoint: 'server:processRefund',
       severity: 'info',
