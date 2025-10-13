@@ -669,6 +669,8 @@ function SceneContent({
           freezeUntilRef.current = startAt
           invulnerableUntilRef.current = startAt + 1000
         }
+        // Hide countdown immediately on round start
+        setSyncedCountdown(null)
       } catch {}
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
@@ -703,6 +705,8 @@ function SceneContent({
         freezeUntilRef.current = Date.now()
         invulnerableUntilRef.current = Date.now() + 1000
       }
+      // Ensure overlay is cleared on generic start signal
+      setSyncedCountdown(null)
     }
     socket.on('match_started', onMatchStarted)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
@@ -718,13 +722,19 @@ function SceneContent({
     }
   }, [socket, onPlayerDamage])
 
-  // Synced countdown updater: prefer absolute start time, else keep last server count
+  // Synced countdown updater: prefer absolute start time; hide at zero or after
   useEffect(() => {
     const id = setInterval(() => {
       const startAt = roundStartAtMsRef.current
       if (typeof startAt === 'number' && startAt > Date.now()) {
-        const next = Math.max(0, Math.ceil((startAt - Date.now()) / 1000))
-        if (syncedCountdown !== next) setSyncedCountdown(next)
+        const next = Math.ceil((startAt - Date.now()) / 1000)
+        if (next <= 0) {
+          if (syncedCountdown !== null) setSyncedCountdown(null)
+        } else if (syncedCountdown !== next) {
+          setSyncedCountdown(next)
+        }
+      } else {
+        if (syncedCountdown !== null) setSyncedCountdown(null)
       }
     }, 100)
     return () => clearInterval(id)
