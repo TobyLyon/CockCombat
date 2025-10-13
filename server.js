@@ -1735,9 +1735,15 @@ preparePromise.then(() => {
         if (!msid) return;
         // Idempotency per session
         try { if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set(); } catch {}
+        try { if (!global.payoutInFlightBySession) global.payoutInFlightBySession = new Set(); } catch {}
         const winnerLowerKey = String((payload?.winnerWallet || '')).toLowerCase();
         const idempoKey = `${msid}:${winnerLowerKey}`;
-        if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) return;
+        // Guard: if already completed or currently in-flight, skip duplicate trigger
+        if ((global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) ||
+            (global.payoutInFlightBySession && global.payoutInFlightBySession.has(idempoKey))) {
+          return;
+        }
+        try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.add(idempoKey); } catch {}
 
         const meta = global.recentMatchMetaBySession ? global.recentMatchMetaBySession.get(msid) : null;
         if (!meta) return;
@@ -1819,8 +1825,10 @@ preparePromise.then(() => {
           const txt = resp ? await resp.text().catch(() => '') : 'no response';
           console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
         }
+        try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.delete(idempoKey); } catch {}
       } catch (err) {
         console.warn('match_end handler error:', err?.message || err);
+        try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.delete(`${String(payload?.matchSessionId||'')}:${String((payload?.winnerWallet||'')).toLowerCase()}`); } catch {}
       }
     });
 
