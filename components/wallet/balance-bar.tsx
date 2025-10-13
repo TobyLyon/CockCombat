@@ -64,6 +64,12 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
         if (me && String(p?.winner || '').toLowerCase() === me.toLowerCase()) {
           // Immediate refresh
           fetchBalances()
+          try {
+            const amt = typeof p?.amount === 'number' ? p.amount : null
+            const cur = p?.currency || (isBsc() ? 'BNB' : 'SOL')
+            const nice = amt !== null ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(amt) : ''
+            toast.success(`Winnings received${nice ? `: ${nice} ${cur}` : ''}`)
+          } catch {}
         }
       } catch {}
     }

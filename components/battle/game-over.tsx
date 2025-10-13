@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from "@/components/ui/button"
 import { useGameState } from '@/contexts/GameStateContext';
 import { motion } from 'framer-motion';
@@ -22,6 +22,13 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   const [autoExitTimer, setAutoExitTimer] = useState(10); // 10 second auto-exit
 
   const isHumanWinner = winner && humanPlayer && winner.id === humanPlayer.id;
+
+  const formatAmount = useMemo(() => (amount: number, cur: string) => {
+    const maxDigits = cur === 'BNB' ? 6 : 6;
+    const str = Number(amount).toFixed(maxDigits);
+    const trimmed = str.replace(/\.0+$/, '').replace(/(\.\d*?[1-9])0+$/, '$1');
+    return trimmed;
+  }, []);
 
   // Auto-exit countdown
   useEffect(() => {
@@ -46,10 +53,10 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   const currency = matchMeta?.currency || (isBsc() ? 'BNB' : 'SOL');
   const isTutorial = (matchMeta?.matchType || 'tutorial') === 'tutorial' || entryPerPlayer === 0;
   const grossPool = isTutorial ? 0 : entryPerPlayer * Math.max(1, humanCount);
-  const netWinner = isTutorial ? 0 : Number((grossPool * 0.96).toFixed(2));
+  const netWinner = isTutorial ? 0 : (grossPool * 0.96);
   const durationSec = battleStartAt && battleEndAt ? Math.max(0, Math.round((battleEndAt - battleStartAt) / 1000)) : null;
 
-  // Play sound and trigger payout on component mount
+  // Play sound on component mount; payout is orchestrated by the server
   useEffect(() => {
     // Ensure a local victory/death cue as fallback (server may also broadcast)
     if (isHumanWinner) {
@@ -58,36 +65,23 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
       try { playSound('death') } catch {}
     }
 
-    const handlePayout = async () => {
-      if (isHumanWinner && publicKey && grossPool > 0) {
-        setPayoutStatus('processing');
-        try {
-          const response = await fetch('/api/payout/forward', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              winnerAddress: publicKey.toString(),
-              prizePool: grossPool,
-            }),
-          });
+    if (isHumanWinner && publicKey && grossPool > 0) {
+      setPayoutStatus('processing');
+    }
+  }, [isHumanWinner, playSound, publicKey, grossPool]);
 
-          if (!response.ok) {
-            throw new Error('Payout transaction failed');
-          }
-
-          const result = await response.json();
-          console.log('💰 Payout successful:', result.winnerTransaction);
+  useEffect(() => {
+    const onPayout = (p: any) => {
+      try {
+        const me = (publicKey as any)?.toString?.() || '';
+        if (me && String(p?.winner || '').toLowerCase() === me.toLowerCase()) {
           setPayoutStatus('success');
-
-        } catch (error) {
-          console.error('❌ Payout failed:', error);
-          setPayoutStatus('failed');
         }
-      }
+      } catch {}
     };
-
-    handlePayout();
-  }, [isHumanWinner, playSound, publicKey, prizeAmount]);
+    try { (window as any)?.__socket__?.on?.('payout_success', onPayout) } catch {}
+    return () => { try { (window as any)?.__socket__?.off?.('payout_success', onPayout) } catch {} }
+  }, [publicKey]);
 
   const handleShare = () => {
     try {
@@ -159,7 +153,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
             <div className="text-center flex flex-col items-center justify-center">
               <p className="text-gray-400 text-sm mb-1">PRIZE</p>
               <p className="text-3xl font-bold text-yellow-400">
-                {netWinner.toFixed(2)} {currency}
+                {formatAmount(netWinner, currency)} {currency}
               </p>
             </div>
           )}
@@ -184,16 +178,16 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
           </div>
           <div>
             <p className="text-white/60 text-[11px]">Entry (per player)</p>
-            <p className="font-semibold">{entryPerPlayer.toFixed(2)} {currency}</p>
+            <p className="font-semibold">{formatAmount(entryPerPlayer, currency)} {currency}</p>
           </div>
           {/* Removed Humans vs AI breakdown per request */}
           <div>
             <p className="text-white/60 text-[11px]">Gross Pool</p>
-            <p className="font-semibold">{grossPool.toFixed(2)} {currency}</p>
+            <p className="font-semibold">{formatAmount(grossPool, currency)} {currency}</p>
           </div>
           <div>
             <p className="text-white/60 text-[11px]">Winner (net)</p>
-            <p className="font-semibold text-yellow-300">{netWinner.toFixed(2)} {currency}</p>
+            <p className="font-semibold text-yellow-300">{formatAmount(netWinner, currency)} {currency}</p>
           </div>
           {durationSec !== null && (
             <div className="col-span-2">
