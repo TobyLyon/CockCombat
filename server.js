@@ -2080,7 +2080,8 @@ preparePromise.then(() => {
         // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
-            return Boolean(p.isReady) || Boolean((p as any).hasWagered);
+            // Avoid TS syntax in Node: check both props safely
+            return Boolean(p.isReady) || Boolean((p && p.hasWagered));
           }
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
