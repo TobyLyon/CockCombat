@@ -167,14 +167,20 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Match winner not recorded in database' }, { status: 400 });
       }
     } else if (prizePool > 0) {
-      // Require matchId for all non-zero payouts
-      await auditLogger.logSuspiciousActivity(
-        'Payout without match ID',
-        winnerAddress,
-        undefined,
-        { amount: prizePool }
-      );
-      return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
+      // Allow server-authorized payouts without matchId (fallback path) when internal auth provided
+      const providedAuth = request.headers.get('x-server-auth') || request.headers.get('authorization');
+      const serverSecret = process.env.PAYOUT_SERVER_SECRET;
+      const authorized = !!(serverSecret && providedAuth && providedAuth.replace(/^Bearer\s+/i, '').trim() === serverSecret);
+      if (!authorized) {
+        await auditLogger.logSuspiciousActivity(
+          'Payout without match ID',
+          winnerAddress,
+          undefined,
+          { amount: prizePool }
+        );
+        return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
+      }
+      // Proceed with payout; matchResult stays null and processPayoutServerOnly will select wallet round-robin
     }
 
     // Perform the payout via server-only helper

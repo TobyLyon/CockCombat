@@ -1779,7 +1779,7 @@ preparePromise.then(() => {
         const resp = await fetch(`${baseUrl}/api/payout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId })
+          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined })
         }).catch(() => null);
         if (resp && resp.ok) {
           console.log('💸 Ranked payout executed via HTTP (client-declared end)');
