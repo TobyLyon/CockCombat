@@ -784,29 +784,8 @@ preparePromise.then(() => {
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
-        // Enforce ranked readiness: only allow ready=true if hasWagered for paid lobbies
-        let finalReady = !!isReady;
-        try {
-          const baseUrl = `http://localhost:${port}`;
-          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-          const all = res ? await res.json().catch(() => []) : [];
-          const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-          if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
-            const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
-            let hasWagered = !!(me && me.hasWagered);
-            // Fallback to in-memory roster if API snapshot hasn't updated yet
-            if (!hasWagered) {
-              try {
-                const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
-                const prior = map && map.get ? map.get(normalizedPlayerId) : null;
-                hasWagered = !!(prior && prior.hasWagered);
-              } catch {}
-            }
-            // Only allow ready=true if wagered; otherwise force false
-            finalReady = finalReady && hasWagered;
-          }
-        } catch {}
-
+        // UI readiness reflects player intent immediately; actual round start still enforces wagers later
+        const finalReady = !!isReady;
         connection.isReady = finalReady;
         connection.lastLobbyActivity = Date.now();
         // Ensure wallet and lobby are linked immediately to avoid first-join races
@@ -908,13 +887,13 @@ preparePromise.then(() => {
           }
         } catch {}
         
-        // Persist readiness and trigger AI backfill for tutorial lobbies via HTTP PUT
+        // Persist readiness for UI snapshots; in ranked lobbies we still gate round start on wagers later
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           await fetch(`${baseUrl}/api/lobbies`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lobbyId, playerId, isReady })
+            body: JSON.stringify({ lobbyId, playerId, isReady: !!isReady })
           }).catch(() => {});
         } catch {}
 

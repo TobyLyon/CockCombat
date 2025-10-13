@@ -597,7 +597,12 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
     }
 
-    player.isReady = isReady;
+    // Do not override ranked readiness with false when wagered; UI still needs to reflect intent immediately
+    if (lobby.matchType !== 'tutorial' && lobby.amount > 0 && (player as any).hasWagered) {
+      player.isReady = true;
+    } else {
+      player.isReady = isReady;
+    }
 
     // Broadcast via Socket.IO if available
     try {
