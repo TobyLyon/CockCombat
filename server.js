@@ -1327,24 +1327,28 @@ preparePromise.then(() => {
           });
           try { io.to(roomId).emit('play_sound', { key: 'victory' }); } catch {}
 
-          // Best-effort tutorial lobby cleanup so it doesn't appear full after match
+          // Best-effort lobby cleanup so rosters don't persist between rounds
         try {
           const baseUrl = `http://localhost:${port}`;
           const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
-            const tutorialLobbies = Array.isArray(all) ? all.filter(l => l && l.matchType === 'tutorial') : [];
-            for (const tl of tutorialLobbies) {
-              if (Array.isArray(tl.players) && tl.players.length > 0) {
-                for (const p of tl.players) {
+            const targetLobbies = Array.isArray(all) ? all.filter(l => l && (l.matchType === 'tutorial' || (l.amount || 0) > 0)) : [];
+            for (const lob of targetLobbies) {
+              if (Array.isArray(lob.players) && lob.players.length > 0) {
+                for (const p of lob.players) {
                   try {
                     await fetch(`${baseUrl}/api/lobbies`, {
                       method: 'DELETE',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ lobbyId: tl.id, playerId: p.playerId })
+                      body: JSON.stringify({ lobbyId: lob.id, playerId: p.playerId })
                     });
                   } catch {}
                 }
               }
+              // Clear socket-only roster and presence for this lobby to avoid stale ready flags
+              try { if (global.lobbyRoster && global.lobbyRoster.delete) global.lobbyRoster.delete(lob.id); } catch {}
+              try { if (global.lobbyPresence && global.lobbyPresence.delete) global.lobbyPresence.delete(lob.id); } catch {}
+              try { if (global.activeQueueForLobby && global.activeQueueForLobby.delete) global.activeQueueForLobby.delete(lob.id); } catch {}
             }
           } catch (e) {
             console.warn('Tutorial lobby cleanup failed (non-fatal):', e?.message || e);
