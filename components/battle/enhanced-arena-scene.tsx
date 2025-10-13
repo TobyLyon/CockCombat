@@ -274,6 +274,21 @@ function SceneContent({
     }
   }, [gameState])
 
+  // Initialize from cached start epoch if present (guards late scene entry)
+  useEffect(() => {
+    if (gameState === 'battle') {
+      try {
+        const startAt = (window as any)?.__last_round_start_at
+        if (typeof startAt === 'number' && startAt > Date.now()) {
+          roundStartAtMsRef.current = startAt
+          freezeUntilRef.current = startAt
+          invulnerableUntilRef.current = startAt + 1000
+          setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+        }
+      } catch {}
+    }
+  }, [gameState])
+
   // Snap player to assigned spawn when battle starts or spawn data changes
   useEffect(() => {
     if (gameState !== 'battle') return
@@ -673,6 +688,23 @@ function SceneContent({
     }
     socket.on('arena_lock_roster', onArenaLockJoin)
     socket.on('round_start', onRoundStartJoin)
+    // Fallback countdown handler when epoch wasn't received
+    const onRoundCountdown = (payload: any) => {
+      try {
+        const c = Number(payload?.count)
+        if (!Number.isFinite(c)) return
+        setSyncedCountdown(Math.max(0, c))
+        // If we never received a startAt epoch, estimate it from the countdown
+        if (!roundStartAtMsRef.current || roundStartAtMsRef.current < Date.now()) {
+          const estimate = Date.now() + Math.max(0, c) * 1000
+          roundStartAtMsRef.current = estimate
+          freezeUntilRef.current = estimate
+          invulnerableUntilRef.current = estimate + 1000
+          try { (window as any).__last_round_start_at = estimate } catch {}
+        }
+      } catch {}
+    }
+    socket.on('round_countdown', onRoundCountdown)
     // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
     const onMatchStarted = () => {
       if (!roundStartAtMsRef.current) {
@@ -688,6 +720,7 @@ function SceneContent({
       socket.off('player_damage', onRemotePlayerDamage)
       socket.off('arena_lock_roster', onArenaLockJoin)
       socket.off('round_start', onRoundStartJoin)
+      socket.off('round_countdown', onRoundCountdown)
       socket.off('match_started', onMatchStarted)
       socket.off('debug_trace', onDebug)
     }
