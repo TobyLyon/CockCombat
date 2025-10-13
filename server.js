@@ -725,7 +725,15 @@ preparePromise.then(() => {
           const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
           if (liveLobby && liveLobby.matchType !== 'tutorial' && (liveLobby.amount || 0) > 0) {
             const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
-            const hasWagered = !!(me && me.hasWagered);
+            let hasWagered = !!(me && me.hasWagered);
+            // Fallback to in-memory roster if API snapshot hasn't updated yet
+            if (!hasWagered) {
+              try {
+                const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
+                const prior = map && map.get ? map.get(normalizedPlayerId) : null;
+                hasWagered = !!(prior && prior.hasWagered);
+              } catch {}
+            }
             if (!hasWagered && finalReady) {
               // Gate: cannot mark ready true without wager in paid lobbies
               finalReady = false;

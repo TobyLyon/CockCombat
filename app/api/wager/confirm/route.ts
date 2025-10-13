@@ -159,6 +159,15 @@ async function handleWagerConfirmation(req: NextRequest) {
     try {
       const socketIo: any = (global as any).socketIo;
       if (socketIo) {
+        // Upsert into in-memory roster so readiness checks pick it up immediately
+        try {
+          const map = ((global as any).lobbyRoster && (global as any).lobbyRoster.get?.(lobbyId)) || null;
+          if (map && map.set) {
+            const key = String(playerPublicKey).toLowerCase();
+            const cur = map.get(key) || { playerId: playerPublicKey };
+            map.set(key, { ...cur, hasWagered: true, isReady: true });
+          }
+        } catch {}
         socketIo.to(lobbyId).emit('roster_diff', { lobbyId, action: 'upsert', player: { playerId: playerPublicKey, hasWagered: true, isReady: true } });
         socketIo.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: true });
       }
