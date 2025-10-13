@@ -176,23 +176,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Match ID required for payouts' }, { status: 400 });
     }
 
-    // --- TRANSACTION LOGIC (Solana or BSC) ---
-    let winnerSignature = '';
-    let houseSignature = '';
-    if (isBsc()) {
-      const poolBnb = prizePool;
-      const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
-      const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
-      const walletId = matchResult?.escrow_wallet_id as any | undefined;
-      const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
-      // Fallback to next wallet if not found
-      const from = wallet || evmEscrowService.getNextWallet();
-      winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
-      houseSignature = await evmEscrowService.transferNative(houseWalletAddress, houseCutWei, from);
-      console.log(`✅ EVM payout successful`, { winnerSignature, houseSignature });
-    } else {
-      return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
-    }
+    // Perform the payout via server-only helper
+    const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, houseWalletAddress, houseCutPercentage, matchResult });
 
     // Audit log and monitor the payout
     await monitoringService.monitorPayout(
@@ -307,4 +292,22 @@ export async function POST(request: Request) {
       details: errorMessage,
     }, { status: 500 });
   }
-} 
+}
+
+// Server-only entrypoint to execute payout logic without HTTP
+export async function processPayoutServerOnly(args: { winnerAddress: string; prizePool: number; matchId?: string | null; houseWalletAddress?: string; houseCutPercentage?: number; matchResult?: any }) {
+  const { winnerAddress, prizePool, matchId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04'), matchResult } = args;
+  if (!isBsc()) throw new Error('Unsupported chain');
+  if (!houseWalletAddress && !process.env.NEXT_PUBLIC_ADMIN_WALLET) throw new Error('House wallet not configured');
+  const house = houseWalletAddress || process.env.NEXT_PUBLIC_ADMIN_WALLET!;
+  const poolBnb = prizePool;
+  const houseCutWei = ethers.parseUnits((poolBnb * houseCutPercentage).toString(), 18);
+  const winnerCutWei = ethers.parseUnits((poolBnb - poolBnb * houseCutPercentage).toString(), 18);
+  const walletId = matchResult?.escrow_wallet_id as any | undefined;
+  const wallet = walletId ? evmEscrowService.getWallet(walletId) : undefined;
+  const from = wallet || evmEscrowService.getNextWallet();
+  const winnerSignature = await evmEscrowService.transferNative(winnerAddress, winnerCutWei, from);
+  const houseSignature = await evmEscrowService.transferNative(house, houseCutWei, from);
+  console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: poolBnb * (1 - houseCutPercentage), houseAmount: poolBnb * houseCutPercentage, escrow: from?.id, winnerSignature, houseSignature });
+  return { winnerSignature, houseSignature };
+}

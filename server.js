@@ -1283,30 +1283,23 @@ preparePromise.then(() => {
                         player2_tokens_wagered: rankedLobby.amount
                       }).eq('id', matchIdBase);
                     } catch {}
-                    // Trigger payout via internal API with server secret
-                    const payoutUrl = `${(process.env.NEXT_PUBLIC_APP_URL || baseUrl || `http://localhost:${port}`)}/api/payout`;
-                    const serverSecret = process.env.PAYOUT_SERVER_SECRET;
-                    if (serverSecret) {
-                      const res = await fetch(payoutUrl, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${serverSecret}`,
-                        },
-                        body: JSON.stringify({
-                          winnerAddress: winnerWallet,
-                          prizePool: (prizePoolLamports / 1_000_000_000),
-                          matchId: mr.id,
-                        }),
+                    // Trigger payout via server-only function (no HTTP)
+                    try {
+                      const { processPayoutServerOnly } = require('./app/api/payout/route.ts');
+                      const houseWalletAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET;
+                      const houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
+                      const { winnerSignature, houseSignature } = await processPayoutServerOnly({
+                        winnerAddress: winnerWallet,
+                        prizePool: (prizePoolLamports / 1_000_000_000),
+                        matchId: mr.id,
+                        houseWalletAddress,
+                        houseCutPercentage,
+                        matchResult: mr,
                       });
-                  if (!res.ok) {
-                        console.error('❌ Ranked payout failed:', await res.text().catch(() => ''));
-                      } else {
-                        console.log('💸 Ranked payout initiated for match_result:', mr.id);
-                        try { room._payoutTriggered = true; } catch {}
-                      }
-                    } else {
-                      console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot trigger ranked payout');
+                      console.log('💸 Ranked payout executed for match_result:', mr.id, { winnerSignature, houseSignature });
+                      try { room._payoutTriggered = true; } catch {}
+                    } catch (e) {
+                      console.error('❌ Ranked payout failed (server fn):', e);
                     }
                   } else if (mrErr) {
                     console.error('❌ Failed to insert match_results:', mrErr);
@@ -2237,15 +2230,10 @@ preparePromise.then(() => {
       const minHumans = isTutorial ? 2 : 2;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
-          // Refund all expected humans (best-effort)
+          // Refund all expected humans (best-effort) via server-only function
+          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
           for (const w of requiredHumans) {
-            try {
-              await fetch(`${baseUrl}/api/wager/refund`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players', __serverOnlyToken: process.env.REFUND_SERVER_TOKEN || '' }),
-              }).catch(() => {});
-            } catch {}
+            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'insufficient_players' }); } catch {}
           }
         } catch {}
         try { io.to(lobbyId).emit('match_cancelled', { reason: 'insufficient_players' }); } catch {}
@@ -2261,15 +2249,12 @@ preparePromise.then(() => {
       // Refund any paid human who failed the queue handshake (ranked only)
       if (!isTutorial) {
         const failedHumans = requiredHumans.filter(w => !presentHumans.includes(w));
-        for (const w of failedHumans) {
-          try {
-            await fetch(`${baseUrl}/api/wager/refund`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show', __serverOnlyToken: process.env.REFUND_SERVER_TOKEN || '' }),
-            }).catch(() => {});
-          } catch {}
-        }
+        try {
+          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
+          for (const w of failedHumans) {
+            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'queue_no_show' }); } catch {}
+          }
+        } catch {}
       }
 
       // Lock roster and schedule a synchronized round start
