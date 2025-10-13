@@ -62,7 +62,7 @@ async function getUsernameForWallet(wallet) {
     if (!key) return '';
     const cached = usernameCache.get(key);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.name;
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const baseUrl = `http://localhost:${port}`;
     const res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
     let name = null;
     if (res && res.ok) {
@@ -479,7 +479,7 @@ preparePromise.then(() => {
             // Do not fully cancel active countdown; but re-emit a fresh 'lobby_updated' snapshot immediately for the joiner
             setTimeout(async () => {
               try {
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const baseUrl = `http://localhost:${port}`;
                 const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null)
                 const all = response ? await response.json().catch(() => []) : []
                 const lob = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null
@@ -623,7 +623,7 @@ preparePromise.then(() => {
 
         // Emit an updated lobby roster immediately
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrl = `http://localhost:${port}`;
           const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -719,7 +719,7 @@ preparePromise.then(() => {
         // Enforce ranked readiness: only allow ready=true if hasWagered for paid lobbies
         let finalReady = !!isReady;
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrl = `http://localhost:${port}`;
           const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -866,7 +866,7 @@ preparePromise.then(() => {
       } catch {}
       try {
         // Fetch lobby data from API to get real usernames and player list
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+        const baseUrl = `http://localhost:${port}`;
         const inflight = fetch(`${baseUrl}/api/lobbies`).then(r => r.json()).finally(() => { try { delete global.__lobbyStateInflight[lobbyId] } catch {} });
         global.__lobbyStateInflight[lobbyId] = inflight;
         const lobbies = await inflight;
@@ -1097,7 +1097,7 @@ preparePromise.then(() => {
                 const isReady = Boolean(conn.isReady);
                 if (!isReady && last > 0 && (now - last) > idleMs) {
                   // Boot: remove from lobby via API and from socket room
-                  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                  const baseUrl = `http://localhost:${port}`;
                   try {
                     await fetch(`${baseUrl}/api/lobbies`, {
                       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
@@ -1242,9 +1242,9 @@ preparePromise.then(() => {
           try { io.to(roomId).emit('play_sound', { key: 'victory' }); } catch {}
 
           // Best-effort tutorial lobby cleanup so it doesn't appear full after match
-          try {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+        try {
+          const baseUrl = `http://localhost:${port}`;
+          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const tutorialLobbies = Array.isArray(all) ? all.filter(l => l && l.matchType === 'tutorial') : [];
             for (const tl of tutorialLobbies) {
@@ -1276,7 +1276,7 @@ preparePromise.then(() => {
               const winnerWallet = winnerConn?.walletAddress || null;
               const meta = (winnerWallet && global.recentMatchMetaByWallet) ? global.recentMatchMetaByWallet.get(String(winnerWallet).toLowerCase()) : null;
               if (meta && (meta.amount > 0) && (meta.humansCount > 0)) {
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const baseUrl = `http://localhost:${port}`;
                 const secret = process.env.PAYOUT_SERVER_SECRET;
                 const prizePool = (meta.amount || 0) * (meta.humansCount || 0);
                 if (secret && winnerWallet) {
@@ -1418,7 +1418,7 @@ preparePromise.then(() => {
                     } catch {}
                     // Trigger payout via internal HTTP API to avoid TS/CJS import issues on server-only path
                     try {
-                      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                      const baseUrl = `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
                         console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
@@ -1699,7 +1699,7 @@ preparePromise.then(() => {
           return;
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                  const baseUrl = `http://localhost:${port}`;
         const secret = process.env.PAYOUT_SERVER_SECRET;
         if (!secret) {
           console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
@@ -1971,7 +1971,7 @@ preparePromise.then(() => {
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {
       // Fetch lobby data from API to get the real player list
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+      const baseUrl = `http://localhost:${port}`;
       const response = await fetch(`${baseUrl}/api/lobbies`);
       const lobbies = await response.json();
       const lobby = lobbies.find(l => l.id === lobbyId);
@@ -2135,7 +2135,7 @@ preparePromise.then(() => {
               // - Ranked: mark paid humans ready; remove unpaid humans
               ;(async () => {
                 try {
-                  const baseUrlLocal = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const baseUrlLocal = `http://localhost:${port}`;
           const resLive = await fetch(`${baseUrlLocal}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
                   const allLive = resLive ? await resLive.json().catch(() => []) : [];
                   const liveLobby = Array.isArray(allLive) ? allLive.find(l => l && l.id === lobbyId) : null;
@@ -2175,7 +2175,7 @@ preparePromise.then(() => {
 
                     // Rebuild current roster and filter to ready humans (and AIs for tutorial), ignoring ghosts
                     try {
-          const resNow = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
+          const resNow = await fetch(`${`http://localhost:${port}`}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
                       const allNow = resNow ? await resNow.json().catch(() => []) : [];
                       const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
                       if (!liveLobbyNow) return;

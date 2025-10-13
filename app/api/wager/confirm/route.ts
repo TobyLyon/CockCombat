@@ -155,7 +155,14 @@ async function handleWagerConfirmation(req: NextRequest) {
       lobby.players = next;
     } catch {}
     
-    console.log(`Player ${player.playerId} is now ready in lobby ${lobbyId}`);
+    console.log(`[WAGER][CONFIRMED]`, { lobbyId, player: player.playerId, signature });
+    try {
+      const socketIo: any = (global as any).socketIo;
+      if (socketIo) {
+        socketIo.to(lobbyId).emit('roster_diff', { lobbyId, action: 'upsert', player: { playerId: playerPublicKey, hasWagered: true, isReady: true } });
+        socketIo.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: true });
+      }
+    } catch {}
 
     // Broadcast updated readiness immediately so Match Room reflects it
     try {
