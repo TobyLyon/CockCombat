@@ -115,20 +115,19 @@ preparePromise.then(() => {
   // Store the socket instance globally so API routes can access it
   global.socketIo = io;
 
+  // Initialize payout in-flight lock set (per-process)
+  try { if (!global.payoutInFlightBySession) global.payoutInFlightBySession = new Set(); } catch {}
+
   console.log('🚀 Socket.io server initialized');
   // Print loaded escrow wallets (if any)
   try {
-    const evm = require('./lib/evm-config.js');
-    const { getEvmProvider } = evm || {};
-    if (getEvmProvider) {
-      // Probe provider and log configured addresses (if any)
-      const provider = getEvmProvider();
-      const addrs = ['A','B','C'].map(id => process.env[`EVM_ESCROW_${id}_ADDRESS`] || process.env[`ESCROW_WALLET_${id}_PUBLIC_KEY`]).filter(Boolean);
-      if (addrs.length > 0) {
-        console.log('🔐 Loaded EVM escrow wallets:', addrs.map(a => `${String(a).slice(0,6)}…${String(a).slice(-4)}`).join(', '));
-      } else {
-        console.warn('⚠️ No EVM escrow wallets available at runtime');
-      }
+    const evm = require('./lib/evm-escrow-service.ts');
+    const svc = evm && (evm.evmEscrowService || evm.default);
+    const list = svc && svc.getWallet ? ['A','B','C'].map(id => svc.getWallet(id)).filter(Boolean) : [];
+    if (Array.isArray(list) && list.length > 0) {
+      console.log('🔐 Loaded EVM escrow wallets (runtime):', list.map(w => `${w.id}:${String(w.address).slice(0,6)}…${String(w.address).slice(-4)}`).join(', '));
+    } else {
+      console.warn('⚠️ No EVM escrow wallets available at runtime');
     }
   } catch {}
 
@@ -591,14 +590,6 @@ preparePromise.then(() => {
         return;
       }
       if (lobbyId) {
-        // Block leaving during active 5s lobby countdown (cutoff window)
-        try {
-          if (global.countdownActive && global.countdownActive[lobbyId]) {
-            try { socket.emit('leave_blocked', { lobbyId, reason: 'countdown_active' }); } catch {}
-            console.log(`🚫 Blocked lobby room leave during countdown for ${lobbyId} (socket ${socket.id})`);
-            return;
-          }
-        } catch {}
         console.log(`🚪 Client ${socket.id} leaving lobby room: ${lobbyId}`);
         socket.leave(lobbyId);
         
@@ -1364,24 +1355,34 @@ preparePromise.then(() => {
                       }).select('id').single();
                       const matchId = mrRow?.id || null;
                       console.log('[PAYOUT][REQUEST][HTTP][FAST]', { matchId, winner: winnerWallet, prizePool });
-                      // Reserve session+winner before HTTP to prevent parallel client path
+                      // In-flight guard for this session+winner to prevent duplicate HTTP triggers
                       try {
-                        const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
-                        if (msid && winnerWallet) {
-                          if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
-                          const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
-                          global.payoutTriggeredBySession.add(idempoKey);
+                        if (!global.payoutInFlightBySession) global.payoutInFlightBySession = new Set();
+                        if (meta && meta.matchSessionId && winnerWallet) {
+                          const k = `${String(meta.matchSessionId)}:${String(winnerWallet).toLowerCase()}`;
+                          if (global.payoutInFlightBySession.has(k)) return;
+                          global.payoutInFlightBySession.add(k);
+                          setTimeout(() => { try { global.payoutInFlightBySession.delete(k) } catch {} }, 30000);
                         }
                       } catch {}
 
                       const resp = await fetch(`${baseUrl}/api/payout`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
+                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) || undefined })
                       }).catch(() => null);
-                        if (resp && (resp.ok || resp.status === 202)) {
+                      if (resp && resp.ok) {
                         console.log('💸 Ranked payout executed via HTTP (fast path)');
                         try { room._payoutTriggered = true; } catch {}
+                        // Prevent any secondary payout paths for this session
+                        try {
+                          const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
+                          if (msid && winnerWallet) {
+                            if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
+                            const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
+                            global.payoutTriggeredBySession.add(idempoKey);
+                          }
+                        } catch {}
                         return;
                       } else {
                         const status = resp ? resp.status : 'no_response';
@@ -1493,45 +1494,44 @@ preparePromise.then(() => {
                     } catch {}
                     // Trigger payout via internal HTTP API to avoid TS/CJS import issues on server-only path
                     try {
-                      // Reserve session+winner before HTTP to prevent parallel client path
+                      // In-flight guard for this session+winner to prevent duplicate HTTP triggers
                       try {
-                        const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
-                        if (msid && winnerWallet) {
-                          if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
-                          const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
-                          if (global.payoutTriggeredBySession.has(idempoKey)) return;
-                          global.payoutTriggeredBySession.add(idempoKey);
+                        if (!global.payoutInFlightBySession) global.payoutInFlightBySession = new Set();
+                        if (meta && meta.matchSessionId && winnerWallet) {
+                          const k = `${String(meta.matchSessionId)}:${String(winnerWallet).toLowerCase()}`;
+                          if (global.payoutInFlightBySession.has(k)) return;
+                          global.payoutInFlightBySession.add(k);
+                          setTimeout(() => { try { global.payoutInFlightBySession.delete(k) } catch {} }, 30000);
                         }
-                        if (room._payoutTriggered) return;
                       } catch {}
+                      // Double-check guard right before HTTP trigger
+                      try { if (room._payoutTriggered) return; } catch {}
                       const baseUrl = `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
                         console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
-                        try {
-                          const resp = await fetch(`${baseUrl}/api/payout`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                            body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined, escrowWalletId: (meta && meta.escrow) || undefined })
-                          }).catch(()=>null)
-                          if (resp && (resp.ok || resp.status === 202)) {
-                            console.log('💸 Ranked payout executed via HTTP');
-                            try { room._payoutTriggered = true; } catch {}
-                            try {
-                              const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
-                              if (msid && winnerWallet) {
-                                if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
-                                const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
-                                global.payoutTriggeredBySession.add(idempoKey);
-                              }
-                            } catch {}
-                            return;
-                          } else {
-                            const txt = resp ? await resp.text().catch(()=> '') : 'no response'
-                            console.warn('Server payout HTTP error:', txt)
-                          }
-                        } catch (eh) {
-                          console.warn('Server payout error:', eh?.message || eh);
+                        const resp = await fetch(`${baseUrl}/api/payout`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) || undefined })
+                        }).catch(() => null);
+                        if (resp && resp.ok) {
+                          console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
+                          try { room._payoutTriggered = true; } catch {}
+                          // Also mark by session to block client-declared path
+                          try {
+                            const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
+                            if (msid && winnerWallet) {
+                              if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
+                              const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
+                              global.payoutTriggeredBySession.add(idempoKey);
+                            }
+                          } catch {}
+                          return;
+                        } else {
+                          const status = resp ? resp.status : 'no_response';
+                          const txt = resp ? await resp.text().catch(() => '') : 'no response';
+                          console.warn('⚠️ HTTP payout failed', { matchId: mr.id, status, details: txt });
                         }
                       } else {
                         console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
@@ -1774,14 +1774,6 @@ preparePromise.then(() => {
         const winnerLowerKey = String((payload?.winnerWallet || '')).toLowerCase();
         const idempoKey = `${msid}:${winnerLowerKey}`;
         if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) return;
-        // Reserve immediately to prevent parallel duplicate HTTP triggers
-        try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
-        // Skip if any room already marked payout triggered for this session
-        try {
-          for (const [, r] of gameRooms.entries()) {
-            if (r && r._payoutTriggered && String(r.matchSessionId || '') === msid) return;
-          }
-        } catch {}
 
         const meta = global.recentMatchMetaBySession ? global.recentMatchMetaBySession.get(msid) : null;
         if (!meta) return;
@@ -1850,24 +1842,27 @@ preparePromise.then(() => {
         }
 
         console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
+        // In-flight guard for client-declared end as well
         try {
-          const payoutSecret = process.env.PAYOUT_SERVER_SECRET;
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const body = { winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined };
-          const resp = await fetch(`${baseUrl}/api/payout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${payoutSecret||''}` },
-            body: JSON.stringify(body)
-          }).catch(() => null);
-          if (!resp || !resp.ok) {
-            const txt = resp ? await resp.text().catch(() => '') : 'no response';
-            throw new Error(`payout_http_failed ${txt}`);
-          }
-          console.log('💸 Ranked payout executed (server, client-declared end)');
-        } catch (e) {
-          console.warn('⚠️ Server payout failed (client-declared end)', e?.message || e);
-          // Release to allow retry later
-          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.delete(idempoKey); } catch {}
+          if (!global.payoutInFlightBySession) global.payoutInFlightBySession = new Set();
+          const k = `${msid}:${String(winnerWallet).toLowerCase()}`;
+          if (global.payoutInFlightBySession.has(k)) return;
+          global.payoutInFlightBySession.add(k);
+          setTimeout(() => { try { global.payoutInFlightBySession.delete(k) } catch {} }, 30000);
+        } catch {}
+
+        const resp = await fetch(`${baseUrl}/api/payout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined })
+        }).catch(() => null);
+        if (resp && resp.ok) {
+          console.log('💸 Ranked payout executed via HTTP (client-declared end)');
+          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
+        } else {
+          const status = resp ? resp.status : 'no_response';
+          const txt = resp ? await resp.text().catch(() => '') : 'no response';
+          console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
         }
       } catch (err) {
         console.warn('match_end handler error:', err?.message || err);
@@ -2227,8 +2222,14 @@ preparePromise.then(() => {
               // Ensure escrow is assigned if missing (best-effort)
               if (!liveLobby.escrowWalletId) {
                 try {
-                  // Defer escrow assignment to payout time; avoid TS require here
-                  console.warn(`⚠️ No escrow assigned for ${lobbyId} yet; will assign at payout time`);
+                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
+                  const wallet = evmEscrowService.getNextWallet();
+                  if (wallet && wallet.id) {
+                    const mem = lobbies.find(l => l && l.id === lobbyId);
+                    if (mem) mem.escrowWalletId = wallet.id;
+                    liveLobby.escrowWalletId = wallet.id;
+                    console.log(`🔐 Auto-assigned escrow ${wallet.id} to ${lobbyId} during ready check`);
+                  }
                 } catch {}
               }
               if (!allWagered) {
@@ -2696,17 +2697,10 @@ preparePromise.then(() => {
       const minHumans = isTutorial ? 2 : 2;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
-          // Refund all expected humans (best-effort) via HTTP API to avoid TS require issues
-          const token = process.env.REFUND_SERVER_TOKEN || ''
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`
+          // Refund all expected humans (best-effort) via server-only function
+          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
           for (const w of requiredHumans) {
-            try {
-              await fetch(`${baseUrl}/api/wager/refund`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'insufficient_players', __serverOnlyToken: token })
-              }).catch(()=>null)
-            } catch {}
+            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'insufficient_players' }); } catch {}
           }
         } catch {}
         try { io.to(lobbyId).emit('match_cancelled', { reason: 'insufficient_players' }); } catch {}
@@ -2723,16 +2717,9 @@ preparePromise.then(() => {
       if (!isTutorial) {
         const failedHumans = requiredHumans.filter(w => !presentHumans.includes(w));
         try {
-          const token = process.env.REFUND_SERVER_TOKEN || ''
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`
+          const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
           for (const w of failedHumans) {
-            try {
-              await fetch(`${baseUrl}/api/wager/refund`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId, playerPublicKey: w, reason: 'queue_no_show', __serverOnlyToken: token })
-              }).catch(()=>null)
-            } catch {}
+            try { await processRefundServerOnly({ lobbyId, playerPublicKey: w, reason: 'queue_no_show' }); } catch {}
           }
         } catch {}
       }
@@ -2742,8 +2729,6 @@ preparePromise.then(() => {
       try {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
-        // Also notify the dedicated match room for clients already transitioned
-        try { io.to(matchSessionId).emit('arena_lock_roster', payload); } catch {}
         try {
           const humans = (finalRoster || []).filter(r => !r.isAi).map(r => r.wallet);
           console.log(`[match] arena_lock_roster`, { lobbyId, matchSessionId, humansCount: humans.length, roundStartAtEpochMs });
@@ -2775,16 +2760,11 @@ preparePromise.then(() => {
       // Emit 3..0 countdown aligned to round start (synced across clients)
       let c = 3;
       const interval = setInterval(() => {
-        // Emit only 3..2..1 (no zero)
-        if (c > 0) {
-          try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c, roundStartAtEpochMs }); } catch {}
-          try { io.to(matchSessionId).emit('round_countdown', { matchSessionId, count: c, roundStartAtEpochMs }); } catch {}
-        }
+        try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
         c--;
-        if (c <= 0) {
+        if (c < 0) {
           clearInterval(interval);
-          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
-          try { io.to(matchSessionId).emit('round_start', { matchSessionId, finalRoster, roundStartAtEpochMs }); } catch {}
+          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
           try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
           try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}

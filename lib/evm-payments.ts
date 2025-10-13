@@ -30,20 +30,24 @@ export async function sendIdempotentPayment(args: SendArgs) {
   const canDb = Boolean(supabaseUrl && supabaseServiceKey)
   const supabase = canDb ? createClient(supabaseUrl!, supabaseServiceKey!) : null
 
-  // Process-wide in-flight guard to prevent duplicate sends for the same opId
-  // Put reservation FIRST to close any race with upstream callers
+  // Process-wide in-flight guard to prevent duplicate sends for the same opId.
+  // IMPORTANT: place a placeholder promise in the map BEFORE any awaits to avoid races.
   ;(global as any).__paymentsInFlight = (global as any).__paymentsInFlight || new Map<string, Promise<{ txHash: string }>>()
   const inFlight: Map<string, Promise<{ txHash: string }>> = (global as any).__paymentsInFlight
-  const existingPromise = inFlight.get(opId)
-  if (existingPromise) {
+  const existing = inFlight.get(opId)
+  if (existing) {
     try {
-      const res = await existingPromise
+      const res = await existing
       console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: res.txHash })
       return res
-    } catch (e) {
-      // fall through to attempt fresh execution; entry should be cleared by finally below
+    } catch {
+      // if the existing promise failed, continue to try fresh execution
     }
   }
+  let resolveGate: ((v: { txHash: string }) => void) | undefined
+  let rejectGate: ((e: any) => void) | undefined
+  const gate = new Promise<{ txHash: string }>((resolve, reject) => { resolveGate = resolve; rejectGate = reject })
+  inFlight.set(opId, gate)
 
   // Resolve escrow wallet
   const from = evmEscrowService.getWallet(fromEscrowId)
@@ -81,23 +85,38 @@ export async function sendIdempotentPayment(args: SendArgs) {
   }
 
   // Attempt to claim the opId for sending by transitioning to in_progress.
-  // Only one process will succeed; if claim fails, DO NOT SEND to avoid duplicates.
+  // Only one process will succeed because we match state='pending' and tx_hash IS NULL.
   if (supabase) {
-    const { data: claimed } = await supabase
-      .from('payments')
-      .update({ state: 'in_progress' })
-      .eq('op_id', opId)
-      .eq('state', 'pending')
-      .is('tx_hash', null)
-      .select('op_id')
-      .maybeSingle()
+    try {
+      const { data: claimed } = await supabase
+        .from('payments')
+        .update({ state: 'in_progress' })
+        .eq('op_id', opId)
+        .eq('state', 'pending')
+        .is('tx_hash', null)
+        .select('op_id')
+        .maybeSingle()
 
-    if (!claimed) {
-      // Another process is handling this op. Wait for its txHash to appear.
-      const start = Date.now()
-      const maxWaitMs = 20000
-      const intervalMs = 400
-      while (Date.now() - start < maxWaitMs) {
+      if (!claimed) {
+        // Another process is handling this op. Wait for its txHash to appear.
+        const start = Date.now()
+        const maxWaitMs = 20000
+        const intervalMs = 400
+        while (Date.now() - start < maxWaitMs) {
+          try {
+            const { data: existing } = await supabase
+              .from('payments')
+              .select('tx_hash, state')
+              .eq('op_id', opId)
+              .maybeSingle()
+            if (existing && existing.tx_hash) {
+              console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: existing.tx_hash })
+              return { txHash: existing.tx_hash as string }
+            }
+          } catch {}
+          await new Promise(r => setTimeout(r, intervalMs))
+        }
+        // Timed out waiting; as a safety, do a final read and return if present
         try {
           const { data: existing } = await supabase
             .from('payments')
@@ -105,30 +124,20 @@ export async function sendIdempotentPayment(args: SendArgs) {
             .eq('op_id', opId)
             .maybeSingle()
           if (existing && existing.tx_hash) {
-            console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: existing.tx_hash })
+            console.log('[PAYMENTS][IDEMPOTENT_AWAIT_TIMEOUT_HIT]', { opId, txHash: existing.tx_hash })
             return { txHash: existing.tx_hash as string }
           }
         } catch {}
-        await new Promise(r => setTimeout(r, intervalMs))
+        // Give up without sending to avoid duplicates
+        throw new Error(`Payment already in progress for ${opId}`)
       }
-      // Final read before giving up
-      try {
-        const { data: existing } = await supabase
-          .from('payments')
-          .select('tx_hash, state')
-          .eq('op_id', opId)
-          .maybeSingle()
-        if (existing && existing.tx_hash) {
-          console.log('[PAYMENTS][IDEMPOTENT_AWAIT_TIMEOUT_HIT]', { opId, txHash: existing.tx_hash })
-          return { txHash: existing.tx_hash as string }
-        }
-      } catch {}
-      throw new Error(`Payment already in progress for ${opId}`)
+      console.log('[PAYMENTS][CLAIMED]', { opId })
+    } catch (e) {
+      // If claim fails (e.g., table lacks columns), fall back to best-effort behavior
     }
-    console.log('[PAYMENTS][CLAIMED]', { opId })
   }
 
-  // Define the execution as a promise and store it in in-flight map immediately
+  // Define the execution. The gate promise has already been placed in the map.
   const execPromise = (async () => {
     // Re-check DB just before sending to reduce race window (two processes)
     if (supabase) {
@@ -140,26 +149,16 @@ export async function sendIdempotentPayment(args: SendArgs) {
           .maybeSingle()
         if (existing && existing.tx_hash) {
           console.log('[PAYMENTS][IDEMPOTENT_HIT_BEFORE_SEND]', { opId, txHash: existing.tx_hash })
-          return { txHash: existing.tx_hash as string }
+          const val = { txHash: existing.tx_hash as string }
+          try { resolveGate && resolveGate(val) } catch {}
+          return val
         }
       } catch {}
     }
 
     // Send via escrow service (per-wallet serialized)
-    let txHash: string
-    try {
-      txHash = await evmEscrowService.transferNative(to, amountWei, from)
-      console.log('[PAYMENTS][SENT]', { opId, txHash })
-    } catch (e: any) {
-      console.warn('[PAYMENTS][SEND_ERROR]', { opId, error: e?.message || String(e) })
-      // Release the claim so another attempt can proceed later
-      if (supabase) {
-        try {
-          await supabase.from('payments').update({ state: 'pending' }).eq('op_id', opId).is('tx_hash', null)
-        } catch {}
-      }
-      throw e
-    }
+    const txHash = await evmEscrowService.transferNative(to, amountWei, from)
+    console.log('[PAYMENTS][SENT]', { opId, txHash })
 
     // Mark sent + soft confirm, and upsert wallet row
     if (supabase) {
@@ -171,16 +170,16 @@ export async function sendIdempotentPayment(args: SendArgs) {
       } catch {}
     }
 
-    return { txHash }
+    const val = { txHash }
+    try { resolveGate && resolveGate(val) } catch {}
+    return val
   })()
-
-  inFlight.set(opId, execPromise)
   try {
     const result = await execPromise
     return result
   } finally {
     // Clear in-flight regardless of success/failure to avoid leaks
-    try { if (inFlight.get(opId) === execPromise) inFlight.delete(opId) } catch {}
+    try { if (inFlight.get(opId) === gate) inFlight.delete(opId) } catch {}
   }
 }
 

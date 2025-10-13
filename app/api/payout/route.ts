@@ -185,31 +185,27 @@ export async function POST(request: Request) {
       // Proceed with payout; matchResult stays null and processPayoutServerOnly will select wallet round-robin
     }
 
-    // Perform the payout via server-only helper
-    let winnerSignature: string | null = null;
-    let houseSignature: string | null = null;
+    // In-flight lock (route level) to prevent back-to-back duplicates per match or session
     try {
-      const res = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
-      winnerSignature = res.winnerSignature;
-      houseSignature = res.houseSignature;
-    } catch (err: any) {
-      const msg = String(err?.message || err || '');
-      // If another process already claimed/sending the payout, treat as Accepted (idempotent in-progress)
-      if (msg.includes('Payment already in progress')) {
-        return NextResponse.json({ success: true, inProgress: true }, { status: 202 });
+      (global as any).__payoutInFlight = (global as any).__payoutInFlight || new Set<string>();
+      const key = (matchId && matchId.length > 0) ? `match:${matchId}` : ((matchSessionId && matchSessionId.length > 0) ? `session:${matchSessionId}:${String(winnerAddress).toLowerCase()}` : `session:unknown:${String(winnerAddress).toLowerCase()}`);
+      if ((global as any).__payoutInFlight.has(key)) {
+        return NextResponse.json({ error: 'Payout already processing' }, { status: 409 });
       }
-      throw err;
-    }
+      (global as any).__payoutInFlight.add(key);
+      setTimeout(() => { try { (global as any).__payoutInFlight.delete(key) } catch {} }, 30000);
+    } catch {}
+
+    // Perform the payout via server-only helper
+    const { winnerSignature, houseSignature } = await processPayoutServerOnly({ winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage, matchResult, escrowWalletId });
 
     // Audit log and monitor the payout
-    try {
-      await monitoringService.monitorPayout(
-        winnerAddress,
-        prizePool * (1 - houseCutPercentage),
-        matchId,
-        winnerSignature || ''
-      );
-    } catch {}
+    await monitoringService.monitorPayout(
+      winnerAddress,
+      prizePool * (1 - houseCutPercentage),
+      matchId,
+      winnerSignature
+    );
 
     // --- RECORD TRANSACTION IN DATABASE ---
     if (supabaseUrl && supabaseServiceKey) {
@@ -295,14 +291,14 @@ export async function POST(request: Request) {
       }
     } catch {}
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: "Payout successful!",
       winnerTransaction: winnerSignature,
       houseTransaction: houseSignature,
       winnerAmount: prizePool * (1 - houseCutPercentage),
       houseAmount: prizePool * houseCutPercentage,
-      explorerUrls: { winner: winnerSignature ? getEvmExplorerUrl(winnerSignature) : null, house: houseSignature ? getEvmExplorerUrl(houseSignature) : null },
+      explorerUrls: { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) },
     });
 
   } catch (error) {
