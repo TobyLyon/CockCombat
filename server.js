@@ -231,8 +231,8 @@ preparePromise.then(() => {
   // Build an authoritative lobby snapshot with stable readiness and usernames
   async function buildLobbySnapshot(lobbyId) {
     try {
-      const lobby = lobbies.find(l => l && l.id === lobbyId);
-      if (!lobby) return null;
+      const meta = getLobbyMeta(lobbyId);
+      if (!meta) return null;
 
       // Presence set for fast lookup
       const present = new Set();
@@ -244,9 +244,9 @@ preparePromise.then(() => {
         }
       } catch {}
 
-      const isTutorial = lobby.matchType === 'tutorial';
+      const isTutorial = meta.matchType === 'tutorial';
       const result = [];
-      for (const p of (lobby.players || [])) {
+      for (const p of Array.from(getRosterMap(lobbyId).values())) {
         const pid = String(p.playerId || '');
         if (!pid) continue;
         const pidNorm = pid.toLowerCase();
@@ -280,7 +280,7 @@ preparePromise.then(() => {
         result.push({
           playerId: pid,
           username: name,
-          chickenName: p.chickenId || 'Default',
+          chickenName: p.chickenName || p.chickenId || 'Default',
           isReady,
           isAi: !!p.isAi,
         });
@@ -318,10 +318,10 @@ preparePromise.then(() => {
       return {
         id: lobbyId,
         players: result,
-        capacity: lobby.capacity,
-        amount: lobby.amount,
-        currency: lobby.currency,
-        matchType: lobby.matchType,
+        capacity: meta.capacity,
+        amount: meta.amount,
+        currency: meta.currency,
+        matchType: meta.matchType,
       };
     } catch {
       return null;
@@ -340,8 +340,8 @@ preparePromise.then(() => {
     const entry = { ...current, ...patch, playerId: String(wallet) };
     // Rank readiness policy: if ranked and human, prefer hasWagered
     try {
-      const lobby = lobbies.find(l => l && l.id === lobbyId);
-      if (lobby && lobby.matchType !== 'tutorial' && !entry.isAi) {
+      const meta = getLobbyMeta(lobbyId);
+      if (meta && meta.matchType !== 'tutorial' && !entry.isAi) {
         entry.isReady = Boolean(entry.hasWagered);
       }
     } catch {}
@@ -935,14 +935,8 @@ preparePromise.then(() => {
                 const last = Number(conn.lastLobbyActivity || 0);
                 const isReady = Boolean(conn.isReady);
                 if (!isReady && last > 0 && (now - last) > idleMs) {
-                  // Boot: remove from lobby via API and from socket room
-                  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-                  try {
-                    await fetch(`${baseUrl}/api/lobbies`, {
-                      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ lobbyId, playerId: conn.walletAddress || id })
-                    }).catch(() => {});
-                  } catch {}
+                  // Boot: remove from lobby via server-held state only
+                  try { removeFromRoster(lobbyId, conn.walletAddress || id); } catch {}
                   try { conn.socket?.leave?.(lobbyId); } catch {}
                   delete conn.currentLobby;
                   conn.isReady = false;
@@ -1505,12 +1499,8 @@ preparePromise.then(() => {
               try { if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) global.lobbyPresence.get(lobbyAtDisconnect).delete(walletAtDisconnect); } catch {}
             }
 
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-            await fetch(`${baseUrl}/api/lobbies`, {
-              method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lobbyId: lobbyAtDisconnect, playerId: walletAtDisconnect })
-            }).catch(() => {});
+            // Remove from server-held roster instead of HTTP API
+            try { removeFromRoster(lobbyAtDisconnect, walletAtDisconnect); } catch {}
             // Also update presence map
             if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) {
               global.lobbyPresence.get(lobbyAtDisconnect).delete(walletAtDisconnect);
@@ -1525,46 +1515,37 @@ preparePromise.then(() => {
 
             // Broadcast updated lobby roster immediately (and prune ghosts for tutorial)
             try {
-              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-              const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-              const all = res ? await res.json().catch(() => []) : [];
-              const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyAtDisconnect) : null;
-              if (lobby) {
-                if (lobby.matchType === 'tutorial') {
-                  const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
-                  lobby.players = lobby.players.filter((p) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
+              const meta = getLobbyMeta(lobbyAtDisconnect) || { capacity: 8, amount: 0, currency: 'BNB', matchType: 'ranked' };
+              const roster = Array.from(getRosterMap(lobbyAtDisconnect).values());
+              let lobbyPlayers = roster.map(player => {
+                let isReady = false;
+                for (const [, c] of activeConnections.entries()) {
+                  if (c.currentLobby === lobbyAtDisconnect && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
                 }
-                let lobbyPlayers = lobby.players.map(player => {
-                  let isReady = false;
-                  for (const [, c] of activeConnections.entries()) {
-                    if (c.currentLobby === lobbyAtDisconnect && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
-                  }
-                  return {
-                    playerId: player.playerId,
-                    username: player.username || player.playerId.slice(0, 8) + '...',
-                    chickenName: player.chickenId || 'Default',
-                    // Apply tutorial-style caching to all lobbies: AI auto-ready in tutorial; otherwise preserve last known ready if present in presence map
-                    isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
-                    isAi: player.isAi || false
-                  };
-                });
-            const version = nextLobbyVersion(lobbyAtDisconnect);
-            io.to(lobbyAtDisconnect).emit('lobby_updated', {
-                  id: lobbyAtDisconnect,
-                  players: lobbyPlayers,
-                  capacity: lobby.capacity,
-                  amount: lobby.amount,
-                  currency: lobby.currency,
-                  matchType: lobby.matchType,
-                  version
-                });
-            // Broadcast updated counts derived from presence
-            try {
-              const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
-              const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
-              io.emit('lobby_counts', { id: lobbyAtDisconnect, liveHumans: humans.length, liveTotal: presence.size });
-            } catch {}
-              }
+                return {
+                  playerId: player.playerId,
+                  username: player.username || String(player.playerId || '').slice(0, 8) + '...',
+                  chickenName: player.chickenName || 'Default',
+                  isReady: (meta.matchType === 'tutorial' && player.isAi) ? true : isReady,
+                  isAi: player.isAi || false
+                };
+              });
+              const version = nextLobbyVersion(lobbyAtDisconnect);
+              io.to(lobbyAtDisconnect).emit('lobby_updated', {
+                id: lobbyAtDisconnect,
+                players: lobbyPlayers,
+                capacity: meta.capacity,
+                amount: meta.amount,
+                currency: meta.currency,
+                matchType: meta.matchType,
+                version
+              });
+              // Broadcast updated counts derived from presence
+              try {
+                const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
+                const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')));
+                io.emit('lobby_counts', { id: lobbyAtDisconnect, liveHumans: humans.length, liveTotal: presence.size });
+              } catch {}
             } catch {}
           } catch {}
         };
@@ -1757,28 +1738,26 @@ preparePromise.then(() => {
               // - Ranked: mark paid humans ready; remove unpaid humans
               ;(async () => {
                 try {
-                  const baseUrlLocal = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-                  const resLive = await fetch(`${baseUrlLocal}/api/lobbies`).catch(() => null);
-                  const allLive = resLive ? await resLive.json().catch(() => []) : [];
-                  const liveLobby = Array.isArray(allLive) ? allLive.find(l => l && l.id === lobbyId) : null;
-                  if (!liveLobby) return;
-                  const isTutorial = liveLobby.matchType === 'tutorial';
-                  const roster = Array.isArray(liveLobby.players) ? liveLobby.players : [];
+                  const meta = getLobbyMeta(lobbyId);
+                  if (!meta) return;
+                  const isTutorial = meta.matchType === 'tutorial';
+                  const roster = Array.from(getRosterMap(lobbyId).values());
                   for (const p of roster) {
                     const playerId = String(p.playerId || '');
                     if (!playerId) continue;
                     if (isTutorial) {
                       // Push everyone ready
-                      try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
+                      try { await upsertRoster(lobbyId, playerId, { isReady: true }); } catch {}
                     } else {
                       if (!p.isAi) {
-                        const hasWagered = Boolean(p.hasWagered);
+                        const rec = getRosterMap(lobbyId).get(String(playerId).toLowerCase());
+                        const hasWagered = Boolean(rec && rec.hasWagered);
                         if (hasWagered) {
                           // Mark as ready
-                          try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
+                          try { await upsertRoster(lobbyId, playerId, { isReady: true }); } catch {}
                         } else {
                           // Remove unpaid human from lobby to avoid bugs during start
-                          try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId }) }).catch(() => {}); } catch {}
+                          try { removeFromRoster(lobbyId, playerId); } catch {}
                         }
                       }
                     }
@@ -1797,12 +1776,7 @@ preparePromise.then(() => {
 
                     // Rebuild current roster and filter to ready humans (and AIs for tutorial), ignoring ghosts
                     try {
-          const resNow = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
-                      const allNow = resNow ? await resNow.json().catch(() => []) : [];
-                      const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
-                      if (!liveLobbyNow) return;
-                      // Merge with socket readiness
-                      const mergedPlayers = (liveLobbyNow.players || []).reduce((acc, player) => {
+                      const mergedPlayers = Array.from(getRosterMap(lobbyId).values()).reduce((acc, player) => {
                         const pid = String(player.playerId || '').toLowerCase();
                         const present = presenceSet.has(pid);
                         if (!player.isAi && !present) return acc; // ignore ghost humans
@@ -1810,10 +1784,10 @@ preparePromise.then(() => {
                         for (const [, connection] of activeConnections.entries()) {
                           if (connection.currentLobby === lobbyId && String(connection.walletAddress || '').toLowerCase() === pid) { isReady = !!connection.isReady; break; }
                         }
-                        acc.push({ playerId: player.playerId, username: player.username, chickenName: player.chickenId, isAi: !!player.isAi, isReady });
+                        acc.push({ playerId: player.playerId, username: player.username || (player.playerId ? String(player.playerId).slice(0,8)+'...' : 'Player'), chickenName: player.chickenName || 'Default', isAi: !!player.isAi, isReady });
                         return acc;
                       }, []);
-                      const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
+                      const isTutorialNow = (getLobbyMeta(lobbyId)?.matchType === 'tutorial');
                       const readyHumansNow = mergedPlayers.filter(p => !p.isAi && p.isReady);
                       let majorityRoster = readyHumansNow;
                       if (isTutorialNow) {
@@ -2116,11 +2090,8 @@ preparePromise.then(() => {
     if (!session) return;
     const { lobbyId, expectedRoster, presenceAcks, assetsAcks } = session;
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-      const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-      const all = response ? await response.json().catch(() => []) : [];
-      const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-      const isTutorial = lobby ? lobby.matchType === 'tutorial' : false;
+      const meta = getLobbyMeta(lobbyId);
+      const isTutorial = meta ? meta.matchType === 'tutorial' : false;
 
       const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => p.wallet);
       const presentHumans = requiredHumans.filter(w => isTutorial ? presenceAcks.has(w) : (presenceAcks.has(w) && assetsAcks.has(w)));
