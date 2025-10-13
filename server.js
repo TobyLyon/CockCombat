@@ -1760,6 +1760,8 @@ preparePromise.then(() => {
         const winnerLowerKey = String((payload?.winnerWallet || '')).toLowerCase();
         const idempoKey = `${msid}:${winnerLowerKey}`;
         if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) return;
+        // Reserve immediately to prevent parallel duplicate HTTP triggers
+        try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
         // Skip if any room already marked payout triggered for this session
         try {
           for (const [, r] of gameRooms.entries()) {
@@ -1841,11 +1843,13 @@ preparePromise.then(() => {
         }).catch(() => null);
         if (resp && (resp.ok || resp.status === 202)) {
           console.log('💸 Ranked payout executed via HTTP (client-declared end)');
-          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
+          // reservation already added above
         } else {
           const status = resp ? resp.status : 'no_response';
           const txt = resp ? await resp.text().catch(() => '') : 'no response';
           console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
+          // Release to allow retry later
+          try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.delete(idempoKey); } catch {}
         }
       } catch (err) {
         console.warn('match_end handler error:', err?.message || err);
