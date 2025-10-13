@@ -374,7 +374,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   const handleReadyToggle = async () => {
     if (!socket) return;
-    const id = getCurrentPlayerId();
+    const id = (() => { const raw = getCurrentPlayerId(); return raw ? String(raw).toLowerCase() : raw; })();
     if (!id) return;
 
     // If trying to ready up and this is a paid lobby, need to process wager first
@@ -485,7 +485,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           params: [txParams],
         });
 
-        const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: from };
+        const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: String(from || '').toLowerCase() };
         const tryConfirm = async (url: string) => {
           const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(confirmPayload) });
           return res;
@@ -493,7 +493,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         let confirmRes = await tryConfirm('/api/wager/confirm');
         if (!confirmRes.ok) {
           // Retry once after short delay (chain receipt race)
-          await new Promise(r => setTimeout(r, 900));
+          await new Promise(r => setTimeout(r, 1800));
           confirmRes = await tryConfirm('/api/wager/confirm');
         }
         if (!confirmRes.ok) {

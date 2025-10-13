@@ -183,7 +183,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
-    const { lobbyId, playerId, chickenId, sessionId } = parsed.data;
+    // Normalize wallet/playerId to lowercase to avoid checksum case mismatch across client/server
+    const { lobbyId, chickenId, sessionId } = parsed.data;
+    const playerId = String(parsed.data.playerId).toLowerCase();
 
     const lobby = lobbies.find(l => l && l.id === lobbyId);
 
@@ -224,7 +226,7 @@ export async function POST(req: NextRequest) {
     // (Previously required session validation here.)
 
     // Check if player is already in the lobby
-    const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === String(playerId).toLowerCase());
+    const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === playerId);
     if (existingPlayer) {
     // Get socket instance and broadcast current lobby state (and presence add)
     try {
@@ -294,7 +296,7 @@ export async function POST(req: NextRequest) {
     
     // De-duplicate any prior entry for this player in this lobby
     try {
-      lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== String(playerId).toLowerCase());
+      lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
     } catch {}
     
     const player = { 

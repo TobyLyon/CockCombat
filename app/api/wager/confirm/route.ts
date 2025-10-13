@@ -76,15 +76,17 @@ async function handleWagerConfirmation(req: NextRequest) {
       // EVM: signature = txHash
       const provider = getEvmProvider();
       // Poll for receipt to avoid race when immediately confirming after send
+      // Poll for a confirmed receipt with a longer timeout to handle network latency
       let receipt = await provider.getTransactionReceipt(signature);
-      let attempts = 0;
-      while ((!receipt || receipt.status !== 1) && attempts < 8) {
-        await new Promise(r => setTimeout(r, 750));
-        receipt = await provider.getTransactionReceipt(signature);
-        attempts++;
+      const maxWaitMs = parseInt(process.env.WAGER_CONFIRM_TIMEOUT_MS || '90000', 10); // default 90s
+      const pollIntervalMs = 1500; // 1.5s between polls
+      const startWaitAt = Date.now();
+      while ((!receipt || receipt.status !== 1) && (Date.now() - startWaitAt) < maxWaitMs) {
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+        try { receipt = await provider.getTransactionReceipt(signature); } catch {}
       }
       if (!receipt || receipt.status !== 1) {
-        return NextResponse.json({ error: 'Transaction not found or failed' }, { status: 400 });
+        return NextResponse.json({ error: 'Transaction not found or failed (timeout waiting for confirmation)' }, { status: 400 });
       }
       const tx = await provider.getTransaction(signature);
       if (!tx) {

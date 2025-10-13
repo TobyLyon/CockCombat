@@ -370,7 +370,8 @@ export default function BattleArena() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          playerId: joiningAsGuest ? guestIdGenerated! : publicKey!.toBase58(),
+          // Always use lowercase wallet id to match server normalization and avoid 400s
+          playerId: joiningAsGuest ? guestIdGenerated! : publicKey!.toBase58().toLowerCase(),
           chickenId: randomChicken,
         }),
       });

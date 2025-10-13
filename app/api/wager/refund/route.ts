@@ -46,14 +46,16 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   if (lobby.matchType === 'tutorial' || lobby.amount <= 0) {
     return { ok: true, message: 'No refund for free/tutorial matches' }
   }
-  let player = lobby.players.find(p => String(p.playerId||'').toLowerCase() === String(playerPublicKey||'').toLowerCase()) as any
+  // Normalize player lookup to lowercase
+  const playerPublicKeyLower = String(playerPublicKey||'').toLowerCase()
+  let player = lobby.players.find(p => String(p.playerId||'').toLowerCase() === playerPublicKeyLower) as any
   // Fallback: consult socket-only roster map to recover player flags for wallets missing from lobby snapshot
   let rosterRec: any = null
   if (!player) {
     try {
       const map = ((global as any).lobbyRoster && (global as any).lobbyRoster.get?.(lobbyId)) || null
       if (map && map.get) {
-        const key = String(playerPublicKey || '').toLowerCase()
+        const key = playerPublicKeyLower
         rosterRec = map.get(key) || null
       }
     } catch {}
@@ -97,8 +99,8 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const escrow = evmEscrowService.getWallet(lobby.escrowWalletId as any)
   if (!escrow) throw new Error('Escrow wallet unavailable')
   const wei = ethers.parseUnits(String(lobby.amount), 18)
-  const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && rosterRec.__fundingWallet) || playerPublicKey) as string)
-  const opId = `refund:${lobbyId}:${String(player.playerId).toLowerCase()}`
+  const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && rosterRec.__fundingWallet) || playerPublicKeyLower) as string)
+  const opId = `refund:${lobbyId}:${playerPublicKeyLower}`
   console.log('[REFUND][REQUEST]', { opId, lobbyId, player: String(player.playerId).toLowerCase(), escrowId: escrow.id, refundTo, wei: wei.toString() })
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash

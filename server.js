@@ -613,6 +613,39 @@ preparePromise.then(() => {
             global.lobbyPresence.get(lobbyId).delete(connection.walletAddress);
           }
         }
+
+        // Best-effort refund for ranked lobbies if the leaving player had already wagered and countdown/queue hasn't started
+        try {
+          const wallet = connection && connection.walletAddress ? String(connection.walletAddress).toLowerCase() : null;
+          if (wallet) {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+            const all = res ? await res.json().catch(() => []) : [];
+            const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
+            const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
+            // Check roster map and API snapshot for wager evidence
+            let hasWagered = false;
+            try {
+              const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
+              const prior = map && map.get ? map.get(wallet) : null;
+              hasWagered = !!(prior && prior.hasWagered);
+            } catch {}
+            if (!hasWagered && lobby) {
+              const me = (lobby.players || []).find(p => String(p.playerId || '').toLowerCase() === wallet);
+              hasWagered = !!(me && me.hasWagered);
+            }
+            const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
+            const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
+            if (isPaidRanked && hasWagered && !isCountdownActive && !hasQueueSession) {
+              try {
+                const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
+                await processRefundServerOnly({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
+              } catch (err) {
+                console.warn('Refund on socket leave failed (non-fatal):', (err && err.message) || err);
+              }
+            }
+          }
+        } catch {}
         
         // Clean up ready timer if this was the last player in a free lobby
         if (lobbyId.includes('tutorial') && global.readyTimers && global.readyTimers[lobbyId]) {
