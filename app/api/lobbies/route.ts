@@ -463,7 +463,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    const idx = lobby.players.findIndex(p => p.playerId === playerId);
+    // Find player case-insensitively (wallet checksum vs lowercase)
+    const idx = lobby.players.findIndex(p => String(p.playerId || '').toLowerCase() === String(playerId || '').toLowerCase());
     if (idx === -1) {
       // Idempotent: treat as success even if player isn't present
       return NextResponse.json(lobby);
@@ -474,17 +475,26 @@ export async function DELETE(req: NextRequest) {
     // Best-effort refund if leaving before countdown/queue begins (ranked only) via idempotent server routine
     try {
       const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
-      const hasWagered = Boolean((leavingPlayer as any)?.hasWagered);
-      const wasReady = Boolean((leavingPlayer as any)?.isReady);
+      // Recover roster record for more accurate flags if available
+      let rosterRec: any = null;
+      try {
+        const map = ((global as any).lobbyRoster && (global as any).lobbyRoster.get?.(lobbyId)) || null;
+        if (map && map.get) {
+          const key = String(playerId || '').toLowerCase();
+          rosterRec = map.get(key) || null;
+        }
+      } catch {}
+      const hasWageredFlag = Boolean((leavingPlayer as any)?.hasWagered || (rosterRec && rosterRec.hasWagered));
+      // Ready is informative but not required for refund if wager is present and countdown/queue hasn't begun
       const alreadyRefunded = Boolean((leavingPlayer as any)?.__refunded);
       const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]); } catch { return false; } })();
       const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)); } catch { return false; } })();
-      const eligibleForRefund = isPaidRanked && hasWagered && wasReady && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
+      const eligibleForRefund = isPaidRanked && hasWageredFlag && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
 
       if (eligibleForRefund) {
         try {
           const { processRefundServerOnly } = await import('@/app/api/wager/refund/route');
-          await processRefundServerOnly({ lobbyId, playerPublicKey: String(leavingPlayer.playerId), reason: 'left_before_countdown' });
+          await processRefundServerOnly({ lobbyId, playerPublicKey: String((leavingPlayer?.playerId || playerId)), reason: 'left_before_countdown' });
         } catch (err) {
           console.warn('Refund routine failed (non-fatal):', (err as any)?.message || err);
         }

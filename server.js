@@ -2063,10 +2063,10 @@ preparePromise.then(() => {
   // Check if lobby is ready to start
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {
-      // Fetch lobby data from API to get the real player list
+      // Fetch lobby data from API to get the real player list (avoid stale cache)
       const baseUrl = `http://localhost:${port}`;
-      const response = await fetch(`${baseUrl}/api/lobbies`);
-      const lobbies = await response.json();
+      const response = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
+      const lobbies = response ? await response.json().catch(() => []) : [];
       const lobby = lobbies.find(l => l.id === lobbyId);
       
       if (lobby) {
@@ -2209,10 +2209,28 @@ preparePromise.then(() => {
                 } catch {}
               }
               if (!allWagered) {
+                // Debug which wallets are missing wager evidence (API vs roster)
+                try {
+                  const roster = (global.lobbyRoster && global.lobbyRoster.get(lobbyId)) || null;
+                  const status = humans.map((p) => {
+                    const key = String(p.playerId || '').toLowerCase();
+                    const entry = roster && roster.get ? roster.get(key) : null;
+                    return { wallet: key, apiHasWagered: !!p.hasWagered, rosterHasWagered: !!(entry && entry.hasWagered) };
+                  });
+                  const unpaid = status.filter(s => !s.apiHasWagered && !s.rosterHasWagered).map(s => s.wallet);
+                  console.log(`[ENFORCE][RANKED] waiting for wagers in ${lobbyId}`, { presentHumans: humans.length, unpaid });
+                } catch {}
                 allReady = false;
                 const version2 = nextLobbyVersion(lobbyId);
                 try { const snap = await buildLobbySnapshot(lobbyId); if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version: version2 }); } catch {}
                 console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered}`);
+              } else {
+                // If all present humans are wagered, treat lobby as ready based on wager authority
+                // This bypasses transient UI readiness lag on any single device
+                allReady = humans.length >= minPlayers;
+                if (allReady) {
+                  console.log(`✅ Ranked lobby ${lobbyId} all humans have wagers; proceeding with countdown`);
+                }
               }
             }
           } catch (e) {
