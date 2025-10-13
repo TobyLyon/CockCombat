@@ -429,8 +429,6 @@ preparePromise.then(() => {
       const connection = activeConnections.get(socket.id);
       if (connection) {
         connection.walletAddress = normalized;
-        // Reset stale ready state on new wallet registration to avoid sticky readiness across rounds
-        try { connection.isReady = false; } catch {}
         console.log(`✅ Wallet ${normalized} registered to socket ${socket.id}`);
         try { socket.emit('wallet_registered', { walletAddress: normalized }); } catch {}
 
