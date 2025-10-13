@@ -31,11 +31,9 @@ export async function sendIdempotentPayment(args: SendArgs) {
   const supabase = canDb ? createClient(supabaseUrl!, supabaseServiceKey!) : null
 
   // Process-wide in-flight guard to prevent duplicate sends for the same opId
-  // even if multiple callers race. Ensures only one transferNative executes.
+  // Put reservation FIRST to close any race with upstream callers
   ;(global as any).__paymentsInFlight = (global as any).__paymentsInFlight || new Map<string, Promise<{ txHash: string }>>()
   const inFlight: Map<string, Promise<{ txHash: string }>> = (global as any).__paymentsInFlight
-
-  // If an identical op is already executing, wait for it and return the same result
   const existingPromise = inFlight.get(opId)
   if (existingPromise) {
     try {
@@ -135,7 +133,7 @@ export async function sendIdempotentPayment(args: SendArgs) {
     }
   }
 
-  // Define the execution as a promise and store it in in-flight map before sending
+  // Define the execution as a promise and store it in in-flight map immediately
   const execPromise = (async () => {
     // Re-check DB just before sending to reduce race window (two processes)
     if (supabase) {

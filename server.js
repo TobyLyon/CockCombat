@@ -1352,6 +1352,16 @@ preparePromise.then(() => {
                       }).select('id').single();
                       const matchId = mrRow?.id || null;
                       console.log('[PAYOUT][REQUEST][HTTP][FAST]', { matchId, winner: winnerWallet, prizePool });
+                      // Reserve session+winner before HTTP to prevent parallel client path
+                      try {
+                        const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
+                        if (msid && winnerWallet) {
+                          if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
+                          const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
+                          global.payoutTriggeredBySession.add(idempoKey);
+                        }
+                      } catch {}
+
                       const resp = await fetch(`${baseUrl}/api/payout`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
@@ -1360,15 +1370,6 @@ preparePromise.then(() => {
                       if (resp && resp.ok) {
                         console.log('💸 Ranked payout executed via HTTP (fast path)');
                         try { room._payoutTriggered = true; } catch {}
-                        // Prevent any secondary payout paths for this session
-                        try {
-                          const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
-                          if (msid && winnerWallet) {
-                            if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
-                            const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
-                            global.payoutTriggeredBySession.add(idempoKey);
-                          }
-                        } catch {}
                         return;
                       } else {
                         const status = resp ? resp.status : 'no_response';
@@ -1480,8 +1481,17 @@ preparePromise.then(() => {
                     } catch {}
                     // Trigger payout via internal HTTP API to avoid TS/CJS import issues on server-only path
                     try {
-                      // Double-check guard right before HTTP trigger
-                      try { if (room._payoutTriggered) return; } catch {}
+                      // Reserve session+winner before HTTP to prevent parallel client path
+                      try {
+                        const msid = meta && meta.matchSessionId ? String(meta.matchSessionId) : null;
+                        if (msid && winnerWallet) {
+                          if (!global.payoutTriggeredBySession) global.payoutTriggeredBySession = new Set();
+                          const idempoKey = `${msid}:${String(winnerWallet).toLowerCase()}`;
+                          if (global.payoutTriggeredBySession.has(idempoKey)) return;
+                          global.payoutTriggeredBySession.add(idempoKey);
+                        }
+                        if (room._payoutTriggered) return;
+                      } catch {}
                       const baseUrl = `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
@@ -1750,6 +1760,12 @@ preparePromise.then(() => {
         const winnerLowerKey = String((payload?.winnerWallet || '')).toLowerCase();
         const idempoKey = `${msid}:${winnerLowerKey}`;
         if (global.payoutTriggeredBySession && global.payoutTriggeredBySession.has(idempoKey)) return;
+        // Skip if any room already marked payout triggered for this session
+        try {
+          for (const [, r] of gameRooms.entries()) {
+            if (r && r._payoutTriggered && String(r.matchSessionId || '') === msid) return;
+          }
+        } catch {}
 
         const meta = global.recentMatchMetaBySession ? global.recentMatchMetaBySession.get(msid) : null;
         if (!meta) return;
