@@ -146,8 +146,20 @@ export async function sendIdempotentPayment(args: SendArgs) {
     }
 
     // Send via escrow service (per-wallet serialized)
-    const txHash = await evmEscrowService.transferNative(to, amountWei, from)
-    console.log('[PAYMENTS][SENT]', { opId, txHash })
+    let txHash: string
+    try {
+      txHash = await evmEscrowService.transferNative(to, amountWei, from)
+      console.log('[PAYMENTS][SENT]', { opId, txHash })
+    } catch (e: any) {
+      console.warn('[PAYMENTS][SEND_ERROR]', { opId, error: e?.message || String(e) })
+      // Release the claim so another attempt can proceed later
+      if (supabase) {
+        try {
+          await supabase.from('payments').update({ state: 'pending' }).eq('op_id', opId).is('tx_hash', null)
+        } catch {}
+      }
+      throw e
+    }
 
     // Mark sent + soft confirm, and upsert wallet row
     if (supabase) {

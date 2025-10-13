@@ -202,12 +202,14 @@ export async function POST(request: Request) {
     }
 
     // Audit log and monitor the payout
-    await monitoringService.monitorPayout(
-      winnerAddress,
-      prizePool * (1 - houseCutPercentage),
-      matchId,
-      winnerSignature
-    );
+    try {
+      await monitoringService.monitorPayout(
+        winnerAddress,
+        prizePool * (1 - houseCutPercentage),
+        matchId,
+        winnerSignature || ''
+      );
+    } catch {}
 
     // --- RECORD TRANSACTION IN DATABASE ---
     if (supabaseUrl && supabaseServiceKey) {
