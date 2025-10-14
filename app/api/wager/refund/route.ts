@@ -108,7 +108,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash
   console.log('[REFUND][SENT]', { opId, txHash })
-  console.log('↩️ refund_executed', { lobbyId, player: String(player.playerId), amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
+  console.log('↩️ refund_executed', { lobbyId, player: playerIdForLog, amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
   try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
   try {
     await auditLogger.log({
