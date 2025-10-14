@@ -717,7 +717,7 @@ preparePromise.then(() => {
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', __serverOnlyToken: token })
+                    body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', force: true, __serverOnlyToken: token })
                   }).catch(() => null);
                   let httpOk = false;
                   try {
@@ -735,7 +735,7 @@ preparePromise.then(() => {
                       const mod = require('./app/api/wager/refund/route.ts');
                       const fn = mod && (mod.processRefundServerOnly || (mod.default && mod.default.processRefundServerOnly));
                       if (typeof fn === 'function') {
-                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
+                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', force: true });
                         console.log('[REFUND][DIRECT][LEAVE]', { ok: true, result });
                       } else {
                         console.warn('[REFUND][DIRECT][LEAVE] processRefundServerOnly not available');
