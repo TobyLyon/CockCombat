@@ -541,6 +541,13 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         const fromWallet = publicKey?.toBase58?.() || publicKey?.toString?.();
         if (fromWallet) return String(fromWallet);
       } catch {}
+      // Guest: use the stable guest id set in localStorage/window by lobby join
+      try {
+        if (typeof window !== 'undefined') {
+          const gid = localStorage.getItem('guest_id') || (window as any).__guestId;
+          if (gid && typeof gid === 'string') return gid;
+        }
+      } catch {}
       return 'guest_local';
     })();
 
@@ -555,7 +562,10 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     const positionedPlayers: PlayerStatus[] = roster.map((entry: any, index) => {
       const id = String(entry.id);
       const isSelf = id === myId;
-      const colors = entry.colors || getDeterministicColorsForId(id);
+      // Ensure every entry has colors. Guests sometimes arrive without colors; assign deterministically.
+      const colors = (entry as any).colors && Object.keys((entry as any).colors).length > 0
+        ? (entry as any).colors
+        : getDeterministicColorsForId(id);
       const displayName = isSelf
         ? (profile?.username || 'You')
         : (entry.name || (id.startsWith('guest_') ? id : id.slice(0, 8) + '...'));

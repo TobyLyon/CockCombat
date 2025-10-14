@@ -693,7 +693,8 @@ export default function BattleArena() {
           </div>
         )}
 
-        {/* Floating Chat (arena/lobby only) */}
+        {/* Floating Chat (lobby/queue only - never in live battle) */}
+        {(gameState === "lobby" || gameState === "queue") && (
         <div className="fixed bottom-4 left-4 z-[10050]">
           {chatOpen && (
             <div className="pointer-events-auto w-[340px] h-[480px] bg-black/40 backdrop-blur-xl border-2 border-yellow-500/30 rounded-2xl shadow-2xl mb-3 overflow-hidden">
@@ -728,6 +729,7 @@ export default function BattleArena() {
             </button>
           )}
         </div>
+        )}
 
         {gameState === "battle" && (
           <div className="flex-1 w-full h-full relative overflow-hidden">

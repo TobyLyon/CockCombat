@@ -1390,13 +1390,6 @@ preparePromise.then(() => {
             room.killLog.push({ killer: socket.id, ts: Date.now() });
             const recent = room.killLog.slice(-3);
             if (recent.length === 3 && recent.every(k => k.killer === socket.id)) {
-              io.to(roomId).emit('chat_message', {
-                id: `ks-${Date.now()}`,
-                user: { name: 'System', address: '0x000' },
-                message: `🔥 CHICKEN SPREE!`,
-                timestamp: new Date().toISOString(),
-                isPrediction: true,
-              });
               io.to(roomId).emit('play_sound', { key: 'killstreak' });
             }
           }
@@ -1418,18 +1411,7 @@ preparePromise.then(() => {
             eventMessage = `${attackerName} is defending! 🛡️`;
           }
           
-          if (eventMessage) {
-            io.to(roomId).emit('chat_message', {
-              id: `event-${Date.now()}`,
-              user: {
-                name: 'System',
-                address: '0x000',
-              },
-              message: eventMessage,
-              timestamp: new Date().toISOString(),
-              isPrediction: true,
-            });
-          }
+          // Suppress system chat events in spectator chat; keep only audio/UI
         }
 
         // Check if battle is over
@@ -1441,16 +1423,7 @@ preparePromise.then(() => {
             ? room.gameState.player1.name 
             : room.gameState.player2.name;
           
-          io.to(roomId).emit('chat_message', {
-            id: `victory-${Date.now()}`,
-            user: {
-              name: 'System',
-              address: '0x000',
-            },
-            message: `🏆 ${winnerName} WINS THE MATCH! 🏆`,
-            timestamp: new Date().toISOString(),
-            isPrediction: true,
-          });
+          // Suppress victory system chat message; rely on UI overlays
           
           io.to(roomId).emit('match_ended', { 
             winner: result.winner,

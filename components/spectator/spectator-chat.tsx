@@ -42,7 +42,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   
   // Socket.IO event listeners for real-time chat
   useEffect(() => {
-    if (!socket || !isConnected || !matchId) return;
+    if (!socket || !isConnected) return;
     
     // Join match as spectator
     socket.emit('spectate_match', { matchId });
@@ -61,75 +61,47 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       if (onNewMessage) onNewMessage(msg.message);
     };
     
-    // Listen for spectator count updates
-    const handleSpectatorJoined = (data: any) => {
-      setSpectatorCount(data.spectatorCount);
-    };
-    
-    const handleSpectatorLeft = (data: any) => {
-      setSpectatorCount(data.spectatorCount);
-    };
-    
-    // Listen for match metadata
-    const handleMatchMetadata = (data: any) => {
-      setSpectatorCount(data.spectatorCount);
-    };
+    // Listen for global lobby/visitor counts and sum
+    const handleLobbyCounts = (payload: any) => {
+      try {
+        const humans = Number(payload?.liveHumans || 0)
+        const total = Number(payload?.liveTotal || 0)
+        setSpectatorCount((prev) => {
+          // We'll just display the max seen across lobbies quickly; UI uses snapshots too
+          return Math.max(prev, Math.max(humans, total))
+        })
+      } catch {}
+    }
+    const handleSnapshot = (snap: any) => {
+      try {
+        const counts = snap?.counts || {}
+        let maxLive = 0
+        for (const k in counts) {
+          const c = counts[k]
+          const v = Math.max(Number(c?.liveHumans||0), Number(c?.liveTotal||0))
+          if (v > maxLive) maxLive = v
+        }
+        if (maxLive > 0) setSpectatorCount(maxLive)
+      } catch {}
+    }
     
     socket.on('chat_message', handleChatMessage);
-    socket.on('spectator_joined', handleSpectatorJoined);
-    socket.on('spectator_left', handleSpectatorLeft);
-    socket.on('match_metadata', handleMatchMetadata);
+    socket.on('lobby_counts', handleLobbyCounts)
+    socket.on('lobby_counts_snapshot', handleSnapshot)
+    // Ask server for a snapshot once when mounted
+    try { socket.emit('get_lobby_counts') } catch {}
     
     return () => {
       socket.off('chat_message', handleChatMessage);
-      socket.off('spectator_joined', handleSpectatorJoined);
-      socket.off('spectator_left', handleSpectatorLeft);
-      socket.off('match_metadata', handleMatchMetadata);
+      socket.off('lobby_counts', handleLobbyCounts)
+      socket.off('lobby_counts_snapshot', handleSnapshot)
       socket.emit('leave_spectate', { matchId });
     };
   }, [socket, isConnected, matchId, onNewMessage]);
   
   // Mock initial welcome message
   useEffect(() => {
-    const initialMessages: ChatMessage[] = [
-      {
-        id: "1",
-        user: { name: "CryptoChicken", address: "0x1a2...3b4c", avatar: "/images/avatars/avatar-1.png" },
-        message: "Anyone else betting on the red chicken?",
-        timestamp: new Date(Date.now() - 1000 * 60 * 5),
-        isSpectator: true
-      },
-      {
-        id: "2",
-        user: { name: "BlockchainRooster", address: "0x5d6...7e8f", avatar: "/images/avatars/avatar-2.png" },
-        message: "Blue chicken is the real deal!",
-        timestamp: new Date(Date.now() - 1000 * 60 * 3),
-        isSpectator: true
-      },
-      {
-        id: "3",
-        user: { name: "System", address: "0x000", avatar: "/images/avatars/system.png" },
-        message: "Red chicken has attacked Blue chicken for 25 damage!",
-        timestamp: new Date(Date.now() - 1000 * 60 * 2),
-        isPrediction: true
-      },
-      {
-        id: "4",
-        user: { name: "EggMaster", address: "0x9a0...1b2c", avatar: "/images/avatars/avatar-3.png" },
-        message: "This match is insane, already put 500 tokens on yellow!",
-        timestamp: new Date(Date.now() - 1000 * 60 * 1),
-        isSpectator: true
-      },
-      {
-        id: "5",
-        user: { name: "System", address: "0x000", avatar: "/images/avatars/system.png" },
-        message: "Blue chicken is down to 50% health!",
-        timestamp: new Date(Date.now() - 1000 * 30),
-        isPrediction: true
-      }
-    ]
-    
-    setMessages(initialMessages)
+    setMessages([])
   }, [])
   
   // Auto-scroll to bottom when new messages arrive
@@ -184,24 +156,20 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
               
               <div className="flex flex-col flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-sm text-yellow-400">{message.user.name}</span>
+                  <span className="font-bold text-[12px] leading-none text-yellow-400">{message.user.name}</span>
                   <span className="text-xs text-gray-400 truncate">
                     {message.user.address}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-[11px] text-gray-500">
                     {typeof message.timestamp === 'string' 
                       ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
                       : formatDistanceToNow(message.timestamp, { addSuffix: true })}
                   </span>
                   
-                  {message.isPrediction && (
-                    <Badge variant="outline" className="bg-yellow-900/40 text-yellow-300 border-yellow-600/40 text-xs pixel-font">
-                      🎯 Update
-                    </Badge>
-                  )}
+                  {/* suppress system/prediction badges */}
                 </div>
                 
-                <p className={`text-sm mt-1 ${message.isPrediction ? "text-yellow-300 font-semibold" : "text-white/90"} break-words`}>
+                <p className={`text-[13px] mt-1 text-white/90 break-words`}>
                   {message.message}
                 </p>
               </div>
@@ -233,7 +201,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
           <p className="text-xs text-yellow-300/60 mt-2 pixel-font">⏳ Connecting to chat...</p>
         )}
         {isConnected && !canSend && (
-          <p className="text-xs text-yellow-300/80 mt-2 pixel-font">🔒 Connect X to send messages</p>
+          <p className="text-[10px] leading-none text-yellow-300/80 mt-1 pixel-font">🔒 Connect X to send messages</p>
         )}
       </form>
     </div>

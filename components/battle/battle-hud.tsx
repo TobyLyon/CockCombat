@@ -52,31 +52,31 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     <div className="absolute inset-0 z-20 pointer-events-none pixel-font text-white overflow-hidden">
 
       {/* Top Bar Area - Better spacing with safe margins and responsive design */}
-      <div className="absolute top-0 left-0 right-0 p-2 sm:p-4 md:p-6 flex justify-between items-start flex-wrap gap-2 sm:gap-4">
+      <div className="absolute top-0 left-0 right-0 p-1 sm:p-2 md:p-4 flex justify-between items-start flex-wrap gap-1 sm:gap-2">
         
         {/* Top Left: Chickens Left */}
-        <div className="bg-black/90 border-2 border-yellow-500/70 rounded-lg px-2 sm:px-3 py-1 sm:py-2 shadow-xl backdrop-blur-sm">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-yellow-400 text-xs sm:text-sm font-bold">ALIVE:</span>
-            <span className="text-lg sm:text-xl lg:text-2xl font-bold text-white">{chickensLeft}</span> 
+        <div className="bg-black/80 border border-yellow-500/60 rounded px-1.5 sm:px-2 py-0.5 sm:py-1 shadow backdrop-blur-sm">
+          <div className="flex items-center gap-1">
+            <span className="text-yellow-400 text-[10px] sm:text-xs font-bold">ALIVE:</span>
+            <span className="text-sm sm:text-base lg:text-lg font-bold text-white">{chickensLeft}</span> 
           </div>
         </div>
 
         {/* Top Center: Title */}
-        <div className="bg-black/90 border-2 border-yellow-500/70 rounded-lg px-2 sm:px-4 py-1 sm:py-2 shadow-xl backdrop-blur-sm">
-          <h1 className="text-sm sm:text-lg lg:text-xl text-yellow-400 font-bold tracking-wide">COCK COMBAT</h1>
+        <div className="bg-black/80 border border-yellow-500/60 rounded px-2 sm:px-3 py-0.5 sm:py-1 shadow backdrop-blur-sm">
+          <h1 className="text-xs sm:text-sm lg:text-base text-yellow-400 font-bold tracking-wide">COCK COMBAT</h1>
         </div>
 
         {/* Top Right: Player List - Better spacing and sizing with responsive width */}
-        <div className="bg-black/90 border-2 border-yellow-500/70 rounded-lg px-2 sm:px-3 py-1 sm:py-2 w-48 sm:w-60 lg:w-72 shadow-xl backdrop-blur-sm">
-          <div className="flex justify-between items-center mb-1 sm:mb-2 border-b border-yellow-500/30 pb-1 sm:pb-2">
-            <h2 className="text-yellow-400 font-bold text-xs sm:text-sm uppercase tracking-wider">Leaderboard</h2>
-            <div className="bg-yellow-500/20 px-1 sm:px-2 py-0.5 sm:py-1 rounded-sm">
-              <span className="text-white text-xs">{displayPlayers.length}</span>
+        <div className="bg-black/80 border border-yellow-500/60 rounded px-2 sm:px-2 py-1 w-40 sm:w-52 lg:w-64 shadow backdrop-blur-sm">
+          <div className="flex justify-between items-center mb-1 border-b border-yellow-500/20 pb-1">
+            <h2 className="text-yellow-400 font-bold text-[10px] sm:text-xs uppercase tracking-wide">Leaderboard</h2>
+            <div className="bg-yellow-500/20 px-1 rounded-sm">
+              <span className="text-white text-[10px]">{displayPlayers.length}</span>
             </div>
           </div>
           
-          <div className="max-h-32 sm:max-h-48 lg:max-h-80 overflow-y-auto">
+          <div className="max-h-24 sm:max-h-40 lg:max-h-72 overflow-y-auto">
             {displayPlayers.slice(0, 12).map((p, index) => {
               const playerListHealthColor = getHealthColor(p.hp, p.maxHp);
               const healthPercent = (p.hp / p.maxHp) * 100;
@@ -86,21 +86,21 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
                   className={`flex justify-between items-center py-0.5 sm:py-1 mb-0.5 sm:mb-1 ${p.isPlayer ? 'font-bold' : ''} ${p.isAlive ? '' : 'opacity-50'}`}
                 >
                   <div className="flex items-center flex-1 min-w-0">
-                    <span className="text-gray-400 w-3 sm:w-4 lg:w-5 text-right mr-1 sm:mr-2 text-xs">{index + 1}.</span>
-                    <span className={`${p.isPlayer ? 'text-yellow-300' : 'text-white'} ${!p.isAlive ? 'line-through' : ''} truncate text-xs sm:text-sm`}>
+                    <span className="text-gray-400 w-3 sm:w-4 lg:w-5 text-right mr-1 text-[10px]">{index + 1}.</span>
+                    <span className={`${p.isPlayer ? 'text-yellow-300' : 'text-white'} ${!p.isAlive ? 'line-through' : ''} truncate text-[10px] sm:text-xs`}>
                       {p.name || (p.id?.startsWith('guest_') ? p.id : (p.id ? p.id.slice(0,8)+'...' : 'Player'))}
                     </span>
                   </div>
                   {/* Mini Health Bar */}
                   {p.isAlive && (
-                    <div className="w-6 sm:w-8 lg:w-10 h-1.5 sm:h-2 bg-gray-800 border border-gray-600 rounded-sm overflow-hidden flex-shrink-0 ml-1 sm:ml-2">
+                    <div className="w-5 sm:w-7 lg:w-9 h-1.5 sm:h-2 bg-gray-800 border border-gray-600 rounded-sm overflow-hidden flex-shrink-0 ml-1">
                       <div 
                         className={`h-full ${playerListHealthColor} transition-all duration-300`}
                         style={{ width: `${healthPercent}%` }}
                       ></div>
                     </div>
                   )}
-                  {!p.isAlive && <span className="text-red-500 text-xs bg-red-900/30 px-1 py-0.5 rounded-sm ml-1 sm:ml-2">KO</span>}
+                  {!p.isAlive && <span className="text-red-500 text-[10px] bg-red-900/30 px-1 py-0.5 rounded-sm ml-1">KO</span>}
                 </div>
               );
             })}
@@ -109,16 +109,16 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
       </div>
 
       {/* Bottom Center: Player Health - Better positioning with safe margins */}
-      <div className="absolute bottom-4 sm:bottom-6 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+      <div className="absolute bottom-2 sm:bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
         {/* Health Bar */}
-        <div className="w-48 sm:w-64 lg:w-80 h-4 sm:h-5 lg:h-6 bg-black/90 border-2 border-yellow-500/70 rounded-lg overflow-hidden p-1 shadow-xl backdrop-blur-sm">
+        <div className="w-40 sm:w-56 lg:w-72 h-3 sm:h-4 lg:h-5 bg-black/80 border border-yellow-500/60 rounded-lg overflow-hidden p-0.5 shadow backdrop-blur-sm">
           <div 
             className={`h-full ${playerHealthBarColor} rounded-sm transition-all duration-300 ease-in-out`}
             style={{ width: `${playerHealthPercentage}%` }}
           ></div>
         </div>
         {/* HP Text Below Bar */}
-        <div className="mt-1 sm:mt-2 text-xs sm:text-sm lg:text-base font-bold bg-black/90 border border-yellow-500/70 px-2 sm:px-3 py-1 rounded-lg shadow-xl backdrop-blur-sm">
+        <div className="mt-1 sm:mt-1.5 text-[10px] sm:text-xs lg:text-sm font-bold bg-black/80 border border-yellow-500/60 px-2 sm:px-2.5 py-0.5 rounded-lg shadow backdrop-blur-sm">
           <span className="text-white">{playerHP}</span>
           <span className="text-gray-400 mx-1">/</span>
           <span className="text-white">{maxHp}</span>
@@ -127,7 +127,7 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
       </div>
 
       {/* Bottom Right: Control Panel - Better positioning with safe margins */}
-      <div className="absolute bottom-2 sm:bottom-4 lg:bottom-6 right-2 sm:right-4 lg:right-6">
+      <div className="absolute bottom-1.5 sm:bottom-3 lg:bottom-5 right-1.5 sm:right-3 lg:right-5 scale-90 sm:scale-95 lg:scale-100">
         <ControlPanel />
       </div>
 

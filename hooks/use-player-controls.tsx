@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useIsomorphicLayoutEffect } from './use-viewport-height'
 import * as THREE from "three"
 
 export function usePlayerControls() {
@@ -88,7 +89,55 @@ export function usePlayerControls() {
     }
   }, [keys])
   
-  // Set up key listeners
+  // Touch controls (mobile-only): virtual joystick + two buttons
+  const leftTouchId = useRef<number | null>(null)
+  const leftOrigin = useRef<{ x: number, y: number } | null>(null)
+  const onTouchStart = (e: TouchEvent) => {
+    try {
+      for (const t of Array.from(e.touches)) {
+        const x = t.clientX, y = t.clientY
+        const vw = window.innerWidth, vh = window.innerHeight
+        // left-bottom quadrant for joystick
+        if (x < vw * 0.4 && y > vh * 0.6 && leftTouchId.current === null) {
+          leftTouchId.current = t.identifier
+          leftOrigin.current = { x, y }
+        }
+        // right-bottom quadrant for peck/jump
+        if (x > vw * 0.6 && y > vh * 0.6) {
+          // tap -> peck; long/second touch -> jump
+          setMousePeck(true)
+          if (mousePeckTimerRef.current) window.clearTimeout(mousePeckTimerRef.current)
+          mousePeckTimerRef.current = window.setTimeout(() => setMousePeck(false), 140)
+        }
+      }
+    } catch {}
+  }
+  const onTouchMove = (e: TouchEvent) => {
+    try {
+      if (leftTouchId.current === null || !leftOrigin.current) return
+      const t = Array.from(e.touches).find(tt => tt.identifier === leftTouchId.current)
+      if (!t) return
+      const dx = t.clientX - leftOrigin.current.x
+      const dy = t.clientY - leftOrigin.current.y
+      // Map to forward/back (dy) and turn (dx)
+      const dir = new (require('three').Vector3)(0, 0, 0)
+      const dead = 8
+      if (Math.abs(dy) > dead) dir.z = dy > 0 ? 1 : -1
+      setMoveDirection(dir)
+      const turnSpeed = 0.015
+      setRotationAngle(prev => prev + (Math.abs(dx) > dead ? (dx > 0 ? -turnSpeed : turnSpeed) : 0))
+    } catch {}
+  }
+  const onTouchEnd = (e: TouchEvent) => {
+    try {
+      if (leftTouchId.current !== null) {
+        const ended = Array.from(e.changedTouches).some(tt => tt.identifier === leftTouchId.current)
+        if (ended) { leftTouchId.current = null; leftOrigin.current = null; setMoveDirection(new (require('three').Vector3)(0,0,0)) }
+      }
+    } catch {}
+  }
+
+  // Set up key + touch listeners
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return
@@ -100,6 +149,10 @@ export function usePlayerControls() {
     window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("keyup", handleKeyUp)
     window.addEventListener("mousedown", onMouseDown)
+    // touch
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
     
     // Animation frame for smooth movement updates
     let animationFrameId: number
@@ -116,6 +169,9 @@ export function usePlayerControls() {
       window.removeEventListener("keyup", handleKeyUp)
       window.removeEventListener("mousedown", onMouseDown)
       cancelAnimationFrame(animationFrameId)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
       if (mousePeckTimerRef.current) window.clearTimeout(mousePeckTimerRef.current)
     }
   }, [handleKeyDown, handleKeyUp, updateMovement])
