@@ -64,10 +64,23 @@ export async function sendIdempotentPayment(args: SendArgs) {
           const provider = getEvmProvider()
           const receipt = await provider.getTransactionReceipt(existing.tx_hash as string)
           if (receipt && receipt.status === 1) {
-            console.log('[PAYMENTS][IDEMPOTENT_HIT]', { opId, txHash: existing.tx_hash })
-            return { txHash: existing.tx_hash as string }
+            // Validate to/from/value match intended payment to avoid reusing wrong tx
+            try {
+              const tx = await provider.getTransaction(existing.tx_hash as string)
+              const toOk = String(tx?.to || '').toLowerCase() === String(to).toLowerCase()
+              const fromOk = String(tx?.from || '').toLowerCase() === String(from.address).toLowerCase()
+              const valueOk = tx?.value ? (BigInt(tx.value.toString()) === amountWei) : false
+              if (toOk && fromOk && valueOk) {
+                console.log('[PAYMENTS][IDEMPOTENT_HIT]', { opId, txHash: existing.tx_hash })
+                return { txHash: existing.tx_hash as string }
+              }
+              console.warn('[PAYMENTS][TX_MISMATCH_RETRY]', { opId, txHash: existing.tx_hash, toOk, fromOk, valueOk })
+            } catch {
+              // If we cannot fetch the tx, treat as stale
+              console.warn('[PAYMENTS][TX_FETCH_FAILED_RETRY]', { opId, txHash: existing.tx_hash })
+            }
           }
-          // Stale or not confirmed: reset for re-send
+          // Stale or not confirmed or mismatched: reset for re-send
           try {
             await supabase
               .from('payments')
