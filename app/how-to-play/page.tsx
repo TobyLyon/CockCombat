@@ -231,6 +231,23 @@ export default function HowToPlayPage() {
             Jump in fast • Win with skill • Profit with strategy
           </motion.p>
 
+          {/* Beta notes / small graces */}
+          <div className="mx-auto max-w-3xl mb-5">
+            <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/20 backdrop-blur-md p-3 text-[11px] text-yellow-200/90">
+              <div className="flex items-center gap-2 font-bold text-yellow-300 text-xs">
+                <span>⚠️ Beta notes</span>
+              </div>
+              <ul className="mt-1 grid gap-1.5">
+                <li>• Payments and refunds can take up to ~1 minute to confirm on BNB.</li>
+                <li>• If the UI looks desynced, refresh the page to resync state.</li>
+                <li>• Cleanest refund path: toggle Ready OFF, then tap "Leave Lobby" before countdown starts.</li>
+                <li>• If you close the tab, refunds may still process—give it up to a minute.</li>
+                <li>• Wallet stuck? Reconnect your wallet from the header and try again.</li>
+                <li>• Need help or a manual refund? Open a ticket in our Discord and we’ll assist (complaints, feedback, or refunds).</li>
+              </ul>
+            </div>
+          </div>
+
           {/* Main flow cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
             {[
