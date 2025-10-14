@@ -361,8 +361,11 @@ export default function BattleArena() {
         try {
           const existing = typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null;
           guestIdGenerated = existing || `guest_${Math.random().toString(36).slice(2, 10)}`;
+          // Persist stable guest id for future sessions and cross-component access
+          try { if (typeof window !== 'undefined') { localStorage.setItem('guest_id', guestIdGenerated); (window as any).__guestId = guestIdGenerated; } } catch {}
         } catch {
           guestIdGenerated = `guest_${Math.random().toString(36).slice(2, 10)}`;
+          try { if (typeof window !== 'undefined') { localStorage.setItem('guest_id', guestIdGenerated); (window as any).__guestId = guestIdGenerated; } } catch {}
         }
       }
       const joinResponse = await fetch('/api/lobbies', {
@@ -395,6 +398,7 @@ export default function BattleArena() {
 
       // Stop persisting guest IDs globally to avoid sticky ghost identities
       setGuestId(joiningAsGuest ? guestIdGenerated : null);
+      try { if (joiningAsGuest && typeof window !== 'undefined') (window as any).__guestId = guestIdGenerated } catch {}
  
       // Go to lobby room for ready-up phase (wager will be handled there)
       console.log('🏠 Going to lobby room...');

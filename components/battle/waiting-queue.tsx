@@ -31,6 +31,18 @@ export default function WaitingQueue({
   playSound,
 }: WaitingQueueProps) {
   const { publicKey } = useWallet()
+  // Resolve a stable identifier for guests so sockets/pings work without a wallet
+  const resolvePlayerId = () => {
+    try {
+      const w = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.()
+      if (w && typeof w === 'string') return w
+      if (typeof window !== 'undefined') {
+        const gid = localStorage.getItem('guest_id') || (window as any)?.__guestId
+        if (gid && typeof gid === 'string') return gid
+      }
+    } catch {}
+    return null
+  }
   const { socket, isConnected } = useSocket()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
   const [latencyByWallet, setLatencyByWallet] = useState<Record<string, number>>({})
@@ -90,7 +102,7 @@ export default function WaitingQueue({
       }
       // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
-        const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
+        const id = resolvePlayerId()
         const msid = matchSessionIdRef.current
         if (id && msid) {
           socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
@@ -224,7 +236,7 @@ export default function WaitingQueue({
     // Local ping loop to estimate latency
     let pingTimer: any = null
     const startPing = () => {
-      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
+      const id = resolvePlayerId()
       if (!id) return
       const sendPing = () => {
         try {
@@ -334,7 +346,7 @@ export default function WaitingQueue({
     if (!socket || !isConnected) return
     // register wallet only (no cached guest id fallback)
     try {
-      const id = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || null
+      const id = resolvePlayerId()
       if (id) socket.emit('register_wallet', id)
     } catch {}
     socket.emit('join_lobby_room', lobby.id)
