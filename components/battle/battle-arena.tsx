@@ -694,7 +694,7 @@ export default function BattleArena() {
         )}
 
         {/* Floating Chat (arena/lobby only) */}
-        <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+        <div className="fixed bottom-4 right-4 z-[10050]">
           {chatOpen && (
             <div className="pointer-events-auto w-[320px] h-[420px] bg-gray-950/95 border border-gray-800 rounded-xl shadow-2xl mb-3 overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 bg-gray-900/70 border-b border-gray-800">
