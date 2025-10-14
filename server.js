@@ -572,7 +572,8 @@ preparePromise.then(() => {
           const entry = await upsertRoster(lobbyId, wallet, { username: name });
           // Ensure roster reflects authoritative readiness for existing players in the lobby (late-join sync)
           try {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            // Always call our local API to avoid cross-origin/env mismatches
+            const baseUrl = `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -653,11 +654,19 @@ preparePromise.then(() => {
                 if (!token) {
                   console.warn('Refund token not set; skipping refund');
                 } else {
-                  await fetch(`${baseUrl}/api/wager/refund`, {
+                  const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', __serverOnlyToken: token })
                   }).catch(() => null);
+                  try {
+                    if (resp) {
+                      const bodyTxt = await resp.text().catch(()=> '');
+                      console.log('[REFUND][HTTP][LEAVE]', { status: resp.status, ok: resp.ok, body: bodyTxt.slice(0, 200) });
+                    } else {
+                      console.warn('[REFUND][HTTP][LEAVE] No response object returned');
+                    }
+                  } catch {}
                 }
               } catch (err) {
                 console.warn('Refund on socket leave failed (non-fatal):', (err && err.message) || err);
