@@ -256,24 +256,6 @@ async function handleWagerConfirmation(req: NextRequest) {
       },
     });
 
-    // Safety: if the player already left before confirmation completed (no presence), refund immediately
-    try {
-      const presence = ((global as any).lobbyPresence && (global as any).lobbyPresence.get?.(lobbyId)) || null;
-      const meLower = String(playerPublicKey || '').toLowerCase();
-      const stillPresent = !!(presence && presence.has && presence.has(meLower));
-      const isCountdownActive = (() => { try { return Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]) } catch { return false } })();
-      const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)) } catch { return false } })();
-      const isPaidRanked = lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0;
-      if (isPaidRanked && !stillPresent && !isCountdownActive && !hasQueueSession) {
-        try {
-          const { processRefundServerOnly } = await import('@/app/api/wager/refund/route');
-          await processRefundServerOnly({ lobbyId, playerPublicKey, reason: 'left_before_countdown' });
-        } catch (e) {
-          console.warn('Immediate refund after late confirm failed (non-fatal):', (e as any)?.message || e);
-        }
-      }
-    } catch {}
-
     return NextResponse.json({ message: "Player status updated to ready", lobby });
 
   } catch (error) {
