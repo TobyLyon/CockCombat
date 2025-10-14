@@ -161,14 +161,14 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   }
   
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-gradient-to-b from-black/20 to-black/40">
       {/* Spectator Count Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-900/50 border-b border-gray-800">
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+      <div className="flex items-center justify-between px-4 py-2 bg-black/30 backdrop-blur-sm border-b border-yellow-500/20">
+        <div className="flex items-center gap-2 text-xs text-yellow-300/80 font-semibold">
           <Users className="h-4 w-4" />
           <span>{spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}</span>
         </div>
-        <Badge variant="outline" className="bg-green-600/20 text-green-400 border-green-600">
+        <Badge variant="outline" className="bg-green-600/30 text-green-300 border-green-500/40 text-xs pixel-font backdrop-blur-sm">
           LIVE
         </Badge>
       </div>
@@ -177,15 +177,15 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         <div className="flex flex-col gap-3">
           {messages.map((message) => (
             <div key={message.id} className="flex gap-2">
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-8 w-8 ring-2 ring-yellow-500/20">
                 <AvatarImage src={message.user.avatar} />
-                <AvatarFallback>{message.user.name.substring(0, 2)}</AvatarFallback>
+                <AvatarFallback className="bg-yellow-900/40 text-yellow-300 text-xs font-bold">{message.user.name.substring(0, 2)}</AvatarFallback>
               </Avatar>
               
-              <div className="flex flex-col flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{message.user.name}</span>
-                  <span className="text-xs text-gray-500 truncate">
+              <div className="flex flex-col flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sm text-yellow-400">{message.user.name}</span>
+                  <span className="text-xs text-gray-400 truncate">
                     {message.user.address}
                   </span>
                   <span className="text-xs text-gray-500">
@@ -195,13 +195,13 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
                   </span>
                   
                   {message.isPrediction && (
-                    <Badge variant="outline" className="bg-yellow-950/20 text-yellow-500 border-yellow-900">
-                      Battle Update
+                    <Badge variant="outline" className="bg-yellow-900/40 text-yellow-300 border-yellow-600/40 text-xs pixel-font">
+                      🎯 Update
                     </Badge>
                   )}
                 </div>
                 
-                <p className={`text-sm mt-1 ${message.isPrediction ? "text-yellow-500" : ""}`}>
+                <p className={`text-sm mt-1 ${message.isPrediction ? "text-yellow-300 font-semibold" : "text-white/90"} break-words`}>
                   {message.message}
                 </p>
               </div>
@@ -211,28 +211,29 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         </div>
       </ScrollArea>
       
-      <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-800 bg-gray-900 mt-auto">
+      <form onSubmit={handleSendMessage} className="p-3 border-t-2 border-yellow-500/20 bg-black/40 backdrop-blur-md mt-auto">
         <div className="flex gap-2">
           <Input 
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
             placeholder={!isConnected ? "Connecting..." : (canSend ? "Type a message..." : "Connect X to chat")}
-            className="bg-gray-950 border-gray-800"
+            className="bg-black/50 backdrop-blur-sm border-yellow-500/30 text-white placeholder:text-gray-500 focus:border-yellow-500/60 transition-all"
             disabled={!isConnected || !canSend}
           />
           <Button 
             type="submit" 
             size="icon" 
             disabled={!messageText.trim() || !isConnected || !canSend}
+            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black border-2 border-yellow-600/50 shadow-lg disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
           </Button>
         </div>
         {!isConnected && (
-          <p className="text-xs text-gray-400 mt-1">Connecting to chat...</p>
+          <p className="text-xs text-yellow-300/60 mt-2 pixel-font">⏳ Connecting to chat...</p>
         )}
         {isConnected && !canSend && (
-          <p className="text-xs text-gray-400 mt-1">Connect your X (Twitter) account to send messages.</p>
+          <p className="text-xs text-yellow-300/80 mt-2 pixel-font">🔒 Connect X to send messages</p>
         )}
       </form>
     </div>

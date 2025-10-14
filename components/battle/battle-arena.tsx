@@ -694,24 +694,26 @@ export default function BattleArena() {
         )}
 
         {/* Floating Chat (arena/lobby only) */}
-        <div className="fixed bottom-4 right-4 z-[10050]">
+        <div className="fixed bottom-4 left-4 z-[10050]">
           {chatOpen && (
-            <div className="pointer-events-auto w-[320px] h-[420px] bg-gray-950/95 border border-gray-800 rounded-xl shadow-2xl mb-3 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 bg-gray-900/70 border-b border-gray-800">
-                <div className="text-sm font-semibold">Arena Chat</div>
+            <div className="pointer-events-auto w-[340px] h-[480px] bg-black/40 backdrop-blur-xl border-2 border-yellow-500/30 rounded-2xl shadow-2xl mb-3 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 backdrop-blur-md border-b-2 border-yellow-500/30">
+                <div className="text-sm font-bold text-yellow-400 pixel-font flex items-center gap-2">
+                  💬 ARENA CHAT
+                </div>
                 <div className="flex items-center gap-2">
                   {!xConnected && (
                     <button
                       onClick={() => { try { window.location.href = '/api/auth/x/login' } catch {} }}
-                      className="px-2 py-1 rounded bg-[#1DA1F2] text-white text-xs font-semibold hover:opacity-90"
+                      className="px-3 py-1 rounded-md bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white text-xs font-bold pixel-font shadow-md transition-all"
                     >
-                      Connect X
+                      🔗 X
                     </button>
                   )}
-                  <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-xs text-gray-300 hover:text-white">Minimize</button>
+                  <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-xs text-yellow-300 hover:text-yellow-400 font-bold pixel-font">−</button>
                 </div>
               </div>
-              <div className="h-[calc(420px-40px)]">
+              <div className="h-[calc(480px-52px)]">
                 <SpectatorChat matchId={activeMatchId} canSend={xConnected} />
               </div>
             </div>
@@ -719,10 +721,10 @@ export default function BattleArena() {
           {!chatOpen && (
             <button
               onClick={() => setChatOpen(true)}
-              className="pointer-events-auto rounded-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold shadow-lg px-4 py-2"
+              className="pointer-events-auto rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold shadow-2xl px-5 py-3 pixel-font border-2 border-yellow-600/50 backdrop-blur-sm transition-all transform hover:scale-105"
               aria-label="Open chat"
             >
-              Chat
+              💬 CHAT
             </button>
           )}
         </div>
