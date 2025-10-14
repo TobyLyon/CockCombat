@@ -714,6 +714,43 @@ preparePromise.then(() => {
                 if (!token) {
                   console.warn('Refund token not set; skipping refund');
                 } else {
+                  // Determine if this wallet actually has a recorded wager (in-memory or DB)
+                  let shouldRefund = false;
+                  try {
+                    if (lobby && Array.isArray(lobby.players)) {
+                      const me = lobby.players.find(p => String(p.playerId||'').toLowerCase() === wallet);
+                      if (me && me.hasWagered) shouldRefund = true;
+                    }
+                  } catch {}
+                  try {
+                    if (!shouldRefund && global.lobbyRoster && global.lobbyRoster.get) {
+                      const map = global.lobbyRoster.get(lobbyId);
+                      const prior = map && map.get ? map.get(wallet) : null;
+                      if (prior && prior.hasWagered) shouldRefund = true;
+                    }
+                  } catch {}
+                  try {
+                    if (!shouldRefund) {
+                      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+                      if (supabaseUrl && supabaseServiceKey) {
+                        const { createClient } = require('@supabase/supabase-js');
+                        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+                        const { data } = await supabase
+                          .from('used_signatures')
+                          .select('signature')
+                          .or(`wallet_address.eq.${wallet},wallet_address.eq.${String(wallet||'').toLowerCase()}`)
+                          .eq('endpoint', '/api/wager/confirm')
+                          .contains('metadata', { lobbyId })
+                          .limit(1);
+                        if (Array.isArray(data) && data.length > 0) shouldRefund = true;
+                      }
+                    }
+                  } catch {}
+                  if (!shouldRefund) {
+                    console.log('[REFUND][SKIP][LEAVE] No recorded wager for wallet', wallet);
+                    return;
+                  }
                   // Try HTTP first
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
