@@ -155,7 +155,7 @@ export default function NavBar() {
 
         {/* Twitter / X */}
         <a
-          href="https://www.x.com/CockCombatSOL"
+          href="https://www.x.com/CockCombatBNB"
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 flex items-center justify-center"
