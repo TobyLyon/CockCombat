@@ -117,7 +117,7 @@ export default function GameLandingPage() {
           <Link href="#" className="text-purple-300 hover:text-white transition-colors">
             Discord
           </Link>
-          <Link href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-white transition-colors">
+          <Link href="https://www.x.com/CockCombatBNB" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-white transition-colors">
             Twitter
           </Link>
           <Link href="https://www.tiktok.com/@cockcombatgame" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-white transition-colors">

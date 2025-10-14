@@ -751,7 +751,20 @@ preparePromise.then(() => {
                     console.log('[REFUND][SKIP][LEAVE] No recorded wager for wallet', wallet);
                     return;
                   }
-                  // Try HTTP first
+                  // Try HTTP first (throttled per wallet+lobby to avoid duplicate triggers from rapid reconnects)
+                  try {
+                    global.__lastRefundHttpAt = global.__lastRefundHttpAt || new Map();
+                  } catch {}
+                  const throttleKey = `${lobbyId}:${wallet}`;
+                  const nowMs = Date.now();
+                  const lastAt = (global.__lastRefundHttpAt && global.__lastRefundHttpAt.get && global.__lastRefundHttpAt.get(throttleKey)) || 0;
+                  const minGapMs = 5000; // 5s throttle window
+                  if (nowMs - lastAt < minGapMs) {
+                    console.log('[REFUND][HTTP][LEAVE][THROTTLED]', { lobbyId, wallet, sinceMs: nowMs - lastAt });
+                    return;
+                  }
+                  try { if (global.__lastRefundHttpAt && global.__lastRefundHttpAt.set) global.__lastRefundHttpAt.set(throttleKey, nowMs); } catch {}
+                  // Try HTTP
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

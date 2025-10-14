@@ -172,10 +172,11 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
         const walletLower = walletRaw.toLowerCase()
         const { data } = await supabase
           .from('used_signatures')
-          .select('signature')
+          .select('signature, created_at')
           .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
           .eq('endpoint', '/api/wager/confirm')
           .contains('metadata', { lobbyId })
+          .order('created_at', { ascending: false })
           .limit(1)
         if (Array.isArray(data) && data.length > 0) {
           incidentSig = String(data[0].signature)
@@ -186,6 +187,58 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
   const opId = incidentSig ? `${baseOpId}:${incidentSig}` : baseOpId
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
+
+  // Cross-process idempotency: prefer exact opId (per-wager) and only fall back to base prefix if needed
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      let row: any = null
+      // Exact opId match
+      try {
+        const { data } = await supabase
+          .from('payments')
+          .select('op_id, tx_hash, state')
+          .eq('op_id', opId)
+          .maybeSingle()
+        row = data || null
+      } catch {}
+      // Fallback: previously saved without incidentSig
+      if (!row && incidentSig) {
+        try {
+          const { data } = await supabase
+            .from('payments')
+            .select('op_id, tx_hash, state')
+            .eq('op_id', baseOpId)
+            .maybeSingle()
+          row = data || null
+        } catch {}
+      }
+      // Last resort: when incidentSig is unknown, check any base prefix record
+      if (!row && !incidentSig) {
+        try {
+          const { data } = await supabase
+            .from('payments')
+            .select('op_id, tx_hash, state')
+            .like('op_id', `${baseOpId}%`)
+            .eq('type', 'refund')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+          row = Array.isArray(data) && data.length > 0 ? data[0] : null
+        } catch {}
+      }
+      if (row && (row.tx_hash || row.state === 'in_progress' || row.state === 'pending' || row.state === 'sent' || row.state === 'confirmed_soft')) {
+        if (row.tx_hash) {
+          console.log('[REFUND][IDEMPOTENT_HIT]', { opId: row.op_id, txHash: row.tx_hash })
+          return { ok: true, txHash: String(row.tx_hash) }
+        }
+        console.log('[REFUND][IDEMPOTENT_IN_PROGRESS]', { opId: row.op_id, state: row.state })
+        return { ok: true, message: 'Refund already processing' }
+      }
+    }
+  } catch {}
+
   console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, reason })
   try {
     const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })

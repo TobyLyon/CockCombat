@@ -213,7 +213,6 @@ export async function sendIdempotentPayment(args: SendArgs) {
         } catch (e) {
           console.warn('[PAYMENTS][CONFIRM_WAIT_TIMEOUT]', { opId, txHash })
         }
-        console.log('[PAYMENTS][SOFT_CONFIRMED]', { opId, txHash })
         await supabase.from('escrow_wallets').upsert({ id: from.id, address: from.address })
       } catch {}
     }
