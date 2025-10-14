@@ -89,7 +89,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
 
   // Idempotency lock
   if (!(global as any).__refundLocks) (global as any).__refundLocks = new Set<string>()
-  const key = `${lobbyId}:${String(player.playerId).toLowerCase()}`
+  const key = `${lobbyId}:${playerPublicKeyLower}`
   if ((global as any).__refundLocks.has(key)) {
     return { ok: true, message: 'Refund already processing' }
   }
@@ -99,6 +99,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const escrow = evmEscrowService.getWallet(lobby.escrowWalletId as any)
   if (!escrow) throw new Error('Escrow wallet unavailable')
   const wei = ethers.parseUnits(String(lobby.amount), 18)
+  // Prefer original funding EVM address when known, fallback to the public key (wallet)
   const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && rosterRec.__fundingWallet) || playerPublicKeyLower) as string)
   const opId = `refund:${lobbyId}:${playerPublicKeyLower}`
   console.log('[REFUND][REQUEST]', { opId, lobbyId, player: String(player.playerId).toLowerCase(), escrowId: escrow.id, refundTo, wei: wei.toString() })

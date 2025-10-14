@@ -649,8 +649,16 @@ preparePromise.then(() => {
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
             if (isPaidRanked && hasWagered && !isCountdownActive && !hasQueueSession) {
               try {
-                const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
-                await processRefundServerOnly({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
+                const token = process.env.REFUND_SERVER_TOKEN;
+                if (!token) {
+                  console.warn('Refund token not set; skipping refund');
+                } else {
+                  await fetch(`${baseUrl}/api/wager/refund`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', __serverOnlyToken: token })
+                  }).catch(() => null);
+                }
               } catch (err) {
                 console.warn('Refund on socket leave failed (non-fatal):', (err && err.message) || err);
               }
