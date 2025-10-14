@@ -51,17 +51,35 @@ export async function sendIdempotentPayment(args: SendArgs) {
   const from = evmEscrowService.getWallet(fromEscrowId)
   if (!from) throw new Error(`Escrow wallet ${fromEscrowId} unavailable`)
 
-  // Fast idempotency check (DB)
+  // Fast idempotency check (DB) with on-chain verification to avoid stale rows
   if (supabase) {
     try {
       const { data: existing } = await supabase
         .from('payments')
-        .select('op_id, tx_hash, state')
+        .select('op_id, tx_hash, state, updated_at')
         .eq('op_id', opId)
         .maybeSingle()
       if (existing && existing.tx_hash) {
-        console.log('[PAYMENTS][IDEMPOTENT_HIT]', { opId, txHash: existing.tx_hash })
-        return { txHash: existing.tx_hash as string }
+        try {
+          const provider = getEvmProvider()
+          const receipt = await provider.getTransactionReceipt(existing.tx_hash as string)
+          if (receipt && receipt.status === 1) {
+            console.log('[PAYMENTS][IDEMPOTENT_HIT]', { opId, txHash: existing.tx_hash })
+            return { txHash: existing.tx_hash as string }
+          }
+          // Stale or not confirmed: reset for re-send
+          try {
+            await supabase
+              .from('payments')
+              .update({ state: 'pending', tx_hash: null })
+              .eq('op_id', opId)
+          } catch {}
+          console.warn('[PAYMENTS][STALE_TX_RETRY]', { opId, txHash: existing.tx_hash })
+        } catch {
+          // Provider error: allow retry by resetting row
+          try { await supabase.from('payments').update({ state: 'pending', tx_hash: null }).eq('op_id', opId) } catch {}
+          console.warn('[PAYMENTS][STALE_TX_RETRY_NO_PROVIDER]', { opId })
+        }
       }
     } catch {}
   }
@@ -108,8 +126,13 @@ export async function sendIdempotentPayment(args: SendArgs) {
               .eq('op_id', opId)
               .maybeSingle()
             if (existing && existing.tx_hash) {
-              console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: existing.tx_hash })
-              return { txHash: existing.tx_hash as string }
+              try {
+                const receipt = await getEvmProvider().getTransactionReceipt(existing.tx_hash as string)
+                if (receipt && receipt.status === 1) {
+                  console.log('[PAYMENTS][IDEMPOTENT_AWAIT]', { opId, txHash: existing.tx_hash })
+                  return { txHash: existing.tx_hash as string }
+                }
+              } catch {}
             }
           } catch {}
           await new Promise(r => setTimeout(r, intervalMs))
@@ -122,8 +145,13 @@ export async function sendIdempotentPayment(args: SendArgs) {
             .eq('op_id', opId)
             .maybeSingle()
           if (existing && existing.tx_hash) {
-            console.log('[PAYMENTS][IDEMPOTENT_AWAIT_TIMEOUT_HIT]', { opId, txHash: existing.tx_hash })
-            return { txHash: existing.tx_hash as string }
+            try {
+              const receipt = await getEvmProvider().getTransactionReceipt(existing.tx_hash as string)
+              if (receipt && receipt.status === 1) {
+                console.log('[PAYMENTS][IDEMPOTENT_AWAIT_TIMEOUT_HIT]', { opId, txHash: existing.tx_hash })
+                return { txHash: existing.tx_hash as string }
+              }
+            } catch {}
           }
         } catch {}
         // Give up without sending to avoid duplicates
@@ -160,7 +188,18 @@ export async function sendIdempotentPayment(args: SendArgs) {
     if (supabase) {
       try {
         await supabase.from('payments').update({ tx_hash: txHash, state: 'sent' }).eq('op_id', opId)
-        await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opId)
+        // Verify confirmation before marking soft confirm
+        try {
+          const receipt = await getEvmProvider().waitForTransaction(txHash, 1, 60000)
+          if (receipt && receipt.status === 1) {
+            await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opId)
+            console.log('[PAYMENTS][SOFT_CONFIRMED]', { opId, txHash })
+          } else {
+            console.warn('[PAYMENTS][PENDING_ONCHAIN]', { opId, txHash })
+          }
+        } catch (e) {
+          console.warn('[PAYMENTS][CONFIRM_WAIT_TIMEOUT]', { opId, txHash })
+        }
         console.log('[PAYMENTS][SOFT_CONFIRMED]', { opId, txHash })
         await supabase.from('escrow_wallets').upsert({ id: from.id, address: from.address })
       } catch {}
