@@ -143,6 +143,7 @@ async function handleWagerConfirmation(req: NextRequest) {
     );
 
     player.hasWagered = true;
+    try { (player as any).__lastWagerSig = signature; } catch {}
     player.isReady = true;
     try {
       // Normalize stored playerId to input case to avoid mismatched case downstream
@@ -228,15 +229,15 @@ async function handleWagerConfirmation(req: NextRequest) {
           const entry = await (async () => {
             try {
               const map = (global as any).lobbyRoster && (global as any).lobbyRoster.get(lobbyId);
-              if (map) {
+          if (map) {
                 const key = String(playerPublicKey).toLowerCase();
                 const cur = map.get(key) || { playerId: playerPublicKey };
-                const next = { ...cur, hasWagered: true, isReady: true };
+            const next = { ...cur, hasWagered: true, isReady: true, lastWagerSig: signature };
                 map.set(key, next);
                 return next;
               }
             } catch {}
-            return { playerId: playerPublicKey, hasWagered: true, isReady: true } as any;
+        return { playerId: playerPublicKey, hasWagered: true, isReady: true, lastWagerSig: signature } as any;
           })();
           try { io.to(lobbyId).emit('roster_diff', { lobbyId, action: 'upsert', player: entry }); } catch {}
         } catch {}
