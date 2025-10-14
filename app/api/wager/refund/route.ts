@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       if (!parsed.success) {
         return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 })
       }
-      const { lobbyId, playerPublicKey, reason, __serverOnlyToken, force } = parsed.data
+      const { lobbyId, playerPublicKey, reason, __serverOnlyToken } = parsed.data
 
       // Reject client-initiated refunds; only allow when invoked by our server logic
       // Server provides a shared-secret token via env
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Refunds must be initiated by server' }, { status: 403 })
       }
 
-      const result = await processRefundServerOnly({ lobbyId, playerPublicKey, reason, force })
+      const result = await processRefundServerOnly({ lobbyId, playerPublicKey, reason })
       return NextResponse.json(result)
     } catch (error: any) {
       console.error('Refund error:', error)
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
   })
 }
 
-export async function processRefundServerOnly(args: { lobbyId: string; playerPublicKey: string; reason?: string; force?: boolean }) {
-  const { lobbyId, playerPublicKey, reason, force } = args
+export async function processRefundServerOnly(args: { lobbyId: string; playerPublicKey: string; reason?: string }) {
+  const { lobbyId, playerPublicKey, reason } = args
   const lobby = lobbies.find(l => l.id === lobbyId)
   if (!lobby) throw new Error('Lobby not found')
   if (lobby.matchType === 'tutorial' || lobby.amount <= 0) {
@@ -67,12 +67,26 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const hasQueueSession = (() => { try { return Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId)) } catch { return false } })()
   // Allow server-triggered queue-time refunds (no-show / insufficient players) even with an active queue session
   const allowDuringQueue = reason === 'queue_no_show' || reason === 'insufficient_players'
-  if (!allowDuringQueue && (isCountdownActive || hasQueueSession)) {
+  // Additional hard block: if the match session recently started or locked roster for this wallet, disallow refund
+  const blockedByRecentMatch = (() => {
+    try {
+      const metaByWallet = (global as any).recentMatchMetaByWallet;
+      const key = String(playerPublicKeyLower || '').toLowerCase();
+      const meta = metaByWallet && metaByWallet.get ? metaByWallet.get(key) : null;
+      // If meta exists for this wallet and lobby matches, and startAt is within last 2 minutes, block
+      if (meta && meta.lobbyId === lobbyId) {
+        const started = Number(meta.startAt || 0);
+        if (started && (Date.now() - started) < 2 * 60 * 1000) return true;
+      }
+    } catch {}
+    return false;
+  })()
+  if (!allowDuringQueue && (isCountdownActive || hasQueueSession || blockedByRecentMatch)) {
     return { error: 'Refund window closed' }
   }
   const hasWageredFlag = Boolean((player && player.hasWagered) || (rosterRec && rosterRec.hasWagered))
   const alreadyRefunded = Boolean(player && (player as any).__refunded)
-  if (!force && (!hasWageredFlag || alreadyRefunded)) {
+  if (!hasWageredFlag || alreadyRefunded) {
     return { ok: true, message: 'Already refunded or no recorded wager' }
   }
   if (!isBsc()) throw new Error('Unsupported chain')
@@ -103,9 +117,9 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   // Prefer original funding EVM address when known, fallback to the public key (wallet)
   const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
   const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
-  const opId = force ? `${baseOpId}:v2:${Date.now()}` : baseOpId
+  const opId = baseOpId
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
-  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, force: !!force, reason })
+  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, reason })
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash
   console.log('[REFUND][SENT]', { opId, txHash })

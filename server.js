@@ -706,7 +706,8 @@ preparePromise.then(() => {
             const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
             const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
-            // Attempt refund best-effort when lobby is ranked and not starting/queued. The refund handler is idempotent and re-checks gates.
+            // Attempt refund best-effort only if ranked and clearly before any countdown/queue has begun.
+            // Do NOT force uniqueness; allow idempotency by stable opId.
             if (isPaidRanked && !isCountdownActive && !hasQueueSession) {
               try {
                 const token = process.env.REFUND_SERVER_TOKEN;
@@ -717,7 +718,7 @@ preparePromise.then(() => {
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', force: true, __serverOnlyToken: token })
+                    body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', __serverOnlyToken: token })
                   }).catch(() => null);
                   let httpOk = false;
                   try {
@@ -735,7 +736,7 @@ preparePromise.then(() => {
                       const mod = require('./app/api/wager/refund/route.ts');
                       const fn = mod && (mod.processRefundServerOnly || (mod.default && mod.default.processRefundServerOnly));
                       if (typeof fn === 'function') {
-                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', force: true });
+                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
                         console.log('[REFUND][DIRECT][LEAVE]', { ok: true, result });
                       } else {
                         console.warn('[REFUND][DIRECT][LEAVE] processRefundServerOnly not available');
