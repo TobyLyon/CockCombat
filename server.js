@@ -636,40 +636,46 @@ preparePromise.then(() => {
             const all = res ? await res.json().catch(() => []) : [];
             const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
             const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
-            // Check roster map and API snapshot for wager evidence
-            let hasWagered = false;
-            try {
-              const map = global.lobbyRoster && global.lobbyRoster.get ? global.lobbyRoster.get(lobbyId) : null;
-              const prior = map && map.get ? map.get(wallet) : null;
-              hasWagered = !!(prior && prior.hasWagered);
-            } catch {}
-            if (!hasWagered && lobby) {
-              const me = (lobby.players || []).find(p => String(p.playerId || '').toLowerCase() === wallet);
-              hasWagered = !!(me && me.hasWagered);
-            }
             const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
-            // If wager evidence is missing due to timing, still attempt refund best-effort if lobby is ranked and not in countdown/queue.
-            // The refund route will re-check idempotently and safely no-op if not eligible.
+            // Attempt refund best-effort when lobby is ranked and not starting/queued. The refund handler is idempotent and re-checks gates.
             if (isPaidRanked && !isCountdownActive && !hasQueueSession) {
               try {
                 const token = process.env.REFUND_SERVER_TOKEN;
                 if (!token) {
                   console.warn('Refund token not set; skipping refund');
                 } else {
+                  // Try HTTP first
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown', __serverOnlyToken: token })
                   }).catch(() => null);
+                  let httpOk = false;
                   try {
                     if (resp) {
                       const bodyTxt = await resp.text().catch(()=> '');
                       console.log('[REFUND][HTTP][LEAVE]', { status: resp.status, ok: resp.ok, body: bodyTxt.slice(0, 200) });
+                      httpOk = !!resp.ok;
                     } else {
                       console.warn('[REFUND][HTTP][LEAVE] No response object returned');
                     }
                   } catch {}
+                  // Fallback: direct server-side call if HTTP failed
+                  if (!httpOk) {
+                    try {
+                      const mod = require('./app/api/wager/refund/route.ts');
+                      const fn = mod && (mod.processRefundServerOnly || (mod.default && mod.default.processRefundServerOnly));
+                      if (typeof fn === 'function') {
+                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
+                        console.log('[REFUND][DIRECT][LEAVE]', { ok: true, result });
+                      } else {
+                        console.warn('[REFUND][DIRECT][LEAVE] processRefundServerOnly not available');
+                      }
+                    } catch (e) {
+                      console.warn('[REFUND][DIRECT][LEAVE] Failed:', (e && e.message) || e);
+                    }
+                  }
                 }
               } catch (err) {
                 console.warn('Refund on socket leave failed (non-fatal):', (err && err.message) || err);
