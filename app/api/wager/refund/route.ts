@@ -185,66 +185,41 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
         }
       }
     } catch {}
+  } else if (!incidentSigCreatedAt) {
+    // We know the signature from memory; fetch its created_at for ordering/idempotency
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const { data } = await supabase
+          .from('used_signatures')
+          .select('created_at')
+          .eq('endpoint', '/api/wager/confirm')
+          .eq('signature', incidentSig)
+          .limit(1)
+        if (Array.isArray(data) && data.length > 0) {
+          incidentSigCreatedAt = String(data[0].created_at || '')
+        }
+      }
+    } catch {}
   }
   const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
   const timeSuffix = (!incidentSig && incidentSigCreatedAt) ? `t${Date.parse(incidentSigCreatedAt) || 0}` : null
   const opId = incidentSig ? `${baseOpId}:${incidentSig}` : (timeSuffix ? `${baseOpId}:${timeSuffix}` : baseOpId)
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
 
-  // Cross-process idempotency: prefer exact opId (per-wager) and only fall back to base prefix if needed
+  // Cross-process idempotency: only accept exact opId hits to avoid reusing older base rows
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (supabaseUrl && supabaseServiceKey) {
       const supabase = createClient(supabaseUrl, supabaseServiceKey)
-      let row: any = null
-      // Exact opId match
-      try {
-        const { data } = await supabase
-          .from('payments')
-          .select('op_id, tx_hash, state, updated_at, type')
-          .eq('op_id', opId)
-          .maybeSingle()
-        row = data || null
-      } catch {}
-      // Fallback: previously saved without incidentSig
-      if (!row && incidentSig) {
-        try {
-          const { data } = await supabase
-            .from('payments')
-            .select('op_id, tx_hash, state, updated_at, type')
-            .eq('op_id', baseOpId)
-            .maybeSingle()
-          const candidate = data || null
-          if (candidate && candidate.type === 'refund') {
-            const updatedAtMs = Date.parse(String(candidate.updated_at || '')) || 0
-            const sigAtMs = incidentSigCreatedAt ? (Date.parse(incidentSigCreatedAt) || 0) : 0
-            if (!sigAtMs || updatedAtMs >= sigAtMs) {
-              row = candidate
-            }
-          }
-        } catch {}
-      }
-      // Last resort: when incidentSig is unknown and no time suffix, check any base prefix record
-      if (!row && !incidentSig && !timeSuffix) {
-        try {
-          const { data } = await supabase
-            .from('payments')
-            .select('op_id, tx_hash, state, updated_at, type')
-            .like('op_id', `${baseOpId}%`)
-            .eq('type', 'refund')
-            .order('updated_at', { ascending: false })
-            .limit(1)
-          const candidate = Array.isArray(data) && data.length > 0 ? data[0] : null
-          if (candidate) {
-            const updatedAtMs = Date.parse(String(candidate.updated_at || '')) || 0
-            const sigAtMs = incidentSigCreatedAt ? (Date.parse(incidentSigCreatedAt) || 0) : 0
-            if (!sigAtMs || updatedAtMs >= sigAtMs) {
-              row = candidate
-            }
-          }
-        } catch {}
-      }
+      const { data: row } = await supabase
+        .from('payments')
+        .select('op_id, tx_hash, state')
+        .eq('op_id', opId)
+        .maybeSingle()
       if (row && (row.tx_hash || row.state === 'in_progress' || row.state === 'pending' || row.state === 'sent' || row.state === 'confirmed_soft')) {
         if (row.tx_hash) {
           console.log('[REFUND][IDEMPOTENT_HIT]', { opId: row.op_id, txHash: row.tx_hash })

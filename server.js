@@ -764,7 +764,7 @@ preparePromise.then(() => {
                     return;
                   }
                   try { if (global.__lastRefundHttpAt && global.__lastRefundHttpAt.set) global.__lastRefundHttpAt.set(throttleKey, nowMs); } catch {}
-                  // Try HTTP
+                  // Try HTTP (always attempt; route will gate by DB confirm/idempotency)
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -780,21 +780,7 @@ preparePromise.then(() => {
                       console.warn('[REFUND][HTTP][LEAVE] No response object returned');
                     }
                   } catch {}
-                  // Fallback: direct server-side call if HTTP failed
-                  if (!httpOk) {
-                    try {
-                      const mod = require('./app/api/wager/refund/route.ts');
-                      const fn = mod && (mod.processRefundServerOnly || (mod.default && mod.default.processRefundServerOnly));
-                      if (typeof fn === 'function') {
-                        const result = await fn({ lobbyId, playerPublicKey: wallet, reason: 'left_before_countdown' });
-                        console.log('[REFUND][DIRECT][LEAVE]', { ok: true, result });
-                      } else {
-                        console.warn('[REFUND][DIRECT][LEAVE] processRefundServerOnly not available');
-                      }
-                    } catch (e) {
-                      console.warn('[REFUND][DIRECT][LEAVE] Failed:', (e && e.message) || e);
-                    }
-                  }
+                  // No direct fallback; idempotency and retries are handled inside the route/payment layer
                 }
               } catch (err) {
                 console.warn('Refund on socket leave failed (non-fatal):', (err && err.message) || err);
