@@ -159,6 +159,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   // Build an incident-scoped opId using the confirmed wager signature so multiple distinct refunds
   // (across separate wager sessions) do not collide on idempotency.
   let incidentSig: string | null = null
+  let incidentSigCreatedAt: string | null = null
   try { if (!incidentSig && player && (player as any).__lastWagerSig) incidentSig = String((player as any).__lastWagerSig) } catch {}
   try { if (!incidentSig && rosterRec && (rosterRec as any).lastWagerSig) incidentSig = String((rosterRec as any).lastWagerSig) } catch {}
   if (!incidentSig) {
@@ -180,12 +181,14 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
           .limit(1)
         if (Array.isArray(data) && data.length > 0) {
           incidentSig = String(data[0].signature)
+          incidentSigCreatedAt = String(data[0].created_at || '')
         }
       }
     } catch {}
   }
   const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
-  const opId = incidentSig ? `${baseOpId}:${incidentSig}` : baseOpId
+  const timeSuffix = (!incidentSig && incidentSigCreatedAt) ? `t${Date.parse(incidentSigCreatedAt) || 0}` : null
+  const opId = incidentSig ? `${baseOpId}:${incidentSig}` : (timeSuffix ? `${baseOpId}:${timeSuffix}` : baseOpId)
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
 
   // Cross-process idempotency: prefer exact opId (per-wager) and only fall back to base prefix if needed
@@ -199,7 +202,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
       try {
         const { data } = await supabase
           .from('payments')
-          .select('op_id, tx_hash, state')
+          .select('op_id, tx_hash, state, updated_at, type')
           .eq('op_id', opId)
           .maybeSingle()
         row = data || null
@@ -209,23 +212,37 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
         try {
           const { data } = await supabase
             .from('payments')
-            .select('op_id, tx_hash, state')
+            .select('op_id, tx_hash, state, updated_at, type')
             .eq('op_id', baseOpId)
             .maybeSingle()
-          row = data || null
+          const candidate = data || null
+          if (candidate && candidate.type === 'refund') {
+            const updatedAtMs = Date.parse(String(candidate.updated_at || '')) || 0
+            const sigAtMs = incidentSigCreatedAt ? (Date.parse(incidentSigCreatedAt) || 0) : 0
+            if (!sigAtMs || updatedAtMs >= sigAtMs) {
+              row = candidate
+            }
+          }
         } catch {}
       }
-      // Last resort: when incidentSig is unknown, check any base prefix record
-      if (!row && !incidentSig) {
+      // Last resort: when incidentSig is unknown and no time suffix, check any base prefix record
+      if (!row && !incidentSig && !timeSuffix) {
         try {
           const { data } = await supabase
             .from('payments')
-            .select('op_id, tx_hash, state')
+            .select('op_id, tx_hash, state, updated_at, type')
             .like('op_id', `${baseOpId}%`)
             .eq('type', 'refund')
             .order('updated_at', { ascending: false })
             .limit(1)
-          row = Array.isArray(data) && data.length > 0 ? data[0] : null
+          const candidate = Array.isArray(data) && data.length > 0 ? data[0] : null
+          if (candidate) {
+            const updatedAtMs = Date.parse(String(candidate.updated_at || '')) || 0
+            const sigAtMs = incidentSigCreatedAt ? (Date.parse(incidentSigCreatedAt) || 0) : 0
+            if (!sigAtMs || updatedAtMs >= sigAtMs) {
+              row = candidate
+            }
+          }
         } catch {}
       }
       if (row && (row.tx_hash || row.state === 'in_progress' || row.state === 'pending' || row.state === 'sent' || row.state === 'confirmed_soft')) {
