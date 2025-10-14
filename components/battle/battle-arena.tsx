@@ -21,6 +21,7 @@ import { useGameState, GameState } from "../../contexts/GameStateContext"
 import { Lobby } from "../../lib/lobbies";
 // Solana web3 removed in EVM-only build
 import { motion } from "framer-motion"
+import SpectatorChat from "../spectator/spectator-chat"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
 import { useSocket } from "../../hooks/use-socket"
@@ -41,6 +42,10 @@ export default function BattleArena() {
   const isMountedRef = useRef(true);
   const [guestId, setGuestId] = useState<string | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
+  // Chat state
+  const [xConnected, setXConnected] = useState<boolean>(false)
+  const [chatOpen, setChatOpen] = useState<boolean>(false)
+  const [activeMatchId, setActiveMatchId] = useState<string | undefined>(undefined)
   
   // Use the game state context instead of local state
   const { 
@@ -57,6 +62,35 @@ export default function BattleArena() {
     setMatchMeta
   } = useGameState();
   const { socket } = useSocket();
+  // Probe X session once
+  useEffect(() => {
+    const probe = async () => {
+      try {
+        const res = await fetch('/api/auth/x/session', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        setXConnected(Boolean(data && data.connected))
+      } catch { setXConnected(false) }
+    }
+    probe()
+  }, [])
+  // Track match session id from server events/window cache
+  useEffect(() => {
+    try { const id = (window as any)?.__last_match_session_id; if (id && typeof id === 'string') setActiveMatchId(id) } catch {}
+  }, [])
+  useEffect(() => {
+    if (!socket) return
+    const capture = (p: any) => {
+      try { const msid = String((p && (p.matchSessionId || (p as any)?.matchSessionId)) || ''); if (msid) setActiveMatchId(msid) } catch {}
+    }
+    socket.on?.('queue_begin', capture)
+    socket.on?.('arena_lock_roster', capture)
+    socket.on?.('round_start', capture)
+    return () => {
+      socket.off?.('queue_begin', capture)
+      socket.off?.('arena_lock_roster', capture)
+      socket.off?.('round_start', capture)
+    }
+  }, [socket])
   // Live counts overlay
   const [liveCounts, setLiveCounts] = useState<Record<string, { liveHumans: number; liveTotal: number }>>({})
   
@@ -658,6 +692,40 @@ export default function BattleArena() {
             />
           </div>
         )}
+
+        {/* Floating Chat (arena/lobby only) */}
+        <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+          {chatOpen && (
+            <div className="pointer-events-auto w-[320px] h-[420px] bg-gray-950/95 border border-gray-800 rounded-xl shadow-2xl mb-3 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-900/70 border-b border-gray-800">
+                <div className="text-sm font-semibold">Arena Chat</div>
+                <div className="flex items-center gap-2">
+                  {!xConnected && (
+                    <button
+                      onClick={() => { try { window.location.href = '/api/auth/x/login' } catch {} }}
+                      className="px-2 py-1 rounded bg-[#1DA1F2] text-white text-xs font-semibold hover:opacity-90"
+                    >
+                      Connect X
+                    </button>
+                  )}
+                  <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-xs text-gray-300 hover:text-white">Minimize</button>
+                </div>
+              </div>
+              <div className="h-[calc(420px-40px)]">
+                <SpectatorChat matchId={activeMatchId} canSend={xConnected} />
+              </div>
+            </div>
+          )}
+          {!chatOpen && (
+            <button
+              onClick={() => setChatOpen(true)}
+              className="pointer-events-auto rounded-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold shadow-lg px-4 py-2"
+              aria-label="Open chat"
+            >
+              Chat
+            </button>
+          )}
+        </div>
 
         {gameState === "battle" && (
           <div className="flex-1 w-full h-full relative overflow-hidden">
