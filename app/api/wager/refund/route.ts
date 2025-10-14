@@ -16,12 +16,13 @@ export async function POST(req: NextRequest) {
         playerPublicKey: z.string().min(32),
         reason: z.string().optional(),
         __serverOnlyToken: z.string().optional(),
+        force: z.boolean().optional(),
       })
       const parsed = BodySchema.safeParse(await req.json())
       if (!parsed.success) {
         return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 })
       }
-      const { lobbyId, playerPublicKey, reason, __serverOnlyToken } = parsed.data
+      const { lobbyId, playerPublicKey, reason, __serverOnlyToken, force } = parsed.data
 
       // Reject client-initiated refunds; only allow when invoked by our server logic
       // Server provides a shared-secret token via env
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Refunds must be initiated by server' }, { status: 403 })
       }
 
-      const result = await processRefundServerOnly({ lobbyId, playerPublicKey, reason })
+      const result = await processRefundServerOnly({ lobbyId, playerPublicKey, reason, force })
       return NextResponse.json(result)
     } catch (error: any) {
       console.error('Refund error:', error)
@@ -39,8 +40,8 @@ export async function POST(req: NextRequest) {
   })
 }
 
-export async function processRefundServerOnly(args: { lobbyId: string; playerPublicKey: string; reason?: string }) {
-  const { lobbyId, playerPublicKey, reason } = args
+export async function processRefundServerOnly(args: { lobbyId: string; playerPublicKey: string; reason?: string; force?: boolean }) {
+  const { lobbyId, playerPublicKey, reason, force } = args
   const lobby = lobbies.find(l => l.id === lobbyId)
   if (!lobby) throw new Error('Lobby not found')
   if (lobby.matchType === 'tutorial' || lobby.amount <= 0) {
@@ -71,7 +72,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   }
   const hasWageredFlag = Boolean((player && player.hasWagered) || (rosterRec && rosterRec.hasWagered))
   const alreadyRefunded = Boolean(player && (player as any).__refunded)
-  if (!hasWageredFlag || alreadyRefunded) {
+  if (!force && (!hasWageredFlag || alreadyRefunded)) {
     return { ok: true, message: 'Already refunded or no recorded wager' }
   }
   if (!isBsc()) throw new Error('Unsupported chain')
@@ -103,7 +104,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
   const opId = `refund:${lobbyId}:${playerPublicKeyLower}`
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
-  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString() })
+  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, force: !!force, reason })
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash
   console.log('[REFUND][SENT]', { opId, txHash })

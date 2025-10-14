@@ -97,6 +97,74 @@ preparePromise.then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
+
+      // Internal admin refund endpoint (Render/ops). Token-gated.
+      if (req.method === 'POST' && parsedUrl.pathname === '/_internal/refund') {
+        try {
+          let raw = '';
+          req.on('data', (chunk) => { try { raw += chunk } catch {} });
+          req.on('end', async () => {
+            try {
+              const body = (() => { try { return JSON.parse(raw || '{}') } catch { return {} } })();
+              const token = String(body.__serverOnlyToken || '');
+              if (!process.env.REFUND_SERVER_TOKEN || token !== process.env.REFUND_SERVER_TOKEN) {
+                res.statusCode = 403;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Forbidden' }));
+                return;
+              }
+              const fromEscrowId = String(body.fromEscrowId || '');
+              const to = String(body.to || '');
+              const opId = body.opId ? String(body.opId) : `manual_refund:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+              if (!fromEscrowId || !to) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Missing required fields: fromEscrowId, to' }));
+                return;
+              }
+              const { ethers } = require('ethers');
+              const { sendIdempotentPayment } = require('./lib/evm-payments.ts');
+              let amountWei;
+              if (body.amountWei) {
+                try { amountWei = BigInt(String(body.amountWei)); } catch { amountWei = null; }
+              }
+              if (!amountWei) {
+                const amount = Number(body.amount || 0);
+                if (!(amount > 0)) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'Missing amount or amountWei' }));
+                  return;
+                }
+                amountWei = ethers.parseUnits(String(amount), 18);
+              }
+              console.log('[ADMIN][REFUND][REQUEST]', { opId, fromEscrowId, to, amountWei: String(amountWei) });
+              try {
+                const result = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId, to, amountWei });
+                console.log('[ADMIN][REFUND][SENT]', { opId, txHash: result.txHash });
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ ok: true, txHash: result.txHash }));
+              } catch (e) {
+                console.warn('[ADMIN][REFUND][FAILED]', (e && e.message) || e);
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Refund failed', details: (e && e.message) || String(e) }));
+              }
+            } catch (err) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Invalid request' }));
+            }
+          });
+        } catch (e) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Internal error' }));
+        }
+        return;
+      }
+
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
