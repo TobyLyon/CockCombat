@@ -155,46 +155,79 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const wei = ethers.parseUnits(String(lobby.amount), 18)
   // Prefer original funding EVM address when known, fallback to the public key (wallet)
   const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
+
+  // Build an incident-scoped opId using the confirmed wager signature so multiple distinct refunds
+  // (across separate wager sessions) do not collide on idempotency.
+  let incidentSig: string | null = null
+  try { if (!incidentSig && player && (player as any).__lastWagerSig) incidentSig = String((player as any).__lastWagerSig) } catch {}
+  try { if (!incidentSig && rosterRec && (rosterRec as any).lastWagerSig) incidentSig = String((rosterRec as any).lastWagerSig) } catch {}
+  if (!incidentSig) {
+    // Query Supabase used_signatures to fetch the last confirm signature for this wallet+lobby
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const walletRaw = String(playerPublicKey || '')
+        const walletLower = walletRaw.toLowerCase()
+        const { data } = await supabase
+          .from('used_signatures')
+          .select('signature')
+          .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
+          .eq('endpoint', '/api/wager/confirm')
+          .contains('metadata', { lobbyId })
+          .limit(1)
+        if (Array.isArray(data) && data.length > 0) {
+          incidentSig = String(data[0].signature)
+        }
+      }
+    } catch {}
+  }
   const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
-  const opId = baseOpId
+  const opId = incidentSig ? `${baseOpId}:${incidentSig}` : baseOpId
   const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
   console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, reason })
-  const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
-  const txHash = res.txHash
-  console.log('[REFUND][SENT]', { opId, txHash })
-  console.log('↩️ refund_executed', { lobbyId, player: playerIdForLog, amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
-  try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
   try {
-    await auditLogger.log({
-      eventType: 'payout_executed',
-      actorWallet: playerPublicKey,
-      endpoint: 'server:processRefund',
-      severity: 'info',
-      metadata: { kind: 'refund', lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
-    })
-  } catch {}
-  try {
-    const io = (global as any).socketIo
-    if (io) {
-      io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: false })
-      const lobbyPlayers = lobby.players.map(p => ({
-        playerId: p.playerId,
-        username: p.username || p.playerId.slice(0, 8) + '...',
-        chickenName: p.chickenId || 'Default',
-        isReady: p.isAi ? true : Boolean(p.isReady),
-        isAi: p.isAi || false
-      }))
-      io.to(lobbyId).emit('lobby_updated', {
-        id: lobbyId,
-        players: lobbyPlayers,
-        capacity: lobby.capacity,
-        amount: lobby.amount,
-        currency: lobby.currency,
-        matchType: lobby.matchType
+    const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
+    const txHash = res.txHash
+    console.log('[REFUND][SENT]', { opId, txHash })
+    console.log('↩️ refund_executed', { lobbyId, player: playerIdForLog, amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
+    try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
+    try {
+      await auditLogger.log({
+        eventType: 'payout_executed',
+        actorWallet: playerPublicKey,
+        endpoint: 'server:processRefund',
+        severity: 'info',
+        metadata: { kind: 'refund', lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
       })
-    }
-  } catch {}
-  return { ok: true, txHash }
+    } catch {}
+    try {
+      const io = (global as any).socketIo
+      if (io) {
+        io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: false })
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: p.isAi || false
+        }))
+        io.to(lobbyId).emit('lobby_updated', {
+          id: lobbyId,
+          players: lobbyPlayers,
+          capacity: lobby.capacity,
+          amount: lobby.amount,
+          currency: lobby.currency,
+          matchType: lobby.matchType
+        })
+      }
+    } catch {}
+    return { ok: true, txHash }
+  } catch (e: any) {
+    console.warn('[REFUND][FAILED]', { opId, error: e?.message || String(e) })
+    throw e
+  }
 }
 
 
