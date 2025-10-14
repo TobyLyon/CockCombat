@@ -100,9 +100,10 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   if (!escrow) throw new Error('Escrow wallet unavailable')
   const wei = ethers.parseUnits(String(lobby.amount), 18)
   // Prefer original funding EVM address when known, fallback to the public key (wallet)
-  const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && rosterRec.__fundingWallet) || playerPublicKeyLower) as string)
+  const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
   const opId = `refund:${lobbyId}:${playerPublicKeyLower}`
-  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: String(player.playerId).toLowerCase(), escrowId: escrow.id, refundTo, wei: wei.toString() })
+  const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
+  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString() })
   const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
   const txHash = res.txHash
   console.log('[REFUND][SENT]', { opId, txHash })

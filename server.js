@@ -630,8 +630,9 @@ preparePromise.then(() => {
         try {
           const wallet = connection && connection.walletAddress ? String(connection.walletAddress).toLowerCase() : null;
           if (wallet) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-            const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+            // Always use local API and bypass caches to avoid stale lobby snapshots during leave
+            const baseUrl = `http://localhost:${port}`;
+            const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
             const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
@@ -648,7 +649,9 @@ preparePromise.then(() => {
             }
             const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
-            if (isPaidRanked && hasWagered && !isCountdownActive && !hasQueueSession) {
+            // If wager evidence is missing due to timing, still attempt refund best-effort if lobby is ranked and not in countdown/queue.
+            // The refund route will re-check idempotently and safely no-op if not eligible.
+            if (isPaidRanked && !isCountdownActive && !hasQueueSession) {
               try {
                 const token = process.env.REFUND_SERVER_TOKEN;
                 if (!token) {
