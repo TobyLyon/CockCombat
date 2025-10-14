@@ -89,13 +89,18 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   let hasWageredFlag = Boolean((player && player.hasWagered) || (rosterRec && rosterRec.hasWagered))
   if (!hasWageredFlag) {
     // Fallback: check DB for a confirmed wager signature for this lobby (survives restarts)
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-      if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
-        const walletRaw = String(playerPublicKey || '')
-        const walletLower = walletRaw.toLowerCase()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const canDb = Boolean(supabaseUrl && supabaseServiceKey)
+    const walletRaw = String(playerPublicKey || '')
+    const walletLower = walletRaw.toLowerCase()
+    const waitMs = Math.max(0, parseInt(String(process.env.REFUND_CONFIRM_WAIT_MS || ''), 10) || 12000)
+    const pollMs = 1200
+    const deadline = Date.now() + waitMs
+    const checkOnce = async () => {
+      try {
+        if (!canDb) return false
+        const supabase = createClient(supabaseUrl!, supabaseServiceKey!)
         const { data } = await supabase
           .from('used_signatures')
           .select('signature')
@@ -103,11 +108,21 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
           .eq('endpoint', '/api/wager/confirm')
           .contains('metadata', { lobbyId })
           .limit(1)
-        if (Array.isArray(data) && data.length > 0) {
-          hasWageredFlag = true
-        }
+        return Array.isArray(data) && data.length > 0
+      } catch {
+        return false
       }
-    } catch {}
+    }
+    // Immediate check
+    if (await checkOnce()) {
+      hasWageredFlag = true
+    } else if (waitMs > 0) {
+      // Briefly wait for confirm record to be persisted
+      while (!hasWageredFlag && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, pollMs))
+        if (await checkOnce()) { hasWageredFlag = true; break }
+      }
+    }
   }
   const alreadyRefunded = Boolean(player && (player as any).__refunded)
   if (!hasWageredFlag || alreadyRefunded) {
