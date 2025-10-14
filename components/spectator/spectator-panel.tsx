@@ -104,12 +104,14 @@ export default function SpectatorPanel({
               <div className="relative h-full">
                 <div className="absolute top-2 right-2 z-10">
                   {!xConnected && (
-                    <button
-                      onClick={() => { try { window.location.href = '/api/auth/x/login' } catch {} }}
+                    <a
+                      href="/api/auth/x/login"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="px-3 py-1 rounded bg-[#1DA1F2] text-white text-xs font-semibold shadow hover:opacity-90"
                     >
                       Connect X to chat
-                    </button>
+                    </a>
                   )}
                 </div>
                 <SpectatorChat 
