@@ -22,6 +22,18 @@ export default function SpectatorPanel({
   const [expanded, setExpanded] = useState(initialExpanded)
   const [activeTab, setActiveTab] = useState("betting")
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [xConnected, setXConnected] = useState(false)
+
+  React.useEffect(() => {
+    const probe = async () => {
+      try {
+        const res = await fetch('/api/auth/x/session', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        setXConnected(Boolean(data && data.connected))
+      } catch { setXConnected(false) }
+    }
+    probe()
+  }, [])
 
   const handleNewMessage = () => {
     if (activeTab !== "chat") {
@@ -89,10 +101,23 @@ export default function SpectatorPanel({
             </TabsContent>
             
             <TabsContent value="chat" className="flex-1 p-0 m-0 overflow-hidden">
-              <SpectatorChat 
-                matchId={matchId} 
-                onNewMessage={handleNewMessage} 
-              />
+              <div className="relative h-full">
+                <div className="absolute top-2 right-2 z-10">
+                  {!xConnected && (
+                    <button
+                      onClick={() => { try { window.location.href = '/api/auth/x/login' } catch {} }}
+                      className="px-3 py-1 rounded bg-[#1DA1F2] text-white text-xs font-semibold shadow hover:opacity-90"
+                    >
+                      Connect X to chat
+                    </button>
+                  )}
+                </div>
+                <SpectatorChat 
+                  matchId={matchId} 
+                  onNewMessage={handleNewMessage}
+                  canSend={xConnected}
+                />
+              </div>
             </TabsContent>
           </Tabs>
         </div>

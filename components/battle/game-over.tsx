@@ -138,7 +138,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-6 bg-black/40 p-4 rounded-lg">
-          <div className="text-center flex flex-col items-center justify-center">
+          <div className={`text-center flex flex-col items-center justify-center ${isHumanWinner ? '' : 'col-span-2'}`}>
             <p className="text-gray-400 text-sm mb-1">PLAYERS</p>
             <p className="text-3xl font-bold text-white">{totalPlayers}</p>
           </div>

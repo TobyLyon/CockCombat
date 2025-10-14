@@ -29,9 +29,10 @@ interface SpectatorChatProps {
   matchId?: string
   onNewMessage?: (message: string) => void
   onSendMessage?: (message: string) => void
+  canSend?: boolean
 }
 
-export default function SpectatorChat({ matchId, onNewMessage, onSendMessage }: SpectatorChatProps) {
+export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, canSend = true }: SpectatorChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageText, setMessageText] = useState("")
   const [spectatorCount, setSpectatorCount] = useState(0)
@@ -140,8 +141,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage }: 
   
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!messageText.trim() || !socket || !matchId) return
+    if (!messageText.trim() || !socket || !matchId || !canSend) return
     
     // Get username from wallet or use fallback
     const username = publicKey ? `${publicKey.toString().slice(0, 4)}...${publicKey.toString().slice(-4)}` : 'Anonymous';
@@ -216,20 +216,23 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage }: 
           <Input 
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder={isConnected ? "Type a message..." : "Connecting..."}
+            placeholder={!isConnected ? "Connecting..." : (canSend ? "Type a message..." : "Connect X to chat")}
             className="bg-gray-950 border-gray-800"
-            disabled={!isConnected}
+            disabled={!isConnected || !canSend}
           />
           <Button 
             type="submit" 
             size="icon" 
-            disabled={!messageText.trim() || !isConnected}
+            disabled={!messageText.trim() || !isConnected || !canSend}
           >
             <Send className="h-4 w-4" />
           </Button>
         </div>
         {!isConnected && (
           <p className="text-xs text-gray-400 mt-1">Connecting to chat...</p>
+        )}
+        {isConnected && !canSend && (
+          <p className="text-xs text-gray-400 mt-1">Connect your X (Twitter) account to send messages.</p>
         )}
       </form>
     </div>
