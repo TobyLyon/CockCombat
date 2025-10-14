@@ -304,6 +304,7 @@ export default function HowToPlayPage() {
                 icon: '🎮',
                 items: [
                   { key: 'WASD', desc: 'Move & Turn' },
+                  { key: 'Arrow Keys', desc: 'Move & Turn' },
                   { key: 'SHIFT', desc: 'Peck Attack' },
                   { key: 'SPACE', desc: 'Jump' },
                   { key: 'CLICK', desc: 'Also Peck' },

@@ -13,7 +13,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
         <p className="text-yellow-400 font-bold uppercase tracking-wider text-xs">CONTROLS</p>
       </div>
       <div className="space-y-1 sm:space-y-2">
-        <p><span className="font-semibold text-orange-400 w-12 sm:w-16 inline-block text-xs">WASD:</span> <span className="text-xs">Move</span></p>
+        <p><span className="font-semibold text-orange-400 w-12 sm:w-16 inline-block text-xs">WASD:</span> <span className="text-xs">Move/Turn</span></p>
+        <p><span className="font-semibold text-orange-400 w-12 sm:w-16 inline-block text-xs">Arrows:</span> <span className="text-xs">Move/Turn</span></p>
         <p><span className="font-semibold text-orange-400 w-12 sm:w-16 inline-block text-xs">Space:</span> <span className="text-xs">Jump</span></p>
         <p><span className="font-semibold text-orange-400 w-12 sm:w-16 inline-block text-xs">Shift:</span> <span className="text-xs">Peck/Attack</span></p>
       </div>
