@@ -706,14 +706,34 @@ preparePromise.then(() => {
             const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
             const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
-            // Attempt refund best-effort only if ranked and clearly before any countdown/queue has begun.
-            // Do NOT force uniqueness; allow idempotency by stable opId.
+            // Attempt refund best-effort only if ranked, clearly before any countdown/queue has begun,
+            // and the player actually has a recorded wager (roster or API snapshot says so).
             if (isPaidRanked && !isCountdownActive && !hasQueueSession) {
               try {
                 const token = process.env.REFUND_SERVER_TOKEN;
                 if (!token) {
                   console.warn('Refund token not set; skipping refund');
                 } else {
+                  // Check hasWagered quickly before calling refund
+                  let hasWagered = false;
+                  try {
+                    if (lobby && Array.isArray(lobby.players)) {
+                      const me = lobby.players.find(p => String(p.playerId||'').toLowerCase() === wallet);
+                      hasWagered = !!(me && me.hasWagered);
+                    }
+                  } catch {}
+                  try {
+                    if (!hasWagered && global.lobbyRoster && global.lobbyRoster.get) {
+                      const map = global.lobbyRoster.get(lobbyId);
+                      const prior = map && map.get ? map.get(wallet) : null;
+                      if (prior && prior.hasWagered) hasWagered = true;
+                    }
+                  } catch {}
+                  if (!hasWagered) {
+                    // Avoid spamming refund endpoint when there's no recorded wager
+                    console.log('[REFUND][SKIP][LEAVE] No recorded wager for wallet', wallet);
+                    return;
+                  }
                   // Try HTTP first
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',

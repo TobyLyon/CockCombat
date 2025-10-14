@@ -7,6 +7,7 @@ import { isBsc } from '@/lib/chain'
 import { evmEscrowService } from '@/lib/evm-escrow-service'
 import { sendIdempotentPayment } from '@/lib/evm-payments'
 import { ethers } from 'ethers'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -84,7 +85,30 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   if (!allowDuringQueue && (isCountdownActive || hasQueueSession || blockedByRecentMatch)) {
     return { error: 'Refund window closed' }
   }
-  const hasWageredFlag = Boolean((player && player.hasWagered) || (rosterRec && rosterRec.hasWagered))
+  // Determine whether the player actually has a recorded wager
+  let hasWageredFlag = Boolean((player && player.hasWagered) || (rosterRec && rosterRec.hasWagered))
+  if (!hasWageredFlag) {
+    // Fallback: check DB for a confirmed wager signature for this lobby (survives restarts)
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        const walletRaw = String(playerPublicKey || '')
+        const walletLower = walletRaw.toLowerCase()
+        const { data } = await supabase
+          .from('used_signatures')
+          .select('signature')
+          .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
+          .eq('endpoint', '/api/wager/confirm')
+          .contains('metadata', { lobbyId })
+          .limit(1)
+        if (Array.isArray(data) && data.length > 0) {
+          hasWageredFlag = true
+        }
+      }
+    } catch {}
+  }
   const alreadyRefunded = Boolean(player && (player as any).__refunded)
   if (!hasWageredFlag || alreadyRefunded) {
     return { ok: true, message: 'Already refunded or no recorded wager' }
