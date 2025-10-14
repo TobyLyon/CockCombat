@@ -714,26 +714,6 @@ preparePromise.then(() => {
                 if (!token) {
                   console.warn('Refund token not set; skipping refund');
                 } else {
-                  // Check hasWagered quickly before calling refund
-                  let hasWagered = false;
-                  try {
-                    if (lobby && Array.isArray(lobby.players)) {
-                      const me = lobby.players.find(p => String(p.playerId||'').toLowerCase() === wallet);
-                      hasWagered = !!(me && me.hasWagered);
-                    }
-                  } catch {}
-                  try {
-                    if (!hasWagered && global.lobbyRoster && global.lobbyRoster.get) {
-                      const map = global.lobbyRoster.get(lobbyId);
-                      const prior = map && map.get ? map.get(wallet) : null;
-                      if (prior && prior.hasWagered) hasWagered = true;
-                    }
-                  } catch {}
-                  if (!hasWagered) {
-                    // Avoid spamming refund endpoint when there's no recorded wager
-                    console.log('[REFUND][SKIP][LEAVE] No recorded wager for wallet', wallet);
-                    return;
-                  }
                   // Try HTTP first
                   const resp = await fetch(`${baseUrl}/api/wager/refund`, {
                     method: 'POST',
