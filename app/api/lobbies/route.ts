@@ -193,11 +193,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    // Prevent joins if the 5s countdown has begun for this lobby
+    // Prevent joins if lobby is starting (countdown), queued, or currently in an active match window
     try {
       const isCountdownActive = Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]);
-      if (isCountdownActive) {
-        return NextResponse.json({ error: 'Lobby is starting, cannot join now' }, { status: 409 });
+      const hasQueueSession = Boolean((global as any).activeQueueForLobby && (global as any).activeQueueForLobby.get(lobbyId));
+      const inActiveMatchWindow = (() => {
+        try {
+          const map = (global as any).recentMatchMetaBySession;
+          if (!map || typeof map.values !== 'function') return false;
+          const lockMs = Math.max(60_000, parseInt(String(process.env.LOBBY_LOCK_MS || ''), 10) || 240_000); // default 4m
+          for (const meta of map.values()) {
+            if (meta && meta.lobbyId === lobbyId) {
+              const startAt = Number(meta.startAt || 0);
+              if (startAt && Date.now() < (startAt + lockMs)) return true;
+            }
+          }
+        } catch {}
+        return false;
+      })();
+      if (isCountdownActive || hasQueueSession || inActiveMatchWindow) {
+        return NextResponse.json({ error: 'Lobby is in an active match. Please try again shortly.' }, { status: 409 });
       }
     } catch {}
 
