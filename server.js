@@ -98,7 +98,7 @@ preparePromise.then(() => {
     try {
       const parsedUrl = parse(req.url, true);
 
-      // Internal admin refund endpoint (Render/ops). Token-gated.
+      // Internal admin refund endpoint (Solana). Token-gated.
       if (req.method === 'POST' && parsedUrl.pathname === '/_internal/refund') {
         try {
           let raw = '';
@@ -113,45 +113,33 @@ preparePromise.then(() => {
                 res.end(JSON.stringify({ error: 'Forbidden' }));
                 return;
               }
-              const fromEscrowId = String(body.fromEscrowId || '');
-              const to = String(body.to || '');
-              const opId = body.opId ? String(body.opId) : `manual_refund:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-              if (!fromEscrowId || !to) {
+              // Accept legacy fields but require lobbyId + playerPublicKey for Solana refund
+              const lobbyId = String(body.lobbyId || '');
+              const playerPublicKey = String(body.playerPublicKey || body.to || '');
+              const reason = body.reason ? String(body.reason) : undefined;
+              if (!lobbyId || !playerPublicKey) {
                 res.statusCode = 400;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: 'Missing required fields: fromEscrowId, to' }));
+                res.end(JSON.stringify({ error: 'Missing required fields: lobbyId, playerPublicKey' }));
                 return;
               }
-              // Solana migration: remove EVM admin refund handler (deprecated)
-              const { ethers } = require('ethers');
-              const { sendIdempotentPayment } = require('./lib/evm-payments.ts');
-              let amountWei;
-              if (body.amountWei) {
-                try { amountWei = BigInt(String(body.amountWei)); } catch { amountWei = null; }
-              }
-              if (!amountWei) {
-                const amount = Number(body.amount || 0);
-                if (!(amount > 0)) {
-                  res.statusCode = 400;
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ error: 'Missing amount or amountWei' }));
-                  return;
-                }
-                amountWei = ethers.parseUnits(String(amount), 18);
-              }
-              console.log('[ADMIN][REFUND][REQUEST]', { opId, fromEscrowId, to, amountWei: String(amountWei) });
-              try {
-                const result = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId, to, amountWei });
-                console.log('[ADMIN][REFUND][SENT]', { opId, txHash: result.txHash });
-                res.statusCode = 200;
+              // Forward to Next.js refund API which handles Solana refunds server-side
+              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+              const resp = await fetch(`${baseUrl}/api/wager/refund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lobbyId, playerPublicKey, reason, __serverOnlyToken: process.env.REFUND_SERVER_TOKEN })
+              }).catch(() => null);
+              if (!resp) {
+                res.statusCode = 502;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ ok: true, txHash: result.txHash }));
-              } catch (e) {
-                console.warn('[ADMIN][REFUND][FAILED]', (e && e.message) || e);
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: 'Refund failed', details: (e && e.message) || String(e) }));
+                res.end(JSON.stringify({ error: 'Upstream refund service unavailable' }));
+                return;
               }
+              const text = await resp.text().catch(() => '');
+              res.statusCode = resp.status;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(text || '{}');
             } catch (err) {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
