@@ -516,7 +516,12 @@ export default function BattleArena() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5 sm:gap-6">
-                    {displayedLobbies.map((lobby) => (
+                    {displayedLobbies.map((lobby) => {
+                      const live = liveCounts[lobby.id]
+                      const playerCount = live ? live.liveHumans : 0
+                      const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
+                      const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
+                      return (
                       <motion.div
                         key={lobby.id}
                         initial={{ opacity: 0, y: 8 }}
@@ -529,7 +534,7 @@ export default function BattleArena() {
                           ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
                         min-h-[280px]
                         `}
-                        onClick={() => !isJoining && handleJoinLobby(lobby)}
+                        onClick={() => !isJoining && !isLocked && handleJoinLobby(lobby)}
                       >
                         {/* Subtle gradient overlay on hover */}
                         <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${lobby.highRoller ? 'from-red-400/10 to-red-700/10' : 'from-white/8 to-white/0'}`} />
@@ -556,44 +561,34 @@ export default function BattleArena() {
                           </div>
                           
                           {/* Players Count */}
-                          {(() => {
-                            const live = liveCounts[lobby.id]
-                            const playerCount = live ? live.liveHumans : 0
-                            const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
-                            const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
-                            return (
-                              <>
-                                <div className="flex items-center justify-between mb-3 lg:mb-3">
-                                  <div className="flex items-center gap-2 text-white/85">
-                                    <Users className="h-4 w-4" />
-                                    <span className="font-semibold text-sm lg:text-base">
-                                      {playerCount} / {lobby.capacity}
-                                    </span>
-                                  </div>
-                                  {/* Status Indicator */}
-                                  <div className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                                    isLocked
-                                      ? 'bg-red-500/15 text-red-300 border-red-400/30'
-                                      : playerCount > 0
-                                      ? 'bg-yellow-500/15 text-yellow-300 border-yellow-400/30'
-                                      : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
-                                  }`}>
-                                    {isLocked
-                                      ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL')
-                                      : (playerCount > 0 ? 'ACTIVE' : 'OPEN')}
-                                  </div>
-                                </div>
-                                {/* Capacity Progress */}
-                                <div className="mb-3 lg:mb-4">
-                                  <div className="h-2 rounded bg-white/10 overflow-hidden">
-                                    <div className={`${lobby.highRoller ? 'bg-red-400' : 'bg-white/80'} h-full`} style={{ width: `${fillPercent}%` }} />
-                                  </div>
-                                  <div className="mt-1 text-[11px] text-white/70 text-right">{fillPercent}% filled</div>
-                                </div>
-                                {/* Removed AI autofill note for tutorial */}
-                              </>
-                            );
-                          })()}
+                          <div className="flex items-center justify-between mb-3 lg:mb-3">
+                            <div className="flex items-center gap-2 text-white/85">
+                              <Users className="h-4 w-4" />
+                              <span className="font-semibold text-sm lg:text-base">
+                                {playerCount} / {lobby.capacity}
+                              </span>
+                            </div>
+                            {/* Status Indicator */}
+                            <div className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                              isLocked
+                                ? 'bg-red-500/15 text-red-300 border-red-400/30'
+                                : playerCount > 0
+                                ? 'bg-yellow-500/15 text-yellow-300 border-yellow-400/30'
+                                : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
+                            }`}>
+                              {isLocked
+                                ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL')
+                                : (playerCount > 0 ? 'ACTIVE' : 'OPEN')}
+                            </div>
+                          </div>
+                          {/* Capacity Progress */}
+                          <div className="mb-3 lg:mb-4">
+                            <div className="h-2 rounded bg-white/10 overflow-hidden">
+                              <div className={`${lobby.highRoller ? 'bg-red-400' : 'bg-white/80'} h-full`} style={{ width: `${fillPercent}%` }} />
+                            </div>
+                            <div className="mt-1 text-[11px] text-white/70 text-right">{fillPercent}% filled</div>
+                          </div>
+                          {/* Removed AI autofill note for tutorial */}
                           
                         {/* Actions: Join and Spectate */}
                         {!lobby.isComingSoon && (
@@ -622,7 +617,7 @@ export default function BattleArena() {
                           )}
                         </div>
                       </motion.div>
-                    ))}
+                    )})}
                   </div>
                   </>
                 )}
