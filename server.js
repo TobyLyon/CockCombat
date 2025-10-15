@@ -683,6 +683,12 @@ preparePromise.then(() => {
           }
         }
 
+        // Immediately broadcast updated lobby counts to avoid stale cards (esp. tutorial)
+        try {
+          const c = getLobbyCounts(lobbyId);
+          io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total });
+        } catch {}
+
         // Best-effort refund for ranked lobbies if the leaving player had already wagered and countdown/queue hasn't started
         try {
           const wallet = connection && connection.walletAddress ? String(connection.walletAddress).toLowerCase() : null;

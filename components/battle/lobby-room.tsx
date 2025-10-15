@@ -446,6 +446,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const newReadyState = !isReady;
     console.log(`🎯 Requesting ready state ${newReadyState} for player ${id}`);
 
+    // Play an immediate attention ping locally when toggling to ready.
+    // Use a zero-delay to ensure the window-level click listener in AudioProvider
+    // sets hasInteracted before attempting playback (autoplay policy compliance).
+    if (newReadyState) {
+      try { setTimeout(() => { try { playSound('ping') } catch {} }, 0) } catch {}
+    }
+
     // Try socket first; if not connected, fallback to HTTP PUT
     if (isConnected) {
       socket.emit('player_ready', {

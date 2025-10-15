@@ -331,7 +331,7 @@ export default function PixelGameInterface() {
 
         {/* How To Play button */}
         <Button
-          className="h-12 px-6 text-base font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-lg active:scale-[0.985] touch-manipulation select-none"
+          className="h-12 px-6 text-base font-bold rounded-lg bg-green-600 hover:bg-green-700 text-white shadow-lg active:scale-[0.985] touch-manipulation select-none"
           onClick={() => handleNavigation("/how-to-play")}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
           disabled={isNavigating}
