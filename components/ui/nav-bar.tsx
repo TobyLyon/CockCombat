@@ -46,7 +46,7 @@ export default function NavBar() {
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const tokenAddressPlaceholder = "coming soon"
+  const tokenAddressPlaceholder = "0x3f7d7299f4ea30a6b5f0095268567a0bcef14444"
   const tokenEndPreview = tokenAddressPlaceholder.length > 6
     ? `…${tokenAddressPlaceholder.slice(-4)}`
     : tokenAddressPlaceholder
