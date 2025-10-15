@@ -138,6 +138,9 @@ export function printEnvironmentStatus(): void {
   if ((process.env.CHAIN || 'solana').toLowerCase() === 'bsc') {
     console.log(`   EVM RPC: ${process.env.NEXT_PUBLIC_EVM_RPC_URL || 'unset'}`);
     console.log(`   ChainId: ${process.env.NEXT_PUBLIC_CHAIN_ID || 'unset'}`);
+  } else {
+    console.log(`   Solana Network: ${process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet'}`)
+    console.log(`   Solana RPC: ${process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'cluster default'}`)
   }
   console.log('\n');
 }

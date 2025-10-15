@@ -228,14 +228,14 @@ export default function UserProfilePro() {
             </Card>
             <Card className="bg-purple-800/40 border-purple-700/50">
               <CardContent className="p-4">
-                <h3 className="text-sm text-purple-200 mb-3">On-chain Payouts (BSC)</h3>
+                <h3 className="text-sm text-purple-200 mb-3">On-chain Payouts (Solana)</h3>
                 <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
                   {matches.filter(m => m.winner_wallet === walletAddress && (m as any)?.metadata?.payout_tx).map((m) => {
                     const hash = (m as any).metadata.payout_tx as string
                     return (
                       <div key={m.id} className="p-3 flex items-center justify-between text-sm">
                         <div className="text-purple-200">Match {m.id?.toString().slice(0,8)}…</div>
-                        <a href={getEvmExplorerUrl(hash)} target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline">View Tx</a>
+                        <span className="text-yellow-400">{hash.slice(0,8)}…</span>
                       </div>
                     )
                   })}

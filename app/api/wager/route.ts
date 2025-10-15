@@ -5,6 +5,8 @@ import { isBsc } from '@/lib/chain';
 import { evmEscrowService } from '@/lib/evm-escrow-service';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
+import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import escrowService from '@/lib/escrow-service';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
@@ -23,7 +25,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Lobby ID and Player Public Key are required" }, { status: 400 });
     }
 
-    // EVM-only build: skip Solana key validation
+    // Validate Solana key format when not on BSC
+    if (!isBsc()) {
+      try { new PublicKey(playerPublicKey) } catch { return NextResponse.json({ error: 'Invalid Solana public key' }, { status: 400 }) }
+    }
 
     // Find the specific lobby to determine the wager amount
     const lobby = lobbies.find((l: Lobby) => l.id === lobbyId);
@@ -72,8 +77,36 @@ export async function POST(request: Request) {
       });
     }
 
-    // EVM-only: unreachable fallback
-    return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
+    // Solana path: return a serialized transfer transaction (player -> escrow)
+    const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+    const connection = new Connection(rpcUrl)
+    escrowService.setConnection(connection)
+
+    // Assign or reuse escrow wallet id for this lobby
+    if (!lobby.escrowWalletId) {
+      // Use simple rotation A/B/C
+      const candidates: Array<'A'|'B'|'C'> = ['A','B','C']
+      for (const id of candidates) { if (escrowService.getWallet(id)) { lobby.escrowWalletId = id; break } }
+    }
+    if (!lobby.escrowWalletId) {
+      return NextResponse.json({ error: 'Escrow wallets not configured' }, { status: 500 })
+    }
+
+    const escrow = escrowService.getWallet(lobby.escrowWalletId)
+    if (!escrow) return NextResponse.json({ error: 'Escrow wallet unavailable' }, { status: 500 })
+
+    const payer = new PublicKey(playerPublicKey)
+    const escrowPk = escrow.publicKey
+    const lamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
+    const ix = SystemProgram.transfer({ fromPubkey: payer, toPubkey: escrowPk, lamports })
+    const tx = new Transaction().add(ix)
+    const { blockhash } = await connection.getLatestBlockhash('finalized')
+    tx.recentBlockhash = blockhash
+    tx.feePayer = payer
+
+    const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64')
+    return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports, transaction: serialized, lobbyId })
 
   } catch (error) {
     console.error("❌ Error creating wager transaction:", error);

@@ -73,22 +73,22 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
     )
   }
 
-  // If not connected, always present brand chooser when any wallets detected
+  // If not connected, present adapter list for Solana (Wallet Adapter)
   if (!connected) {
     const hasAny = Array.isArray(wallets) && wallets.length > 0
-    if (hasAny) {
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <motion.button
-              className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span>{connecting ? 'Connecting...' : 'Choose Wallet'}</span>
-            </motion.button>
-          </DropdownMenuTrigger>
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <motion.button
+            className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+            <span>{connecting ? 'Connecting...' : hasAny ? 'Choose Wallet' : 'Connect Wallet'}</span>
+          </motion.button>
+        </DropdownMenuTrigger>
+        {hasAny && (
           <DropdownMenuContent className="bg-[#333333] border-2 border-[#555555] text-white min-w-[220px]">
             <div className="px-2 py-1.5 text-xs text-gray-400 border-b border-[#555555]">Choose Wallet</div>
             {wallets.map((w) => (
@@ -101,18 +101,8 @@ export function WalletMultiButton({ onClickSound, className = "" }: WalletMultiB
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    }
-    // No injected providers detected: show generic button (will no-op) or link to install
-    return (
-      <button
-        onClick={() => { if (onClickSound) onClickSound(); window.open('https://metamask.io/download/', '_blank') }}
-        className={`bg-[#fbbf24] text-[#333333] font-bold py-2 px-3 sm:px-4 rounded border-b-4 border-[#d97706] hover:bg-[#f59e0b] hover:border-[#b45309] transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap leading-none shrink-0 min-w-fit ${className}`}
-      >
-        <Wallet className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-        <span>Install Wallet</span>
-      </button>
+        )}
+      </DropdownMenu>
     )
   }
 

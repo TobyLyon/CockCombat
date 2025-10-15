@@ -268,7 +268,7 @@ export default function BattleArena() {
         toast.success(
           <div className="flex flex-col gap-1">
             <span className="font-bold">Payout received</span>
-            <span className="text-sm text-white/80">+{amount.toFixed(3)} BNB</span>
+            <span className="text-sm text-white/80">+{amount.toFixed(3)} SOL</span>
             {url && <a href={url} target="_blank" rel="noreferrer" className="text-xs underline text-yellow-300">View transaction</a>}
           </div>,
           { duration: 4000 }
@@ -816,7 +816,7 @@ export default function BattleArena() {
 
       {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
         <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs flex-shrink-0">
-          <p> {new Date().getFullYear()} Cock Combat • Powered by BNB Chain</p>
+          <p> {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
         </footer>
       )}
     </div>

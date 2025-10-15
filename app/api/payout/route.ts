@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-// Solana removed in EVM-only build
+import { Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import escrowService from '@/lib/escrow-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { monitoringService } from '@/lib/monitoring';
 import { createClient } from '@supabase/supabase-js';
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     // --- VALIDATION ---
     const BodySchema = z.object({
       winnerAddress: z.string().min(32),
-      prizePool: z.number().positive(), // in BNB
+      prizePool: z.number().positive(), // in SOL
       matchId: z.string().optional(),
       matchSessionId: z.string().optional(),
       escrowWalletId: z.string().optional(),
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
     console.log(`💰 Processing payout for match ${matchId || 'unknown'}`);
     console.log(`   Winner: ${winnerAddress}`);
-    console.log(`   Prize Pool: ${prizePool} BNB`);
+    console.log(`   Prize Pool: ${prizePool} SOL`);
 
     // --- IDEMPOTENCY + MATCH VALIDATION ---
     let matchAlreadyPaid = false;
@@ -262,10 +263,10 @@ export async function POST(request: Request) {
       const payload = {
         winner: winnerAddress,
         amount: prizePool * (1 - houseCutPercentage),
-        currency: 'BNB',
+        currency: 'SOL',
         matchId: matchId || null,
         txHash: winnerSignature,
-        explorer: getEvmExplorerUrl(winnerSignature),
+        explorer: null,
         ts: Date.now(),
       };
       if (io && active && typeof active.entries === 'function') {
@@ -287,7 +288,7 @@ export async function POST(request: Request) {
       houseTransaction: houseSignature,
       winnerAmount: prizePool * (1 - houseCutPercentage),
       houseAmount: prizePool * houseCutPercentage,
-      explorerUrls: { winner: getEvmExplorerUrl(winnerSignature), house: getEvmExplorerUrl(houseSignature) },
+      explorerUrls: { winner: null as any, house: null as any },
     });
 
   } catch (error) {
@@ -306,37 +307,21 @@ export async function POST(request: Request) {
 // Server-only entrypoint to execute payout logic without HTTP
 export async function processPayoutServerOnly(args: { winnerAddress: string; prizePool: number; matchId?: string | null; matchSessionId?: string | null; houseWalletAddress?: string; houseCutPercentage?: number; matchResult?: any; escrowWalletId?: string }) {
   const { winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04'), matchResult, escrowWalletId } = args;
-  if (!isBsc()) throw new Error('Unsupported chain');
+  if (isBsc()) throw new Error('Unsupported chain');
   if (!houseWalletAddress && !process.env.NEXT_PUBLIC_ADMIN_WALLET) throw new Error('House wallet not configured');
   const house = houseWalletAddress || process.env.NEXT_PUBLIC_ADMIN_WALLET!;
-  // Integer math in wei for precise splits
-  const poolWei = ethers.parseUnits(prizePool.toString(), 18);
-  const houseBps = Math.min(10000, Math.max(0, Math.round(houseCutPercentage * 10000)));
-  const houseCutWei = (poolWei * BigInt(houseBps)) / BigInt(10000);
-  const winnerCutWei = poolWei - houseCutWei;
-  const walletId = (escrowWalletId as any) || (matchResult?.escrow_wallet_id as any) || undefined;
-  const wallet = walletId ? evmEscrowService.getWallet(walletId as any) : undefined;
-  const from = wallet || evmEscrowService.getNextWallet();
-  const idScope = (matchSessionId && matchSessionId.length > 0) ? matchSessionId : ((matchId && matchId.length > 0) ? matchId : `ts-${Date.now()}`)
-  const opWinnerId = `payout:${idScope}:winner:${String(winnerAddress).toLowerCase()}`
-  const opHouseId = `payout:${idScope}:house:${String(house).toLowerCase()}`
-  console.log('[PAYOUT][REQUEST]', {
-    matchId,
-    opWinnerId,
-    opHouseId,
-    escrowId: (from as any).id,
-    from: from.address,
-    winner: winnerAddress,
-    house,
-    winnerWei: winnerCutWei.toString(),
-    houseWei: houseCutWei.toString()
-  })
-  const winRes = await sendIdempotentPayment({ opId: opWinnerId, type: 'payout', fromEscrowId: (from as any).id, to: winnerAddress, amountWei: winnerCutWei })
-  const houseRes = await sendIdempotentPayment({ opId: opHouseId, type: 'house', fromEscrowId: (from as any).id, to: house, amountWei: houseCutWei })
-  const winnerSignature = winRes.txHash
-  const houseSignature = houseRes.txHash
-  console.log('[PAYOUT][SENT]', { opId: opWinnerId, txHash: winnerSignature })
-  console.log('[PAYOUT][SENT]', { opId: opHouseId, txHash: houseSignature })
-  console.log('✅ payout_executed', { matchId: matchId || null, winner: winnerAddress, amount: Number(ethers.formatUnits(winnerCutWei, 18)), houseAmount: Number(ethers.formatUnits(houseCutWei, 18)), escrow: from?.id, winnerSignature, houseSignature });
-  return { winnerSignature, houseSignature };
+
+  const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+  const connection = new Connection(rpcUrl)
+  escrowService.setConnection(connection)
+
+  const lamportsPool = Math.round(prizePool * LAMPORTS_PER_SOL)
+  const houseLamports = Math.floor(lamportsPool * houseCutPercentage)
+  const winnerLamports = lamportsPool - houseLamports
+
+  console.log('[PAYOUT][REQUEST][SOL]', { matchId: matchId || null, winner: winnerAddress, winnerLamports, houseLamports })
+  const winnerSignature = await escrowService.transferSOL(winnerAddress, winnerLamports)
+  const houseSignature = await escrowService.transferSOL(house, houseLamports)
+  return { winnerSignature, houseSignature }
 }

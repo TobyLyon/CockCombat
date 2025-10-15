@@ -122,6 +122,7 @@ preparePromise.then(() => {
                 res.end(JSON.stringify({ error: 'Missing required fields: fromEscrowId, to' }));
                 return;
               }
+              // Solana migration: remove EVM admin refund handler (deprecated)
               const { ethers } = require('ethers');
               const { sendIdempotentPayment } = require('./lib/evm-payments.ts');
               let amountWei;
@@ -197,13 +198,13 @@ preparePromise.then(() => {
   console.log('🚀 Socket.io server initialized');
   // Print loaded escrow wallets (if any)
   try {
-    const evm = require('./lib/evm-escrow-service.ts');
-    const svc = evm && (evm.evmEscrowService || evm.default);
-    const list = svc && svc.getWallet ? ['A','B','C'].map(id => svc.getWallet(id)).filter(Boolean) : [];
+    const esc = require('./lib/escrow-service.ts');
+    const svc = esc && (esc.escrowService || esc.default);
+    const list = svc && svc.getStats ? svc.getStats() : [];
     if (Array.isArray(list) && list.length > 0) {
-      console.log('🔐 Loaded EVM escrow wallets (runtime):', list.map(w => `${w.id}:${String(w.address).slice(0,6)}…${String(w.address).slice(-4)}`).join(', '));
+      console.log('🔐 Loaded Solana escrow wallets (runtime):', list.map(w => `${w.id}:${String(w.publicKey).slice(0,6)}…${String(w.publicKey).slice(-4)}`).join(', '));
     } else {
-      console.warn('⚠️ No EVM escrow wallets available at runtime');
+      console.warn('⚠️ No Solana escrow wallets available at runtime');
     }
   } catch {}
 
@@ -1591,7 +1592,7 @@ preparePromise.then(() => {
                     winnerWallet,
                     rankedAmount,
                     humansCount,
-                    prizePoolBNB: (rankedAmount * humansCount),
+                    prizePoolSOL: (rankedAmount * humansCount),
                     escrowId: escrowIdVal || null,
                     participants
                   });

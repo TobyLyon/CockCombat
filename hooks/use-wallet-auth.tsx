@@ -47,14 +47,13 @@ export function useWalletAuth() {
 
       // 2) Sign message with wallet
       const messageBytes = new TextEncoder().encode(message)
+      // For Solana we expect base58; for BSC we accept hex
       let signature: string
+      const sig = await (signMessage as any)(messageBytes)
       if (isBsc()) {
-        // EVM returns a hex signature
-        signature = await (signMessage as any)(messageBytes)
+        signature = sig
       } else {
-        // Solana returns bytes -> base58
-        const signatureBytes = await (signMessage as any)(messageBytes)
-        signature = (await import('bs58')).default.encode(signatureBytes)
+        signature = Array.isArray(sig) || sig instanceof Uint8Array ? (await import('bs58')).default.encode(sig) : String(sig)
       }
 
       // 3) Verify on server and mint a session

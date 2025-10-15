@@ -31,14 +31,14 @@ export default function LandingPage() {
             COCK COMBAT
           </h1>
           <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto text-purple-200">
-            The ultimate voxel chicken fighting arena on BNB Chain. Battle for glory, bet on champions, and build your
+            The ultimate voxel chicken fighting arena on Solana. Battle for glory, bet on champions, and build your
             feathered empire.
           </p>
 
           {!showNavigation ? (
             <div className="flex flex-col items-center space-y-6">
               <WalletMultiButton />
-              <p className="text-sm text-purple-300">Connect your BNB Chain wallet to enter the arena</p>
+              <p className="text-sm text-purple-300">Connect your Solana wallet to enter the arena</p>
             </div>
           ) : (
             <GameNavigation />
@@ -99,7 +99,7 @@ export default function LandingPage() {
       <footer className="py-8 bg-purple-950 text-purple-400 text-center">
         <div className="container mx-auto px-4">
           <p>© {new Date().getFullYear()} Cock Combat. All rights reserved.</p>
-          <p className="text-sm mt-2">Powered by BNB Chain</p>
+          <p className="text-sm mt-2">Powered by Solana</p>
         </div>
       </footer>
     </div>

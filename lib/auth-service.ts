@@ -7,6 +7,7 @@
 
 import { isBsc } from './chain';
 import { ethers } from 'ethers';
+import nacl from 'tweetnacl';
 import { createClient } from '@supabase/supabase-js';
 import bs58 from 'bs58';
 
@@ -80,9 +81,15 @@ class AuthService {
     const { walletAddress, signature, message } = params;
 
     try {
-      // EVM personal_sign hex signature (BSC)
-      const recovered = ethers.verifyMessage(message, signature);
-      return recovered.toLowerCase() === walletAddress.toLowerCase();
+      if (isBsc()) {
+        const recovered = ethers.verifyMessage(message, signature);
+        return recovered.toLowerCase() === walletAddress.toLowerCase();
+      }
+      // Solana: signature is base58, walletAddress is base58, verify Ed25519
+      const sigBytes = (await import('bs58')).default.decode(signature);
+      const pubkeyBytes = (await import('bs58')).default.decode(walletAddress);
+      const messageBytes = new TextEncoder().encode(message);
+      return nacl.sign.detached.verify(messageBytes, sigBytes, pubkeyBytes);
     } catch (error) {
       console.error('Signature verification error:', error);
       return false;

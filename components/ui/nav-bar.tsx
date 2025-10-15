@@ -151,7 +151,7 @@ export default function NavBar() {
 
         {/* Twitter / X (hidden on mobile) */}
         <a
-          href="https://www.x.com/CockCombatBNB"
+          href="https://www.x.com/CockCombatSOL"
           target="_blank"
           rel="noopener noreferrer"
           className="hidden sm:flex p-2 items-center justify-center"

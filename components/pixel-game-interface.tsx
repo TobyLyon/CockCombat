@@ -260,7 +260,7 @@ export default function PixelGameInterface() {
           </span>
         </div>
         <p className="text-lg md:text-xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
-          Battle Royale on BNB Chain
+          Battle Royale on Solana
         </p>
         </div>
 

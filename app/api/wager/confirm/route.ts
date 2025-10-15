@@ -1,13 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { lobbies } from '@/lib/lobbies';
-// Solana imports removed in EVM-only build
 import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
-import { isBsc, toNativeUnits } from '@/lib/chain';
+import { isBsc } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
+import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey } from '@solana/web3.js';
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -131,7 +131,54 @@ async function handleWagerConfirmation(req: NextRequest) {
       // Record exact funding wallet for deterministic refunds
       try { (player as any).__fundingWallet = tx.from; } catch {}
     } else {
-      return NextResponse.json({ error: 'Unsupported chain' }, { status: 500 });
+      // Solana: signature refers to a confirmed transfer to lobby escrow for exact lamports
+      const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+      const connection = new Connection(rpcUrl)
+      // Wait for confirmation
+      try { await connection.confirmTransaction(signature, 'confirmed') } catch {}
+      const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 })
+      if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 400 })
+      const amountLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
+      const toExpected = (() => {
+        const id = lobby.escrowWalletId
+        const key = id ? `ESCROW_WALLET_${id}_PUBLIC_KEY` : ''
+        return (key && process.env[key]) ? process.env[key] : null
+      })()
+      // Scan instructions for a matching SystemProgram transfer
+      const found = (() => {
+        try {
+          const meta = tx.meta
+          const message = tx.transaction.message
+          if (!meta || !message) return false
+          const pre = meta.preBalances
+          const post = meta.postBalances
+          const acctKeys = message.getAccountKeys().staticAccountKeys
+          // Find first transfer that matches amount and recipient
+          for (let i = 0; i < acctKeys.length; i++) {
+            const before = pre[i]
+            const after = post[i]
+            const delta = (after - before)
+            if (delta === amountLamports) {
+              const recipient = acctKeys[i].toBase58()
+              if (toExpected && recipient !== toExpected) continue
+              // Validate payer/source matches sender wallet
+              const sender = new PublicKey(playerPublicKey).toBase58()
+              // Source lost lamports
+              for (let j = 0; j < acctKeys.length; j++) {
+                if ((pre[j] - post[j]) >= amountLamports) {
+                  const from = acctKeys[j].toBase58()
+                  if (from === sender) return true
+                }
+              }
+            }
+          }
+          return false
+        } catch { return false }
+      })()
+      if (!found) {
+        return NextResponse.json({ error: 'Wager transfer not found or mismatched' }, { status: 400 })
+      }
     }
 
     // Mark signature as used (database-backed)

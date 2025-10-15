@@ -7,6 +7,8 @@ import { isBsc } from '@/lib/chain'
 import { evmEscrowService } from '@/lib/evm-escrow-service'
 import { sendIdempotentPayment } from '@/lib/evm-payments'
 import { ethers } from 'ethers'
+import escrowService from '@/lib/escrow-service'
+import { Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
@@ -128,19 +130,6 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   if (!hasWageredFlag || alreadyRefunded) {
     return { ok: true, message: 'Already refunded or no recorded wager' }
   }
-  if (!isBsc()) throw new Error('Unsupported chain')
-  // Ensure an escrow is assigned (mirror payout readiness auto-assign behavior)
-  if (!lobby.escrowWalletId) {
-    try {
-      const wallet = evmEscrowService.getNextWallet()
-      if (wallet && wallet.id) {
-        lobby.escrowWalletId = wallet.id as any
-        // Best-effort: also store on in-memory lobby for subsequent ops
-      }
-    } catch {}
-  }
-  if (!lobby.escrowWalletId) throw new Error('Escrow not assigned')
-
   // Idempotency lock
   if (!(global as any).__refundLocks) (global as any).__refundLocks = new Set<string>()
   const key = `${lobbyId}:${playerPublicKeyLower}`
@@ -150,11 +139,135 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   (global as any).__refundLocks.add(key)
   setTimeout(() => { try { (global as any).__refundLocks.delete(key) } catch {} }, 30000)
 
-  const escrow = evmEscrowService.getWallet(lobby.escrowWalletId as any)
-  if (!escrow) throw new Error('Escrow wallet unavailable')
-  const wei = ethers.parseUnits(String(lobby.amount), 18)
-  // Prefer original funding EVM address when known, fallback to the public key (wallet)
-  const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
+  // Chain-specific refund execution
+  if (isBsc()) {
+    // Ensure an escrow is assigned
+    if (!lobby.escrowWalletId) {
+      try {
+        const wallet = evmEscrowService.getNextWallet()
+        if (wallet && wallet.id) {
+          lobby.escrowWalletId = wallet.id as any
+        }
+      } catch {}
+    }
+    if (!lobby.escrowWalletId) throw new Error('Escrow not assigned')
+    const escrow = evmEscrowService.getWallet(lobby.escrowWalletId as any)
+    if (!escrow) throw new Error('Escrow wallet unavailable')
+    const wei = ethers.parseUnits(String(lobby.amount), 18)
+    const refundTo = String((((player as any)?.__fundingWallet) || (rosterRec && (rosterRec as any).__fundingWallet) || playerPublicKeyLower) as string)
+    // Continue with EVM path below
+    
+    // Build an incident-scoped opId using the confirmed wager signature so multiple distinct refunds
+    // (across separate wager sessions) do not collide on idempotency.
+    let incidentSig: string | null = null
+    let incidentSigCreatedAt: string | null = null
+    try { if (!incidentSig && player && (player as any).__lastWagerSig) incidentSig = String((player as any).__lastWagerSig) } catch {}
+    try { if (!incidentSig && rosterRec && (rosterRec as any).lastWagerSig) incidentSig = String((rosterRec as any).lastWagerSig) } catch {}
+    if (!incidentSig) {
+      // Query Supabase used_signatures to fetch the last confirm signature for this wallet+lobby
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        if (supabaseUrl && supabaseServiceKey) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey)
+          const walletRaw = String(playerPublicKey || '')
+          const walletLower = walletRaw.toLowerCase()
+          const { data } = await supabase
+            .from('used_signatures')
+            .select('signature, created_at')
+            .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
+            .eq('endpoint', '/api/wager/confirm')
+            .contains('metadata', { lobbyId })
+            .order('created_at', { ascending: false })
+            .limit(1)
+          if (Array.isArray(data) && data.length > 0) {
+            incidentSig = String(data[0].signature)
+            incidentSigCreatedAt = String(data[0].created_at || '')
+          }
+        }
+      } catch {}
+    } else if (!incidentSigCreatedAt) {
+      // We know the signature from memory; fetch its created_at for ordering/idempotency
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        if (supabaseUrl && supabaseServiceKey) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey)
+          const { data } = await supabase
+            .from('used_signatures')
+            .select('created_at')
+            .eq('endpoint', '/api/wager/confirm')
+            .eq('signature', incidentSig)
+            .limit(1)
+          if (Array.isArray(data) && data.length > 0) {
+            incidentSigCreatedAt = String(data[0].created_at || '')
+          }
+        }
+      } catch {}
+    }
+    const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
+    const timeSuffix = (!incidentSig && incidentSigCreatedAt) ? `t${Date.parse(incidentSigCreatedAt) || 0}` : null
+    const opId = incidentSig ? `${baseOpId}:${incidentSig}` : (timeSuffix ? `${baseOpId}:${timeSuffix}` : baseOpId)
+    const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
+
+    console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, reason })
+    try {
+      const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
+      const txHash = res.txHash
+      console.log('[REFUND][SENT]', { opId, txHash })
+      console.log('↩️ refund_executed', { lobbyId, player: playerIdForLog, amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason })
+      try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
+      try {
+        await auditLogger.log({
+          eventType: 'payout_executed',
+          actorWallet: playerPublicKey,
+          endpoint: 'server:processRefund',
+          severity: 'info',
+          metadata: { kind: 'refund', lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
+        })
+      } catch {}
+      try {
+        const io = (global as any).socketIo
+        if (io) {
+          io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: false })
+          const lobbyPlayers = lobby.players.map(p => ({
+            playerId: p.playerId,
+            username: p.username || p.playerId.slice(0, 8) + '...',
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : Boolean(p.isReady),
+            isAi: p.isAi || false
+          }))
+          io.to(lobbyId).emit('lobby_updated', {
+            id: lobbyId,
+            players: lobbyPlayers,
+            capacity: lobby.capacity,
+            amount: lobby.amount,
+            currency: lobby.currency,
+            matchType: lobby.matchType
+          })
+        }
+      } catch {}
+      return { ok: true, txHash }
+    } catch (e: any) {
+      console.warn('[REFUND][FAILED]', { opId, error: e?.message || String(e) })
+      throw e
+    }
+  } else {
+    // Solana: transfer back from escrow to player (server-signed)
+    const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+    const connection = new Connection(rpcUrl)
+    escrowService.setConnection(connection)
+    const lamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
+    try {
+      const sig = await escrowService.transferSOL(playerPublicKey, lamports)
+      try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
+      return { ok: true, txHash: sig }
+    } catch (e: any) {
+      console.warn('[REFUND][FAILED][SOL]', { lobbyId, player: playerPublicKeyLower, error: e?.message || String(e) })
+      throw e
+    }
+  }
 
   // Build an incident-scoped opId using the confirmed wager signature so multiple distinct refunds
   // (across separate wager sessions) do not collide on idempotency.

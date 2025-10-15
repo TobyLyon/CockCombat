@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useWallet } from "@/hooks/use-wallet"
-import { isBsc } from "@/lib/chain"
+import { Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js'
+import escrowService from '@/lib/escrow-service'
 import { toast } from "sonner"
 import Image from "next/image"
 // Token service removed for EVM-only build
@@ -17,7 +18,7 @@ interface BalanceBarProps {
 
 export default function BalanceBar({ className = "", compact = false, pollIntervalMs = 15000 }: BalanceBarProps) {
   const { publicKey, connected } = useWallet()
-  const connection: any = null
+  const [connection, setConnection] = useState<Connection | null>(null)
   const [mounted, setMounted] = useState(false)
 
   const [sol, setSol] = useState<number>(0)
@@ -35,16 +36,16 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
 
     const fetchBalances = async () => {
       try {
-        if (isBsc()) {
-          const addr = (publicKey as any)?.toString?.() || ''
-          if (addr) {
-            const provider = getEvmProvider()
-            const bal = await provider.getBalance(addr)
-            const val = parseFloat(ethers.formatEther(bal))
-            if (val !== bnb) setBnb(val)
-          }
-        } else {
-          // Solana path removed in EVM-only build
+        {
+          try {
+            const net = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+            const url = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(net)
+            const conn = connection || new Connection(url)
+            if (!connection) setConnection(conn)
+            const balLamports = await conn.getBalance({ toBase58: () => publicKey.toString() } as any)
+            const val = balLamports / LAMPORTS_PER_SOL
+            if (val !== sol) setSol(val)
+          } catch {}
         }
         if (tokenMint) {
           // no-op
@@ -87,17 +88,15 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
 
   return (
     <div className={`flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 ${className}`}>
-      {!isBsc() && (
-        <div className="flex items-center gap-1.5 text-white/90">
-          <SolanaLogo className="h-4 w-4" />
-          <span className="font-semibold">{sol.toFixed(4)}</span>
-          {!compact && <span className="text-xs text-white/70 ml-1">SOL</span>}
-        </div>
-      )}
+      <div className="flex items-center gap-1.5 text-white/90">
+        <SolanaLogo className="h-4 w-4" />
+        <span className="font-semibold">{sol.toFixed(4)}</span>
+        {!compact && <span className="text-xs text-white/70 ml-1">SOL</span>}
+      </div>
 
       <div className="h-4 w-px bg-white/15" />
 
-      {isBsc() && (
+      {false && (
         <div className="flex items-center gap-1.5 text-white/90">
           <BnbLogo className="h-4 w-4" />
           <span className="font-semibold">{bnb.toFixed(4)}</span>

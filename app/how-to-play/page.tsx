@@ -238,7 +238,7 @@ export default function HowToPlayPage() {
                 <span>⚠️ Beta notes</span>
               </div>
               <ul className="mt-1 grid gap-1.5">
-                <li>• Payments and refunds can take up to ~1 minute to confirm on BNB.</li>
+                <li>• Payments and refunds typically confirm in seconds on Solana.</li>
                 <li>• If the UI looks desynced, refresh the page to resync state.</li>
                 <li>• Cleanest refund path: toggle Ready OFF, then tap "Leave Lobby" before countdown starts.</li>
                 <li>• If you close the tab, refunds may still process—give it up to a minute.</li>
@@ -254,7 +254,7 @@ export default function HowToPlayPage() {
               { 
                 num: '01', 
                 title: 'Connect Wallet', 
-                desc: 'BNB Chain • Instant access', 
+                desc: 'Solana • Instant access', 
                 icon: '🔗',
                 color: 'from-blue-500 to-cyan-500'
               },
@@ -268,7 +268,7 @@ export default function HowToPlayPage() {
               { 
                 num: '03', 
                 title: 'Win & Earn', 
-                desc: 'Battle or spectate for $COCK or $BNB', 
+                desc: 'Battle or spectate for $COCK or SOL', 
                 icon: '💰',
                 color: 'from-yellow-500 to-amber-500'
               },
@@ -324,7 +324,7 @@ export default function HowToPlayPage() {
                 icon: '🪙',
                 items: [
                   { key: '$COCK', desc: 'In-game currency' },
-                  { key: '$BNB', desc: 'Chain native wagers/payouts' },
+                  { key: 'SOL', desc: 'Chain native wagers/payouts' },
                   { key: 'Wagers', desc: 'Pool into prizes' },
                   { key: 'Winners', desc: 'Take 96% cut' },
                 ]

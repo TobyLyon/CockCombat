@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useGameState } from '@/contexts/GameStateContext';
 import { motion } from 'framer-motion';
 import { useWallet } from '@/hooks/use-wallet';
-import { isBsc } from '@/lib/chain';
+// Removed BSC-specific UI
 import { Loader2 } from 'lucide-react';
 import { Player } from '@/hooks/use-battle-state';
 
@@ -23,8 +23,8 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   const isHumanWinner = winner && humanPlayer && winner.id === humanPlayer.id;
 
-  const formatAmount = useMemo(() => (amount: number, cur: string) => {
-    const maxDigits = cur === 'BNB' ? 6 : 6;
+  const formatAmount = useMemo(() => (amount: number, _cur: string) => {
+    const maxDigits = 6;
     const str = Number(amount).toFixed(maxDigits);
     const trimmed = str.replace(/\.0+$/, '').replace(/(\.\d*?[1-9])0+$/, '$1');
     return trimmed;
@@ -52,7 +52,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   const humanCount = (derivedHumans > 0 ? derivedHumans : (matchMeta?.humanCount || 0));
   const aiCount = Math.max(0, totalPlayers - humanCount);
   const entryPerPlayer = matchMeta?.amount || 0;
-  const currency = matchMeta?.currency || (isBsc() ? 'BNB' : 'SOL');
+  const currency = 'SOL';
   const isTutorial = (matchMeta?.matchType || 'tutorial') === 'tutorial' || entryPerPlayer === 0;
   const grossPool = isTutorial ? 0 : entryPerPlayer * Math.max(1, humanCount);
   const netWinner = isTutorial ? 0 : (grossPool * 0.96);
@@ -87,7 +87,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   const handleShare = () => {
     try {
-      window.open('https://x.com/CockCombatBNB', '_blank', 'noopener,noreferrer');
+      window.open('https://x.com/CockCombatSOL', '_blank', 'noopener,noreferrer');
     } catch {}
   };
 
