@@ -232,10 +232,6 @@ export async function POST(req: NextRequest) {
           removeOneAiPlayer(lobby)
           if (!lobby.players.some(p => p.isAi)) break
         }
-        // Strict re-check: if still at capacity, reject join
-        if (lobby.players.length >= lobby.capacity) {
-          return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
-        }
       } else {
         return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
       }
@@ -243,6 +239,63 @@ export async function POST(req: NextRequest) {
 
     // Allow ranked lobby joins without full auth; enforce wager/auth at ready-up/confirmation time
     // (Previously required session validation here.)
+
+    // Enforce single-lobby membership: remove this player from any other lobby before proceeding
+    try {
+      const socketIo = await getSocketInstance();
+      const playerLower = String(playerId).toLowerCase();
+      for (const other of lobbies) {
+        if (!other || other.id === lobbyId) continue;
+        const idxOther = other.players.findIndex(p => String(p.playerId || '').toLowerCase() === playerLower);
+        if (idxOther !== -1) {
+          const removed = other.players.splice(idxOther, 1)[0];
+          // Clear presence for the old lobby
+          try {
+            const presenceSet = (global as any).lobbyPresence?.get(other.id);
+            presenceSet?.delete(playerLower);
+          } catch {}
+          // Broadcast removal + updated roster for the old lobby
+          if (socketIo) {
+            try {
+              socketIo.to(other.id).emit('player_left_lobby', {
+                playerId: playerLower,
+                timestamp: Date.now()
+              });
+              const lobbyPlayers = other.players.map(p => ({
+                playerId: p.playerId,
+                username: p.username || p.playerId.slice(0, 8) + '...',
+                chickenName: p.chickenId || 'Default',
+                isReady: p.isAi ? true : Boolean((p as any).isReady),
+                isAi: p.isAi || false
+              }));
+              const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(other.id) || 0) + 1; (global as any).lobbyVersions?.set(other.id, cur); return cur } catch { return 1 } })();
+              socketIo.to(other.id).emit('lobby_updated', {
+                id: other.id,
+                players: lobbyPlayers,
+                capacity: other.capacity,
+                amount: other.amount,
+                currency: other.currency,
+                matchType: other.matchType,
+                version: nextVersion
+              });
+              // Emit live counts snapshot immediately after removal
+              try {
+                const ac = (global as any).activeConnections;
+                let humans = 0, total = 0;
+                for (const [, conn] of (ac && ac.entries && ac.entries()) || []) {
+                  if (conn && conn.currentLobby === other.id && conn.walletAddress) {
+                    total += 1; const addr = String(conn.walletAddress || ''); if (!addr.startsWith('ai-')) humans += 1;
+                  }
+                }
+                socketIo.emit('lobby_counts', { id: other.id, liveHumans: humans, liveTotal: total });
+              } catch {}
+            } catch {}
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Single-lobby enforcement failed (non-fatal):', (e as any)?.message || e);
+    }
 
     // Check if player is already in the lobby
     const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === playerId);
@@ -271,10 +324,9 @@ export async function POST(req: NextRequest) {
               }
             } catch {}
             if (lob.matchType === 'tutorial' && p.isAi) isReady = true;
-            const isGuest = pid.startsWith('guest_');
             return {
               playerId: pid,
-              username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
+              username: p.username || pid.slice(0, 8) + '...',
               chickenName: p.chickenId || 'Default',
               isReady,
               isAi: p.isAi || false
@@ -326,27 +378,8 @@ export async function POST(req: NextRequest) {
       hasWagered: lobby.amount === 0 ? true : false,
       isReady: lobby.amount === 0 ? true : false,
     };
-    // Final strict capacity guard prior to insert (handles races during username fetch)
-    if (lobby.players.length >= lobby.capacity) {
-      if (lobby.matchType === 'tutorial') {
-        while (lobby.players.length >= lobby.capacity) {
-          removeOneAiPlayer(lobby)
-          if (!lobby.players.some(p => p.isAi)) break
-        }
-      }
-      if (lobby.players.length >= lobby.capacity) {
-        return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
-      }
-    }
     // Insert player (AI removed entirely)
     lobby.players.push(player);
-    // Post-insert rollback if another concurrent join slipped in
-    if (lobby.players.length > lobby.capacity) {
-      try {
-        lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
-      } catch {}
-      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
-    }
 
     // Track presence immediately
     try {
@@ -405,30 +438,29 @@ export async function POST(req: NextRequest) {
       });
 
       // Also broadcast the full lobby update (ensure current ready states are preserved; authoritative in ranked)
-        const lobbyPlayers = (() => {
-          try {
-            return lobby.players.map((p: any) => {
-              const pid = String(p.playerId || '');
-              let isReady = false;
-              try {
-                const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
-                if (presence && presence.has(pid)) {
-                  for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
-                    if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
-                  }
+      const lobbyPlayers = (() => {
+        try {
+          return lobby.players.map((p: any) => {
+            const pid = String(p.playerId || '');
+            let isReady = false;
+            try {
+              const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
+              if (presence && presence.has(pid)) {
+                for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+                  if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
                 }
-              } catch {}
-              const isGuest = pid.startsWith('guest_');
-              return {
-                playerId: pid,
-                username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
-                chickenName: p.chickenId || 'Default',
-                isReady,
-                isAi: false
               }
-            })
-          } catch { return [] as any[] }
-        })();
+            } catch {}
+            return {
+              playerId: pid,
+              username: p.username || pid.slice(0, 8) + '...',
+              chickenName: p.chickenId || 'Default',
+              isReady,
+              isAi: false
+            }
+          })
+        } catch { return [] as any[] }
+      })();
       const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
       
       socketIo.to(lobbyId).emit('lobby_updated', {
@@ -547,6 +579,15 @@ export async function DELETE(req: NextRequest) {
 
     lobby.players.splice(idx, 1);
 
+    // Remove presence for this lobby on leave
+    try {
+      const playerLower = String(playerId || '').toLowerCase();
+      const set = (global as any).lobbyPresence?.get(lobbyId);
+      set?.delete(playerLower);
+      // Also attempt raw key removal in case older entries used original case
+      set?.delete(String(playerId || ''));
+    } catch {}
+
     // If tutorial lobby has no humans left, purge all AI and reset state
     if (lobby.matchType === 'tutorial') {
       const hasHuman = lobby.players.some(p => !p.isAi);
@@ -569,17 +610,13 @@ export async function DELETE(req: NextRequest) {
           timestamp: Date.now()
         });
 
-        const lobbyPlayers = lobby.players.map(p => {
-          const pid = String(p.playerId || '');
-          const isGuest = pid.startsWith('guest_');
-          return ({
-            playerId: pid,
-            username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
-            chickenName: p.chickenId || 'Default',
-            isReady: p.isAi ? true : false,
-            isAi: p.isAi || false
-          })
-        });
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : false,
+          isAi: p.isAi || false
+        }));
 
         const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
@@ -654,17 +691,13 @@ export async function PUT(req: NextRequest) {
       if (socketIo) {
         socketIo.to(lobbyId).emit('player_ready_status', { playerId, isReady });
 
-        const lobbyPlayers = lobby.players.map(p => {
-          const pid = String(p.playerId || '');
-          const isGuest = pid.startsWith('guest_');
-          return ({
-            playerId: pid,
-            username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
-            chickenName: p.chickenId || 'Default',
-            isReady: p.isAi ? true : Boolean(p.isReady),
-            isAi: p.isAi || false
-          })
-        });
+        const lobbyPlayers = lobby.players.map(p => ({
+          playerId: p.playerId,
+          username: p.username || p.playerId.slice(0, 8) + '...',
+          chickenName: p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: p.isAi || false
+        }));
         const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
