@@ -18,6 +18,8 @@ const SOUND_VOLUMES = {
   lose: 0.4,
   click: 0.9,
   collect: 0.7,
+  // Attention ping: boost multiplier so it's audible even at low global volume
+  ping: 6.0,
 };
 
 // Define the AudioContext type

@@ -193,13 +193,26 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
       // Ignore snapshots not meant for this lobby (safety against cross-room races)
       try { if (updatedLobby && updatedLobby.id && updatedLobby.id !== lobby.id) return } catch {}
-      setPlayers((updatedLobby?.players || []).map((p: any) => ({
+      const next = (updatedLobby?.players || []).map((p: any) => ({
         playerId: String(p.playerId || '').toLowerCase(),
         username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
         chickenName: p.chickenId || p.chickenName || 'Default',
         isReady: p.isAi ? true : Boolean(p.isReady),
         isAi: !!p.isAi,
-      })))
+      }))
+      // Detect any ready-up transitions compared to previous playersRef
+      try {
+        const me = getCurrentPlayerId();
+        const meNorm = me ? String(me).toLowerCase() : ''
+        const priorMap = new Map((playersRef.current || []).map(p => [p.playerId, p]))
+        for (const n of next) {
+          const prev = priorMap.get(n.playerId)
+          if (n.isReady && (!prev || !prev.isReady) && (!meNorm || n.playerId !== meNorm)) {
+            playSound('ping')
+          }
+        }
+      } catch {}
+      setPlayers(next)
     };
 
     // Lightweight join/leave handlers (no snapshots)
