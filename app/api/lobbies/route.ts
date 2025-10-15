@@ -232,6 +232,10 @@ export async function POST(req: NextRequest) {
           removeOneAiPlayer(lobby)
           if (!lobby.players.some(p => p.isAi)) break
         }
+        // Strict re-check: if still at capacity, reject join
+        if (lobby.players.length >= lobby.capacity) {
+          return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+        }
       } else {
         return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
       }
@@ -321,8 +325,27 @@ export async function POST(req: NextRequest) {
       hasWagered: lobby.amount === 0 ? true : false,
       isReady: lobby.amount === 0 ? true : false,
     };
+    // Final strict capacity guard prior to insert (handles races during username fetch)
+    if (lobby.players.length >= lobby.capacity) {
+      if (lobby.matchType === 'tutorial') {
+        while (lobby.players.length >= lobby.capacity) {
+          removeOneAiPlayer(lobby)
+          if (!lobby.players.some(p => p.isAi)) break
+        }
+      }
+      if (lobby.players.length >= lobby.capacity) {
+        return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+      }
+    }
     // Insert player (AI removed entirely)
     lobby.players.push(player);
+    // Post-insert rollback if another concurrent join slipped in
+    if (lobby.players.length > lobby.capacity) {
+      try {
+        lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
+      } catch {}
+      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+    }
 
     // Track presence immediately
     try {
