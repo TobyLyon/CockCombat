@@ -6,6 +6,7 @@
 // Lobby interface
 export interface Lobby {
   id: string;
+  name?: string;
   amount: number;
   currency: string;
   players: { playerId: string; chickenId: string; isAi?: boolean; username?: string; isReady?: boolean; hasWagered?: boolean }[];
@@ -15,6 +16,7 @@ export interface Lobby {
   matchType: 'ranked' | 'tutorial';
   isComingSoon?: boolean;
   escrowWalletId?: 'A' | 'B' | 'C'; // Which escrow wallet this match uses
+  aiBackfill?: boolean; // Whether to auto-populate with AI when humans are missing
 }
 
 // In-memory lobbies store
@@ -23,6 +25,7 @@ import { isBsc } from './chain';
 const CURRENCY = isBsc() ? 'BNB' : 'SOL';
 export const lobbies: Lobby[] = [
   // Tutorial (free)
+  { id: 'tutorial', name: 'Tutorial', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial', aiBackfill: true },
   { id: 'tutorial-1', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
   { id: 'tutorial-2', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial' },
   // Primary test ranked lobbies

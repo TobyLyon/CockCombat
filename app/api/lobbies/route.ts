@@ -84,8 +84,8 @@ async function getPlayerUsername(playerId: string): Promise<string> {
 
 function addAiPlayer(lobbyId: string) {
   const lobby = lobbies.find(l => l.id === lobbyId);
-  // Strict guard: AI only allowed in tutorial lobbies
-  if (!lobby || lobby.matchType !== 'tutorial') return;
+  // Strict guard: AI only allowed in Tutorial practice lobby (aiBackfill flag)
+  if (!lobby || lobby.matchType !== 'tutorial' || !lobby.aiBackfill) return;
   if (lobby.players.length < lobby.capacity) {
     const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
     const randomName = aiNames[Math.floor(Math.random() * aiNames.length)];
@@ -156,7 +156,7 @@ function removeOneAiPlayer(lobby: any) {
 }
 
 function ensureTutorialAIFilledToCapacity(lobby: any) {
-  if (lobby.matchType !== 'tutorial') return
+  if (lobby.matchType !== 'tutorial' || !lobby.aiBackfill) return
   while (lobby.players.length < lobby.capacity) {
     addAiPlayer(lobby.id)
   }
@@ -404,6 +404,13 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
+    // For Tutorial practice lobby: backfill AIs to capacity on join
+    try {
+      if (lobby.matchType === 'tutorial' && (lobby as any).aiBackfill) {
+        ensureTutorialAIFilledToCapacity(lobby)
+      }
+    } catch {}
+
     // Assign escrow wallet when first player joins (for non-tutorial matches)
     if (!lobby.escrowWalletId && lobby.matchType !== 'tutorial' && lobby.amount > 0) {
       const { evmEscrowService } = await import('@/lib/evm-escrow-service');
@@ -602,8 +609,8 @@ export async function DELETE(req: NextRequest) {
       set?.delete(String(playerId || ''));
     } catch {}
 
-    // If tutorial lobby has no humans left, purge all AI and reset state
-    if (lobby.matchType === 'tutorial') {
+    // If tutorial practice lobby has no humans left, purge all AI and reset state
+    if (lobby.matchType === 'tutorial' && (lobby as any).aiBackfill) {
       const hasHuman = lobby.players.some(p => !p.isAi);
       if (!hasHuman) {
         lobby.players = [];

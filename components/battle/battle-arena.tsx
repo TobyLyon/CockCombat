@@ -567,7 +567,7 @@ export default function BattleArena() {
                             <div className="flex items-center gap-2 text-white/85">
                               <Users className="h-4 w-4" />
                               <span className="font-semibold text-sm lg:text-base">
-                                {playerCount} / {lobby.capacity}
+                                {(lobby.name === 'Tutorial' ? Math.max(playerCount, 1) : playerCount)} / {lobby.capacity}
                               </span>
                             </div>
                             {/* Status Indicator */}
