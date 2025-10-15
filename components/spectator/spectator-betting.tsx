@@ -230,7 +230,7 @@ export default function SpectatorBetting({ matchId, onPlaceBet, gameState, match
           ) : (
             <div className="flex flex-col items-center justify-center gap-2 text-center p-4 bg-gray-800 rounded-md">
               <p className="text-sm text-gray-400">Connect your wallet to place bets.</p>
-              <WalletMultiButton className="!bg-primary hover:!bg-primary/90 !h-9 !rounded-md !px-3"/>
+              <WalletMultiButton />
             </div>
           )}
         </div>

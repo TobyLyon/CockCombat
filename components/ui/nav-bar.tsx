@@ -192,7 +192,7 @@ export default function NavBar() {
         {isMounted && <BalanceBar compact className="hidden sm:flex" />}
 
         {/* Wallet */}
-        {isMounted && <WalletMultiButton onClickSound={() => playSound("click")} className="shrink-0" />}
+        {isMounted && <WalletMultiButton className="shrink-0" />}
       </div>
     </header>
   )

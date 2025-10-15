@@ -12,6 +12,14 @@ import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
   CoinbaseWalletAdapter,
+  TrustWalletAdapter,
+  TokenPocketWalletAdapter,
+  SafePalWalletAdapter,
+  TorusWalletAdapter,
+  LedgerWalletAdapter,
+  NightlyWalletAdapter,
+  Coin98WalletAdapter,
+  XDEFIWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -22,6 +30,14 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
     new CoinbaseWalletAdapter(),
+    new TrustWalletAdapter(),
+    new TokenPocketWalletAdapter(),
+    new SafePalWalletAdapter(),
+    new TorusWalletAdapter(),
+    new LedgerWalletAdapter(),
+    new NightlyWalletAdapter(),
+    new Coin98WalletAdapter(),
+    new XDEFIWalletAdapter(),
   ];
 
   const content = (
