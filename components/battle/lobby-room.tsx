@@ -191,13 +191,19 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log('Current playerIdentifier:', playerIdentifier || publicKey?.toString());
       // Ignore snapshots not meant for this lobby (safety against cross-room races)
       try { if (updatedLobby && updatedLobby.id && updatedLobby.id !== lobby.id) return } catch {}
-      setPlayers((updatedLobby?.players || []).map((p: any) => ({
-        playerId: String(p.playerId || '').toLowerCase(),
-        username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
-        chickenName: p.chickenId || p.chickenName || 'Default',
-        isReady: p.isAi ? true : Boolean(p.isReady),
-        isAi: !!p.isAi,
-      })))
+      setPlayers((updatedLobby?.players || []).map((p: any) => {
+        const pidRaw = String(p.playerId || '')
+        const pid = pidRaw.toLowerCase()
+        const isGuest = pidRaw.startsWith('guest_')
+        const username = (p.username && String(p.username).trim()) || (isGuest ? pidRaw : (pidRaw ? pidRaw.slice(0,8)+'...' : 'Player'))
+        return ({
+          playerId: pid,
+          username,
+          chickenName: p.chickenId || p.chickenName || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: !!p.isAi,
+        })
+      }))
     };
 
     // Lightweight join/leave handlers (no snapshots)
@@ -275,9 +281,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           if (action === 'remove') {
             map.delete(pid)
           } else {
+            const rawId = String(player?.playerId || '')
+            const isGuest = rawId.startsWith('guest_')
+            const username = (player?.username && String(player?.username).trim()) || (isGuest ? rawId : (rawId ? rawId.slice(0,8)+'...' : 'Player'))
             map.set(pid, {
               playerId: pid,
-              username: player?.username || (pid ? pid.slice(0,8)+'...' : 'Player'),
+              username,
               chickenName: player?.chickenName || 'Default',
               isReady: !!player?.isReady,
               isAi: !!player?.isAi,

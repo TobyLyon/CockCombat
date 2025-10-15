@@ -271,9 +271,10 @@ export async function POST(req: NextRequest) {
               }
             } catch {}
             if (lob.matchType === 'tutorial' && p.isAi) isReady = true;
+            const isGuest = pid.startsWith('guest_');
             return {
               playerId: pid,
-              username: p.username || pid.slice(0, 8) + '...',
+              username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
               chickenName: p.chickenId || 'Default',
               isReady,
               isAi: p.isAi || false
@@ -404,29 +405,30 @@ export async function POST(req: NextRequest) {
       });
 
       // Also broadcast the full lobby update (ensure current ready states are preserved; authoritative in ranked)
-      const lobbyPlayers = (() => {
-        try {
-          return lobby.players.map((p: any) => {
-            const pid = String(p.playerId || '');
-            let isReady = false;
-            try {
-              const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
-              if (presence && presence.has(pid)) {
-                for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
-                  if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
+        const lobbyPlayers = (() => {
+          try {
+            return lobby.players.map((p: any) => {
+              const pid = String(p.playerId || '');
+              let isReady = false;
+              try {
+                const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined
+                if (presence && presence.has(pid)) {
+                  for (const [, conn] of (global as any).activeConnections?.entries?.() || []) {
+                    if (conn.currentLobby === lobbyId && String(conn.walletAddress || '').toLowerCase() === pid.toLowerCase()) { isReady = !!conn.isReady; break }
+                  }
                 }
+              } catch {}
+              const isGuest = pid.startsWith('guest_');
+              return {
+                playerId: pid,
+                username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
+                chickenName: p.chickenId || 'Default',
+                isReady,
+                isAi: false
               }
-            } catch {}
-            return {
-              playerId: pid,
-              username: p.username || pid.slice(0, 8) + '...',
-              chickenName: p.chickenId || 'Default',
-              isReady,
-              isAi: false
-            }
-          })
-        } catch { return [] as any[] }
-      })();
+            })
+          } catch { return [] as any[] }
+        })();
       const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
       
       socketIo.to(lobbyId).emit('lobby_updated', {
@@ -567,13 +569,17 @@ export async function DELETE(req: NextRequest) {
           timestamp: Date.now()
         });
 
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: p.isAi ? true : false,
-          isAi: p.isAi || false
-        }));
+        const lobbyPlayers = lobby.players.map(p => {
+          const pid = String(p.playerId || '');
+          const isGuest = pid.startsWith('guest_');
+          return ({
+            playerId: pid,
+            username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : false,
+            isAi: p.isAi || false
+          })
+        });
 
         const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
@@ -648,13 +654,17 @@ export async function PUT(req: NextRequest) {
       if (socketIo) {
         socketIo.to(lobbyId).emit('player_ready_status', { playerId, isReady });
 
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: p.isAi ? true : Boolean(p.isReady),
-          isAi: p.isAi || false
-        }));
+        const lobbyPlayers = lobby.players.map(p => {
+          const pid = String(p.playerId || '');
+          const isGuest = pid.startsWith('guest_');
+          return ({
+            playerId: pid,
+            username: (p.username && String(p.username).trim()) || (isGuest ? pid : (pid ? pid.slice(0, 8) + '...' : '')),
+            chickenName: p.chickenId || 'Default',
+            isReady: p.isAi ? true : Boolean(p.isReady),
+            isAi: p.isAi || false
+          })
+        });
         const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
         socketIo.to(lobbyId).emit('lobby_updated', {
           id: lobbyId,
