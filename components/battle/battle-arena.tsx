@@ -518,9 +518,7 @@ export default function BattleArena() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5 sm:gap-6">
                     {displayedLobbies.map((lobby) => {
                       const live = liveCounts[lobby.id]
-                      const serverHumans = Array.isArray(lobby.players) ? lobby.players.filter(p => !p.isAi).length : 0
-                      const liveHumans = live ? Number(live.liveHumans) || 0 : 0
-                      const playerCount = Math.max(serverHumans, liveHumans)
+                      const playerCount = live ? Math.max(0, Number(live.liveHumans) || 0) : 0
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
                       const isTutorialLobby = (lobby as any).name === 'Tutorial' || lobby.id === 'tutorial'
