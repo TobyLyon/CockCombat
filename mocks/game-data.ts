@@ -189,6 +189,8 @@ export const soundMap: { [key: string]: string } = {
   background_music: '/sounds/background.mp3', // Add background music for main menu/landing page
   killstreak: '/sounds/killstreaks/chicken_spree.mp3',
   victory: '/sounds/die.mp3',
+  // Attention ping when players ready up in lobby
+  ping: '/sounds/pickup.mp3',
 };
 
 // Arena configuration - Scaled values
