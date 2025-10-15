@@ -278,6 +278,21 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         }))
         // Stable sort
         players.sort((a,b)=> (a.isAi!==b.isAi? (a.isAi?1:-1) : a.playerId.localeCompare(b.playerId)))
+        // Play attention ping for any other player that just flipped to ready
+        try {
+          const me = getCurrentPlayerId()
+          const meNorm = me ? String(me).toLowerCase() : ''
+          const priorMap = new Map((playersRef.current || []).map(p => [p.playerId, p]))
+          let shouldPing = false
+          for (const n of players) {
+            const prev = priorMap.get(n.playerId)
+            if (n.isReady && (!prev || !prev.isReady) && (!meNorm || n.playerId !== meNorm)) {
+              shouldPing = true
+              break
+            }
+          }
+          if (shouldPing) playSound('ping')
+        } catch {}
         setPlayers(players)
       } catch {}
     }
@@ -286,6 +301,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         if (!payload || payload.lobbyId !== lobby.id) return
         const { action, player } = payload
         const pid = String(player?.playerId || '').toLowerCase()
+        // Audible ping when another player becomes ready via diff
+        try {
+          const me = getCurrentPlayerId()
+          const meNorm = me ? String(me).toLowerCase() : ''
+          const prev = (playersRef.current || []).find(p => p.playerId === pid)
+          const nowReady = !!player?.isReady
+          const wasReady = !!prev?.isReady
+          if (action !== 'remove' && nowReady && !wasReady && (!meNorm || pid !== meNorm)) {
+            playSound('ping')
+          }
+        } catch {}
         // If this diff is about me, sync local hasWagered flag from server
         try {
           const me = getCurrentPlayerId()
@@ -568,7 +594,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const minRequired = lobby.matchType === 'tutorial' ? 2 : ((lobby.id === 'lobby-0p005' || lobby.id === 'lobby-0.005') ? 2 : 2)
+  // Tutorial allows solo human (with AI) so minimum is 1; ranked remains 2
+  const minRequired = lobby.matchType === 'tutorial' ? 1 : 2
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()

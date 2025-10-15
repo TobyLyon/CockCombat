@@ -2739,6 +2739,25 @@ preparePromise.then(() => {
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
       }
 
+      // Enforce hard capacity cap (prefer humans first; fill remaining with AI only for tutorial)
+      try {
+        const capacity = (lobbyMeta && typeof lobbyMeta.capacity === 'number') ? lobbyMeta.capacity : 8;
+        const capRoster = (roster) => {
+          try {
+            const humans = (roster || []).filter(r => !r.isAi);
+            const ai = (roster || []).filter(r => r.isAi);
+            const trimmed = humans.slice(0, capacity);
+            if (isTutorial) {
+              while (trimmed.length < capacity && ai.length > 0) {
+                trimmed.push(ai.shift());
+              }
+            }
+            return trimmed;
+          } catch { return Array.isArray(roster) ? roster.slice(0, capacity) : []; }
+        };
+        expectedRoster = capRoster(Array.isArray(expectedRoster) ? expectedRoster : []);
+      } catch {}
+
       // Guard against duplicate sessions for the same lobby (secondary guard in addition to lock)
       try {
         const existingMs = global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId);
@@ -2808,6 +2827,8 @@ preparePromise.then(() => {
           minHumans: isTutorial ? 1 : 2,
         escrowId: escrowIdVal,
       };
+      // Mark lobby as starting for UI cards/state
+      try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'starting'; } catch {}
       io.to(lobbyId).emit('queue_begin', qbPayload);
       try {
         const humans = (expectedRoster || []).filter(r => !r.isAi).map(r => r.wallet);
@@ -2942,6 +2963,8 @@ preparePromise.then(() => {
         c--;
         if (c < 0) {
           clearInterval(interval);
+          // Mark lobby in-progress and emit start
+          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'in-progress'; } catch {}
           try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
           try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}

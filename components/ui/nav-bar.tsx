@@ -128,14 +128,10 @@ export default function NavBar() {
           <span className="text-xs font-mono tracking-wide">Token: {tokenEndPreview}</span>
         </button>
 
-        {/* Copy Token - mobile icon */}
+        {/* Copy Token - mobile icon (hidden on mobile to declutter) */}
         <button
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
-          className={`sm:hidden inline-flex items-center justify-center p-2 border-2 rounded-md transition-colors ${
-            copied
-              ? 'border-green-500 bg-green-600/20'
-              : 'border-[#666666] bg-[#333333] hover:bg-[#444444]'
-          }`}
+          className={`hidden`}
           aria-label="Copy token contract address"
           type="button"
         >
@@ -153,12 +149,12 @@ export default function NavBar() {
       {/* Right side - Socials, Balances, Wallet */}
       <div className="flex basis-1/3 items-center justify-end gap-1 sm:gap-2 md:gap-3 min-w-0 flex-shrink-0">
 
-        {/* Twitter / X */}
+        {/* Twitter / X (hidden on mobile) */}
         <a
           href="https://www.x.com/CockCombatBNB"
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2 flex items-center justify-center"
+          className="hidden sm:flex p-2 items-center justify-center"
           aria-label="Cock Combat on X"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -166,12 +162,12 @@ export default function NavBar() {
           </svg>
         </a>
 
-        {/* Discord */}
+        {/* Discord (hidden on mobile) */}
         <a
           href="https://discord.gg/Tj2vBPgbFP"
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2 flex items-center justify-center"
+          className="hidden sm:flex p-2 items-center justify-center"
           aria-label="Join the Cock Combat Discord"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -179,12 +175,12 @@ export default function NavBar() {
           </svg>
         </a>
 
-        {/* TikTok */}
+        {/* TikTok (hidden on mobile) */}
         <a
           href="https://www.tiktok.com/@cockcombatgame"
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2 flex items-center justify-center"
+          className="hidden sm:flex p-2 items-center justify-center"
           aria-label="Cock Combat on TikTok"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
