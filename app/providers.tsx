@@ -12,7 +12,6 @@ import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
   CoinbaseWalletAdapter,
-  BackpackWalletAdapter,
   SolletWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -24,7 +23,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
     new CoinbaseWalletAdapter(),
-    new BackpackWalletAdapter(),
     new SolletWalletAdapter({ network }),
   ];
 
