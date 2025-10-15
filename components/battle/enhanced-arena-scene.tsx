@@ -567,78 +567,6 @@ function SceneContent({
   const selfPeckRecoverUntilRef = useRef<number>(0)
   const lastPeckEdgeAtRef = useRef<number>(0)
 
-  // Mobile touch controls (left-bottom: virtual stick; right-bottom: peck)
-  const mobileLeftTouchIdRef = useRef<number | null>(null)
-  const mobileLeftOriginRef = useRef<{ x: number; y: number } | null>(null)
-  const mobileMoveZRef = useRef<number>(0) // -1 forward, +1 backward (aligning with moveVector.z semantics)
-  const mobileTurnDirRef = useRef<number>(0) // -1 turn right, +1 turn left
-  const mobilePeckTimerRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const onTouchStart = (e: TouchEvent) => {
-      try {
-        for (const t of Array.from(e.touches)) {
-          const x = t.clientX, y = t.clientY
-          const vw = window.innerWidth, vh = window.innerHeight
-          // Left-bottom quadrant → acquire joystick touch id
-          if (x < vw * 0.45 && y > vh * 0.55 && mobileLeftTouchIdRef.current === null) {
-            mobileLeftTouchIdRef.current = t.identifier
-            mobileLeftOriginRef.current = { x, y }
-          }
-          // Right-bottom quadrant → peck tap
-          if (x > vw * 0.55 && y > vh * 0.55) {
-            peckRequestRef.current = true
-            if (mobilePeckTimerRef.current) window.clearTimeout(mobilePeckTimerRef.current)
-            mobilePeckTimerRef.current = window.setTimeout(() => { peckRequestRef.current = false; }, 160)
-          }
-        }
-      } catch {}
-    }
-    const onTouchMove = (e: TouchEvent) => {
-      try {
-        if (mobileLeftTouchIdRef.current === null || !mobileLeftOriginRef.current) return
-        const t = Array.from(e.touches).find(tt => tt.identifier === mobileLeftTouchIdRef.current)
-        if (!t) return
-        const dx = t.clientX - mobileLeftOriginRef.current.x
-        const dy = t.clientY - mobileLeftOriginRef.current.y
-        const dead = 10
-        // Map to forward/back (dy) and turn (dx)
-        if (Math.abs(dy) > dead) {
-          mobileMoveZRef.current = dy > 0 ? 1 : -1
-        } else {
-          mobileMoveZRef.current = 0
-        }
-        if (Math.abs(dx) > dead) {
-          mobileTurnDirRef.current = dx > 0 ? -1 : 1 // right swipe → negative (turn right)
-        } else {
-          mobileTurnDirRef.current = 0
-        }
-      } catch {}
-    }
-    const onTouchEnd = (e: TouchEvent) => {
-      try {
-        if (mobileLeftTouchIdRef.current !== null) {
-          const ended = Array.from(e.changedTouches).some(tt => tt.identifier === mobileLeftTouchIdRef.current)
-          if (ended) {
-            mobileLeftTouchIdRef.current = null
-            mobileLeftOriginRef.current = null
-            mobileMoveZRef.current = 0
-            mobileTurnDirRef.current = 0
-          }
-        }
-      } catch {}
-    }
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
-    window.addEventListener('touchmove', onTouchMove, { passive: true })
-    window.addEventListener('touchend', onTouchEnd, { passive: true })
-    return () => {
-      window.removeEventListener('touchstart', onTouchStart as any)
-      window.removeEventListener('touchmove', onTouchMove as any)
-      window.removeEventListener('touchend', onTouchEnd as any)
-      if (mobilePeckTimerRef.current) window.clearTimeout(mobilePeckTimerRef.current)
-    }
-  }, [])
-
   // Capture rising-edge inputs at the DOM level for responsiveness
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -960,9 +888,8 @@ function SceneContent({
 
     // Handle movement
     let moveVector = new THREE.Vector3(0, 0, 0);
-    const mobileZ = mobileMoveZRef.current || 0
-    if (forward || mobileZ < 0) moveVector.z -= 1;
-    if (backward || mobileZ > 0) moveVector.z += 1;
+    if (forward) moveVector.z -= 1;
+    if (backward) moveVector.z += 1;
     // Removed direct L/R move for rotation-based movement
     // if (left) moveVector.x -= 1;
     // if (right) moveVector.x += 1;
@@ -970,7 +897,7 @@ function SceneContent({
 
     // Handle rotation with deltaTime scaling and clamping (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-      const turn = (right ? -1 : 0) + (left ? 1 : 0) + (mobileTurnDirRef.current || 0)
+      const turn = (right ? -1 : 0) + (left ? 1 : 0)
       if (turn !== 0) {
         // Normalize current angle to [-PI, PI]
         while (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2
@@ -1247,6 +1174,13 @@ function SceneContent({
             } catch {}
             if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1)
           }}
+          onAiDamageTarget={(targetId, amount = 1, byId) => {
+            try {
+              if (targetId && onPlayerDamage) onPlayerDamage(String(targetId), amount, byId)
+              // Also set a guaranteed flash window for AI targets to surface hits visually
+              if (targetId) (remoteHitUntilRef.current as any)[String(targetId)] = Date.now() + 600
+            } catch {}
+          }}
         />
       )}
 
@@ -1371,7 +1305,8 @@ function ChickenInstances({
     invulnerableUntilMs,
     remoteHumans,
     remoteHitUntil,
-    onAiDamagePlayer
+      onAiDamagePlayer,
+      onAiDamageTarget
   }: {
     chickens: PlayerStatus[],
     playerChickenId: string,
@@ -1380,12 +1315,21 @@ function ChickenInstances({
     invulnerableUntilMs?: number,
     remoteHumans?: Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>,
     remoteHitUntil?: Record<string, number>,
-    onAiDamagePlayer?: () => void
+      onAiDamagePlayer?: () => void,
+      onAiDamageTarget?: (targetId: string, amount?: number, byId?: string) => void
   }) {
     const groupsRef = useRef<Record<string, THREE.Group | null>>({})
     const lastPeckRef = useRef<Record<string, number>>({})
     const wanderTargetRef = useRef<Record<string, THREE.Vector3>>({})
     const wanderUntilRef = useRef<Record<string, number>>({})
+  // Limit how many AIs actively engage the player at once to avoid ganging up
+  const engagedWithPlayerRef = useRef<Record<string, number>>({}) // id -> untilMs
+  const lastEngagementRecalcAtRef = useRef<number>(0)
+  const MAX_ACTIVE_ATTACKERS = 2
+    // Free-for-all targeting: allow AIs to target non-player opponents with per-target caps
+    const aiFocusRef = useRef<Record<string, string>>({}) // aiId -> targetId (non-player preferred)
+    const aiRetargetAfterRef = useRef<Record<string, number>>({}) // aiId -> timestamp
+    const MAX_ATTACKERS_PER_TARGET = 2
 
     useFrame((_, delta) => {
       const playerPos = (() => {
@@ -1399,6 +1343,50 @@ function ChickenInstances({
       const now = Date.now()
       const ringRadius = ARENA_CONFIG.ringRadius
       const maxBounds = ringRadius - 2
+
+      // Periodically rebalance which AIs are allowed to actively engage the player
+      if (now >= (lastEngagementRecalcAtRef.current || 0)) {
+        // Prune expired engagements
+        try {
+          for (const [k, until] of Object.entries(engagedWithPlayerRef.current)) {
+            if (!until || until < now) delete engagedWithPlayerRef.current[k]
+          }
+        } catch {}
+        // Fill remaining slots with nearest AI within a reasonable radius
+        const slotsOpen = Math.max(0, MAX_ACTIVE_ATTACKERS - Object.keys(engagedWithPlayerRef.current).length)
+        if (slotsOpen > 0) {
+          try {
+            const candidates: Array<{ id: string; d: number }> = []
+            for (const c of chickens) {
+              if (!(c as any).isAi || !c.isAlive || c.id === playerChickenId) continue
+              const g = groupsRef.current[c.id]
+              if (!g) continue
+              const dx = g.position.x - playerPos.x
+              const dz = g.position.z - playerPos.z
+              const d = Math.hypot(dx, dz)
+              if (d <= 9) candidates.push({ id: c.id, d })
+            }
+            candidates.sort((a, b) => a.d - b.d)
+            const pick = candidates
+              .filter(c => !(engagedWithPlayerRef.current[c.id] || 0))
+              .slice(0, slotsOpen)
+            const engageForMs = 2200
+            for (const c of pick) engagedWithPlayerRef.current[c.id] = now + engageForMs
+          } catch {}
+        }
+        // Recalculate roughly a few times per second
+        lastEngagementRecalcAtRef.current = now + 450
+      }
+
+      // Build focus counts for anti-gang on non-player targets (humans or AIs)
+      const focusCounts: Record<string, number> = {}
+      try {
+        for (const [aid, tid] of Object.entries(aiFocusRef.current)) {
+          if (!aid || !tid) continue
+          if (tid === playerChickenId) continue
+          focusCounts[tid] = (focusCounts[tid] || 0) + 1
+        }
+      } catch {}
 
       for (const chicken of chickens) {
         if (!chicken.isAlive || chicken.id === playerChickenId) continue
@@ -1461,11 +1449,65 @@ function ChickenInstances({
           continue
         }
 
-        const toPlayer = playerPos.clone().sub(pos)
-        const dist = Math.hypot(toPlayer.x, toPlayer.z)
+        // Determine target for this AI: prefer assigned focus; otherwise player if engaged
+        const engagedUntil = engagedWithPlayerRef.current[chicken.id] || 0
+        const engagedWithPlayer = engagedUntil > now
+
+        // Resolve current non-player target
+        let targetId: string | null = engagedWithPlayer ? playerChickenId : (aiFocusRef.current[chicken.id] || null)
+        let targetPos: THREE.Vector3 | null = null
+        if (targetId === playerChickenId) {
+          targetPos = playerPos.clone()
+        } else if (targetId) {
+          const tg = groupsRef.current[targetId]
+          if (tg) targetPos = tg.position.clone()
+        }
+
+        // Retarget non-player target when needed
+        if (!engagedWithPlayer) {
+          const shouldRetarget = (!targetId || !targetPos || (aiRetargetAfterRef.current[chicken.id] || 0) < now)
+          if (shouldRetarget) {
+            try {
+              const candidates: Array<{ id: string; d: number; pos: THREE.Vector3 }> = []
+              for (const other of chickens) {
+                if (!other.isAlive) continue
+                if (other.id === chicken.id) continue
+                const og = groupsRef.current[other.id]
+                if (!og) continue
+                const dx = og.position.x - pos.x
+                const dz = og.position.z - pos.z
+                const d = Math.hypot(dx, dz)
+                if (d <= 20) candidates.push({ id: other.id, d, pos: og.position.clone() })
+              }
+              candidates.sort((a, b) => a.d - b.d)
+              let picked: { id: string; pos: THREE.Vector3 } | null = null
+              for (const c of candidates) {
+                const cur = focusCounts[c.id] || 0
+                if (cur < MAX_ATTACKERS_PER_TARGET) { picked = { id: c.id, pos: c.pos }; break }
+              }
+              if (picked) {
+                targetId = picked.id
+                targetPos = picked.pos
+                aiFocusRef.current[chicken.id] = picked.id
+                aiRetargetAfterRef.current[chicken.id] = now + 1000
+                focusCounts[picked.id] = (focusCounts[picked.id] || 0) + 1
+              } else {
+                // No valid target; clear focus
+                aiFocusRef.current[chicken.id] = ''
+                targetId = null
+                targetPos = null
+              }
+            } catch {}
+          }
+        }
+
+        // Compute vector to chosen target; fall back to player for orientation
+        const actualTargetPos = targetPos || playerPos
+        const toTarget = actualTargetPos.clone().sub(pos)
+        const dist = Math.hypot(toTarget.x, toTarget.z)
 
         // Face player - custom angle lerp (THREE.MathUtils.lerpAngle not available)
-        const targetAngle = Math.atan2(toPlayer.x, toPlayer.z)
+        const targetAngle = Math.atan2(toTarget.x, toTarget.z)
         const lerpAngle = (a: number, b: number, t: number) => {
           let diff = (b - a + Math.PI) % (Math.PI * 2)
           if (diff < 0) diff += Math.PI * 2
@@ -1479,6 +1521,7 @@ function ChickenInstances({
 
         const isFrozen = typeof freezeUntilMs === 'number' && now < freezeUntilMs
         const isInvulnerable = typeof invulnerableUntilMs === 'number' && now < invulnerableUntilMs
+        const isEngaged = engagedWithPlayer || Boolean(targetId)
 
         if (isFrozen) {
           moveVec.set(0, 0, 0)
@@ -1498,20 +1541,44 @@ function ChickenInstances({
           const len = Math.hypot(w.x, w.z) || 1
           moveVec.set((w.x / len) * 1.2, 0, (w.z / len) * 1.2)
         } else if (dist > 2.6) {
-          // Chase when near
-          const len = Math.max(0.0001, Math.hypot(toPlayer.x, toPlayer.z))
-          moveVec.set((toPlayer.x / len) * speed, 0, (toPlayer.z / len) * speed)
+          // Near: only engaged AIs directly chase; others orbit to avoid dogpiling
+          if (isEngaged) {
+            const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
+            moveVec.set((toTarget.x / len) * speed, 0, (toTarget.z / len) * speed)
+          } else {
+            // Orbit around target clockwise at a comfortable radius
+            const tangent = new THREE.Vector3(-toTarget.z, 0, toTarget.x)
+            const len = Math.max(0.0001, Math.hypot(tangent.x, tangent.z))
+            moveVec.set((tangent.x / len) * 1.2, 0, (tangent.z / len) * 1.2)
+            // Light keep-distance behavior: nudge outward if getting too close
+            if (dist < 3.2) {
+              const baseLen = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
+              moveVec.x += (toTarget.x / baseLen) * 0.6
+              moveVec.z += (toTarget.z / baseLen) * 0.6
+            }
+          }
         } else {
           // In range: try to peck with cooldown
           const last = lastPeckRef.current[chicken.id] || 0
-          if (!isFrozen && !isInvulnerable && now - last > 1200) {
+          if (isEngaged && !isFrozen && !isInvulnerable && now - last > 1200) {
             // Require vertical alignment similar to player hits
-            const dy = Math.abs(pos.y - playerPos.y)
+            const dy = Math.abs(pos.y - actualTargetPos.y)
             const verticalWindow = 0.45
             if (dy <= verticalWindow) {
             lastPeckRef.current[chicken.id] = now
-            try { onAiDamagePlayer && onAiDamagePlayer() } catch {}
+            try {
+              if (targetId && targetId !== playerChickenId && onAiDamageTarget) {
+                onAiDamageTarget(targetId, 1, chicken.id)
+              } else if (targetId === playerChickenId && onAiDamagePlayer) {
+                onAiDamagePlayer()
+              }
+            } catch {}
             }
+          }
+          // If not engaged, back off slightly to let others take turns
+          if (!isEngaged) {
+            const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
+            moveVec.set((toTarget.x / len) * 0.8, 0, (toTarget.z / len) * 0.8)
           }
         }
 

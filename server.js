@@ -2292,7 +2292,7 @@ preparePromise.then(() => {
         }
 
         // Check if we have minimum players and all are ready (uniform policy)
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : 2;
+        const minPlayers = lobbyId.includes('tutorial') ? 1 : 2;
         // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
@@ -2702,6 +2702,18 @@ preparePromise.then(() => {
         expectedRoster = rosterOverride;
         isTutorial = lobbyMeta ? lobbyMeta.matchType === 'tutorial' : false;
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
+        // Ensure tutorial override roster is backfilled with AI to capacity
+        if (isTutorial && lobbyMeta && typeof lobbyMeta.capacity === 'number') {
+          const current = Array.isArray(expectedRoster) ? expectedRoster.length : 0;
+          const missing = Math.max(0, lobbyMeta.capacity - current);
+          if (missing > 0) {
+            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+            for (let i = 0; i < missing; i++) {
+              const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+              expectedRoster.push({ wallet: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenName: 'default-ai-chicken' });
+            }
+          }
+        }
       } else {
         if (!lobbyMeta) return;
         // Build expected roster from API (tutorial may include AI; ranked is humans only)
@@ -2793,7 +2805,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-          minHumans: isTutorial ? 2 : 2,
+          minHumans: isTutorial ? 1 : 2,
         escrowId: escrowIdVal,
       };
       io.to(lobbyId).emit('queue_begin', qbPayload);
@@ -2849,7 +2861,7 @@ preparePromise.then(() => {
       const presentHumans = requiredHumans.filter(w => isTutorial ? presenceAcks.has(w) : (presenceAcks.has(w) && assetsAcks.has(w)));
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 2 : 2;
+      const minHumans = isTutorial ? 1 : 2;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function
@@ -2866,8 +2878,17 @@ preparePromise.then(() => {
         return;
       }
 
-      // Build final roster: include present humans only (AI removed)
-      let finalRoster = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
+      // Build final roster
+      // Tutorial: include all AI plus any present humans
+      // Ranked: include present humans only (no AI ever)
+      let finalRoster = [];
+      if (isTutorial) {
+        const aiEntries = expectedRoster.filter(p => p.isAi);
+        const presentHumanEntries = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
+        finalRoster = [...presentHumanEntries, ...aiEntries];
+      } else {
+        finalRoster = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
+      }
       // Remove over-eager tutorial fallback; require at least one human ready AND AI roster populated by prior steps
 
       // Refund any paid human who failed the queue handshake (ranked only)
