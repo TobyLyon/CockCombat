@@ -66,7 +66,7 @@ export default function BattleArena() {
   useEffect(() => {
     const probe = async () => {
       try {
-        const res = await fetch('/api/auth/x/session', { cache: 'no-store' })
+        const res = await fetch('/api/auth/session', { cache: 'no-store' })
         const data = await res.json().catch(() => ({}))
         setXConnected(Boolean(data && data.connected))
       } catch { setXConnected(false) }

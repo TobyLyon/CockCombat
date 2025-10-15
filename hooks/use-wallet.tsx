@@ -7,36 +7,41 @@ type AnyFn = (...args: any[]) => any
 
 // Solana wallet hook backed by wallet-adapter
 export function useWallet() {
-  const {
-    publicKey,
-    connected,
-    connecting,
-    disconnect,
-    wallet,
-    wallets,
-    select,
-    sendTransaction,
-    signTransaction,
-    signAllTransactions,
-    signMessage,
-  } = useSolanaWallet()
+  // Access the adapter, but guard property reads so we don't throw
+  const base = useSolanaWallet() as any
+
+  const safeGet = <T,>(getter: () => T, fallback: T): T => {
+    try { return getter() } catch { return fallback }
+  }
+
+  const publicKey = safeGet(() => base.publicKey, undefined)
+  const connected = safeGet(() => base.connected, false)
+  const connecting = safeGet(() => base.connecting, false)
+  const disconnect = safeGet(() => base.disconnect, undefined) as AnyFn | undefined
+  const wallet = safeGet(() => base.wallet, undefined)
+  const rawWallets = safeGet(() => base.wallets, []) as any[]
+  const select = safeGet(() => base.select, undefined) as AnyFn | undefined
+  const sendTransaction = safeGet(() => base.sendTransaction, undefined) as AnyFn | undefined
+  const signTransaction = safeGet(() => base.signTransaction, undefined) as AnyFn | undefined
+  const signAllTransactions = safeGet(() => base.signAllTransactions, undefined) as AnyFn | undefined
+  const signMessage = safeGet(() => base.signMessage, undefined) as AnyFn | undefined
 
   const simplifiedWallets = useMemo(() => {
-    return (wallets || []).map((w: any) => ({ key: w.adapter?.name, adapter: { name: w.adapter?.name } }))
-  }, [wallets])
+    return (rawWallets || []).map((w: any) => ({ key: safeGet(() => w.adapter?.name, ''), adapter: { name: safeGet(() => w.adapter?.name, '') } }))
+  }, [rawWallets])
 
   return {
     publicKey,
     connected,
     connecting,
-    disconnect: disconnect as AnyFn,
+    disconnect: (disconnect || (() => {})) as AnyFn,
     wallet,
     wallets: simplifiedWallets,
-    select: select as AnyFn,
+    select: (select || (() => {})) as AnyFn,
     chooseAccount: undefined,
-    sendTransaction: sendTransaction as AnyFn,
-    signTransaction: signTransaction as AnyFn,
-    signMessage: signMessage as AnyFn,
-    signAllTransactions: signAllTransactions as AnyFn,
+    sendTransaction: (sendTransaction || (() => Promise.reject(new Error('sendTransaction unavailable')))) as AnyFn,
+    signTransaction: (signTransaction || (() => Promise.reject(new Error('signTransaction unavailable')))) as AnyFn,
+    signMessage: (signMessage || (() => Promise.reject(new Error('signMessage unavailable')))) as AnyFn,
+    signAllTransactions: (signAllTransactions || (() => Promise.reject(new Error('signAllTransactions unavailable')))) as AnyFn,
   }
 }
