@@ -193,6 +193,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
+    // Block joins when lobby is not open
+    if (lobby.status !== 'open') {
+      return NextResponse.json({ error: 'Lobby is not open for joining' }, { status: 409 });
+    }
+
     // Prevent joins if lobby is starting (countdown), queued, or currently in an active match window
     try {
       const isCountdownActive = Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]);
@@ -380,6 +385,15 @@ export async function POST(req: NextRequest) {
     };
     // Insert player (AI removed entirely)
     lobby.players.push(player);
+
+    // Race-safe capacity guard: if we eclipsed capacity (due to concurrency), roll back and reject
+    if (lobby.players.length > lobby.capacity) {
+      // Remove the player we just added
+      try {
+        lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
+      } catch {}
+      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+    }
 
     // Track presence immediately
     try {

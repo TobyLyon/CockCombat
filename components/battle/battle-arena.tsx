@@ -558,10 +558,8 @@ export default function BattleArena() {
                           {/* Players Count */}
                           {(() => {
                             const live = liveCounts[lobby.id]
-                            const serverPlayers = Array.isArray(lobby.players) ? lobby.players : [] as any[]
-                            const serverHumans = serverPlayers.filter((p: any) => !p?.isAi).length
-                            const liveHumans = live ? Number(live.liveHumans || 0) : 0
-                            const playerCount = Math.max(serverHumans, liveHumans)
+                            const playerCount = live ? live.liveHumans : 0
+                            const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                             const fillPercent = Math.min(100, Math.round((playerCount / lobby.capacity) * 100))
                             return (
                               <>
@@ -574,17 +572,15 @@ export default function BattleArena() {
                                   </div>
                                   {/* Status Indicator */}
                                   <div className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                                    playerCount >= lobby.capacity
+                                    isLocked
                                       ? 'bg-red-500/15 text-red-300 border-red-400/30'
                                       : playerCount > 0
-                                      ? 'bg-white/10 text-white/90 border-white/20'
+                                      ? 'bg-yellow-500/15 text-yellow-300 border-yellow-400/30'
                                       : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
                                   }`}>
-                                    {playerCount >= lobby.capacity 
-                                      ? 'FULL' 
-                                      : playerCount > 0 
-                                      ? 'ACTIVE' 
-                                      : 'OPEN'}
+                                    {isLocked
+                                      ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL')
+                                      : (playerCount > 0 ? 'ACTIVE' : 'OPEN')}
                                   </div>
                                 </div>
                                 {/* Capacity Progress */}
@@ -604,17 +600,15 @@ export default function BattleArena() {
                           <div className="mt-auto grid grid-cols-1 gap-2">
                             <Button
                               className={`w-full font-bold py-2.5 px-3 lg:px-4 rounded-lg transition-all duration-300 border text-sm md:text-base flex items-center justify-center gap-2
-                                bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner`}
-                              onClick={(e) => { e.stopPropagation(); !isJoining && handleJoinLobby(lobby); }}
-                              disabled={(() => { const live = liveCounts[lobby.id]; const serverPlayers = Array.isArray(lobby.players) ? lobby.players : []; const serverHumans = serverPlayers.filter((p:any)=>!p?.isAi).length; const liveHumans = live ? Number(live.liveHumans||0) : 0; const count = Math.max(serverHumans, liveHumans); return isJoining === lobby.id || ((count >= lobby.capacity) && lobby.matchType !== 'tutorial'); })()}
+                                ${isLocked ? 'bg-white/5 text-white/50 border-white/10 cursor-not-allowed' : 'bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner'}`}
+                              onClick={(e) => { e.stopPropagation(); if (!isJoining && !isLocked) handleJoinLobby(lobby); }}
+                              disabled={isJoining === lobby.id || isLocked}
                             >
-                              {(() => { const live = liveCounts[lobby.id]; const serverPlayers = Array.isArray(lobby.players) ? lobby.players : []; const serverHumans = serverPlayers.filter((p:any)=>!p?.isAi).length; const liveHumans = live ? Number(live.liveHumans||0) : 0; const count = Math.max(serverHumans, liveHumans); return (
-                                isJoining === lobby.id 
+                              {isJoining === lobby.id 
                                   ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
                                   : joinedLobby?.id === lobby.id
                                   ? '✓ JOINED'
-                                  : (((count >= lobby.capacity) && lobby.matchType !== 'tutorial') ? 'FULL' : <>JOIN <ChevronRight className="h-5 w-5"/></>)
-                              ) })()}
+                                  : (isLocked ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL') : <>JOIN <ChevronRight className="h-5 w-5"/></>)}
                             </Button>
                           </div>
                         )}
