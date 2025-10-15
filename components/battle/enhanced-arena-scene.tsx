@@ -567,6 +567,78 @@ function SceneContent({
   const selfPeckRecoverUntilRef = useRef<number>(0)
   const lastPeckEdgeAtRef = useRef<number>(0)
 
+  // Mobile touch controls (left-bottom: virtual stick; right-bottom: peck)
+  const mobileLeftTouchIdRef = useRef<number | null>(null)
+  const mobileLeftOriginRef = useRef<{ x: number; y: number } | null>(null)
+  const mobileMoveZRef = useRef<number>(0) // -1 forward, +1 backward (aligning with moveVector.z semantics)
+  const mobileTurnDirRef = useRef<number>(0) // -1 turn right, +1 turn left
+  const mobilePeckTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      try {
+        for (const t of Array.from(e.touches)) {
+          const x = t.clientX, y = t.clientY
+          const vw = window.innerWidth, vh = window.innerHeight
+          // Left-bottom quadrant → acquire joystick touch id
+          if (x < vw * 0.45 && y > vh * 0.55 && mobileLeftTouchIdRef.current === null) {
+            mobileLeftTouchIdRef.current = t.identifier
+            mobileLeftOriginRef.current = { x, y }
+          }
+          // Right-bottom quadrant → peck tap
+          if (x > vw * 0.55 && y > vh * 0.55) {
+            peckRequestRef.current = true
+            if (mobilePeckTimerRef.current) window.clearTimeout(mobilePeckTimerRef.current)
+            mobilePeckTimerRef.current = window.setTimeout(() => { peckRequestRef.current = false; }, 160)
+          }
+        }
+      } catch {}
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      try {
+        if (mobileLeftTouchIdRef.current === null || !mobileLeftOriginRef.current) return
+        const t = Array.from(e.touches).find(tt => tt.identifier === mobileLeftTouchIdRef.current)
+        if (!t) return
+        const dx = t.clientX - mobileLeftOriginRef.current.x
+        const dy = t.clientY - mobileLeftOriginRef.current.y
+        const dead = 10
+        // Map to forward/back (dy) and turn (dx)
+        if (Math.abs(dy) > dead) {
+          mobileMoveZRef.current = dy > 0 ? 1 : -1
+        } else {
+          mobileMoveZRef.current = 0
+        }
+        if (Math.abs(dx) > dead) {
+          mobileTurnDirRef.current = dx > 0 ? -1 : 1 // right swipe → negative (turn right)
+        } else {
+          mobileTurnDirRef.current = 0
+        }
+      } catch {}
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      try {
+        if (mobileLeftTouchIdRef.current !== null) {
+          const ended = Array.from(e.changedTouches).some(tt => tt.identifier === mobileLeftTouchIdRef.current)
+          if (ended) {
+            mobileLeftTouchIdRef.current = null
+            mobileLeftOriginRef.current = null
+            mobileMoveZRef.current = 0
+            mobileTurnDirRef.current = 0
+          }
+        }
+      } catch {}
+    }
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart as any)
+      window.removeEventListener('touchmove', onTouchMove as any)
+      window.removeEventListener('touchend', onTouchEnd as any)
+      if (mobilePeckTimerRef.current) window.clearTimeout(mobilePeckTimerRef.current)
+    }
+  }, [])
+
   // Capture rising-edge inputs at the DOM level for responsiveness
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -888,8 +960,9 @@ function SceneContent({
 
     // Handle movement
     let moveVector = new THREE.Vector3(0, 0, 0);
-    if (forward) moveVector.z -= 1;
-    if (backward) moveVector.z += 1;
+    const mobileZ = mobileMoveZRef.current || 0
+    if (forward || mobileZ < 0) moveVector.z -= 1;
+    if (backward || mobileZ > 0) moveVector.z += 1;
     // Removed direct L/R move for rotation-based movement
     // if (left) moveVector.x -= 1;
     // if (right) moveVector.x += 1;
@@ -897,7 +970,7 @@ function SceneContent({
 
     // Handle rotation with deltaTime scaling and clamping (disabled during freeze)
     if (Date.now() >= freezeUntilRef.current) {
-      const turn = (right ? -1 : 0) + (left ? 1 : 0)
+      const turn = (right ? -1 : 0) + (left ? 1 : 0) + (mobileTurnDirRef.current || 0)
       if (turn !== 0) {
         // Normalize current angle to [-PI, PI]
         while (selfRotation.y > Math.PI) selfRotation.y -= Math.PI * 2
