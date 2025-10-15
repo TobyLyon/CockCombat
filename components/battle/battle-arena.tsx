@@ -523,6 +523,7 @@ export default function BattleArena() {
                       const playerCount = Math.max(serverHumans, liveHumans)
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
+                      const isTutorialLobby = (lobby as any).name === 'Tutorial' || lobby.id === 'tutorial'
                       return (
                       <motion.div
                         key={lobby.id}
@@ -555,11 +556,13 @@ export default function BattleArena() {
                           {/* Entry Amount */}
                           <div className="mb-3 lg:mb-3">
                             <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
-                              {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
+                              {isTutorialLobby ? 'Tutorial' : (lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`)}
                             </div>
-                            <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
-                              {lobby.amount === 0 ? 'Tutorial Match' : 'Entry Fee'}
-                            </div>
+                            {(isTutorialLobby || lobby.amount !== 0) && (
+                              <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
+                                {isTutorialLobby ? 'Tutorial Match' : 'Entry Fee'}
+                              </div>
+                            )}
                           </div>
                           
                           {/* Players Count */}
