@@ -695,20 +695,20 @@ export default function BattleArena() {
         <div className="fixed bottom-4 left-4 z-[10050]">
           {chatOpen && (
             <div className="pointer-events-auto w-[340px] h-[480px] bg-black/40 backdrop-blur-xl border-2 border-yellow-500/30 rounded-2xl shadow-2xl mb-3 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 backdrop-blur-md border-b-2 border-yellow-500/30">
-                <div className="text-sm font-bold text-yellow-400 pixel-font flex items-center gap-2">
+              <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 backdrop-blur-md border-b-2 border-yellow-500/30">
+                <div className="text-[11px] font-bold text-yellow-400 pixel-font flex items-center gap-2 leading-none">
                   💬 ARENA CHAT
                 </div>
                 <div className="flex items-center gap-2">
                   {!xConnected && (
                     <button
-                      onClick={() => { try { window.location.href = '/api/auth/x/login' } catch {} }}
-                      className="px-3 py-1 rounded-md bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white text-xs font-bold pixel-font shadow-md transition-all"
+                      onClick={() => { try { window.open('/api/auth/x/login', '_blank', 'noopener,noreferrer') } catch {} }}
+                      className="px-2.5 py-1 rounded-md bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white text-[11px] font-bold pixel-font shadow-md transition-all"
                     >
                       🔗 X
                     </button>
                   )}
-                  <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-xs text-yellow-300 hover:text-yellow-400 font-bold pixel-font">−</button>
+                  <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-[11px] text-yellow-300 hover:text-yellow-400 font-bold pixel-font leading-none">−</button>
                 </div>
               </div>
               <div className="h-[calc(480px-52px)]">

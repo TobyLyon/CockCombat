@@ -135,12 +135,12 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-black/20 to-black/40">
       {/* Spectator Count Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-black/30 backdrop-blur-sm border-b border-yellow-500/20">
-        <div className="flex items-center gap-2 text-xs text-yellow-300/80 font-semibold">
-          <Users className="h-4 w-4" />
-          <span>{spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}</span>
+      <div className="flex items-center justify-between px-3 py-1.5 bg-black/30 backdrop-blur-sm border-b border-yellow-500/20">
+        <div className="flex items-center gap-1.5 text-[10px] text-yellow-300/80 font-semibold leading-none">
+          <Users className="h-3.5 w-3.5" />
+          <span className="truncate">{spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}</span>
         </div>
-        <Badge variant="outline" className="bg-green-600/30 text-green-300 border-green-500/40 text-xs pixel-font backdrop-blur-sm">
+        <Badge variant="outline" className="bg-green-600/30 text-green-300 border-green-500/40 text-[10px] leading-none pixel-font px-1.5 py-0.5 backdrop-blur-sm">
           LIVE
         </Badge>
       </div>
@@ -149,18 +149,18 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         <div className="flex flex-col gap-3">
           {messages.map((message) => (
             <div key={message.id} className="flex gap-2">
-              <Avatar className="h-8 w-8 ring-2 ring-yellow-500/20">
+              <Avatar className="h-7 w-7 ring-2 ring-yellow-500/20">
                 <AvatarImage src={message.user.avatar} />
-                <AvatarFallback className="bg-yellow-900/40 text-yellow-300 text-xs font-bold">{message.user.name.substring(0, 2)}</AvatarFallback>
+                <AvatarFallback className="bg-yellow-900/40 text-yellow-300 text-[10px] font-bold">{message.user.name.substring(0, 2)}</AvatarFallback>
               </Avatar>
               
               <div className="flex flex-col flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-[12px] leading-none text-yellow-400">{message.user.name}</span>
-                  <span className="text-xs text-gray-400 truncate">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-bold text-[11px] leading-none text-yellow-400 truncate max-w-[40%]">{message.user.name}</span>
+                  <span className="text-[10px] text-gray-400 truncate max-w-[40%]">
                     {message.user.address}
                   </span>
-                  <span className="text-[11px] text-gray-500">
+                  <span className="text-[10px] text-gray-500 whitespace-nowrap">
                     {typeof message.timestamp === 'string' 
                       ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
                       : formatDistanceToNow(message.timestamp, { addSuffix: true })}
@@ -169,7 +169,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
                   {/* suppress system/prediction badges */}
                 </div>
                 
-                <p className={`text-[13px] mt-1 text-white/90 break-words`}>
+                <p className={`text-[12px] mt-0.5 text-white/90 break-words leading-snug`}>
                   {message.message}
                 </p>
               </div>
