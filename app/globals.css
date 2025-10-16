@@ -283,6 +283,36 @@ body.arena-active {
   visibility: visible !important;
 }
 
+/* Center the wallet adapter modal viewport-wide */
+#wallet-adapter-modal-container,
+.wallet-adapter-modal-container {
+  inset: 0 !important;            /* fill viewport */
+  display: grid !important;       /* enable centering */
+  place-items: center !important; /* center modal */
+}
+
+/* Ensure the modal itself doesn't inherit stray offsets */
+#wallet-adapter-modal,
+.wallet-adapter-modal {
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+}
+
+/* Ensure overlay is below modal so clicks are not blocked */
+.wallet-adapter-modal-overlay {
+  z-index: 100000 !important; /* overlay */
+}
+
+#wallet-adapter-modal,
+.wallet-adapter-modal,
+.wallet-adapter-dropdown,
+.wallet-adapter-dropdown-list,
+.wallet-adapter-dropdown-list-active {
+  z-index: 100001 !important; /* modal and dropdown above overlay */
+}
+
 /* Do not hide wallet adapter UI when arena-mode is active */
 .arena-mode ~ .wallet-adapter-modal,
 .arena-mode ~ .wallet-adapter-modal-container,
