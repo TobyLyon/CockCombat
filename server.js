@@ -2399,8 +2399,10 @@ preparePromise.then(() => {
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
             // Only allow majority logic when there are 3 or more humans (remove 2-human special-case)
-            // Majority rule also applies when there are exactly 2 humans and 1 is ready
-            const twoHumanMajority = (totalHumans === 2 && readyHumans.length === 1 && eligiblePlayers.length >= minPlayers)
+            // Majority rule only applies when there are 3 or more humans for free/wagered lobbies.
+            // For tutorial lobbies we allow a two-human majority (1 ready) to start a grace.
+            const isTutorialLobby = /tutorial/i.test(String(lobbyId || ''));
+            const twoHumanMajority = (isTutorialLobby && totalHumans === 2 && readyHumans.length === 1 && eligiblePlayers.length >= minPlayers);
             const hasMajorityReady = ((totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers) || twoHumanMajority);
 
             if (!global.majorityGrace) global.majorityGrace = Object.create(null);
