@@ -61,10 +61,11 @@ async function getPlayerUsername(playerId: string): Promise<string> {
       }
     );
 
+    const lower = String(playerId || '').toLowerCase()
     const { data: profile } = await supabase
       .from('profiles')
       .select('username')
-      .eq('wallet_address', playerId)
+      .or(`wallet_address.eq.${playerId},wallet_address.eq.${lower}`)
       .single();
 
     const username = profile?.username || playerId.slice(0, 8) + '...';

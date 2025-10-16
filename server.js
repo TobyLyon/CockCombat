@@ -2234,6 +2234,55 @@ preparePromise.then(() => {
     });
   });
 
+  // Live Render status poller → emits `server_status` to all clients
+  try {
+    if (!global.__render_status_interval) {
+      const intervalMs = Math.max(5000, parseInt(String(process.env.RENDER_STATUS_POLL_MS || ''), 10) || 15000);
+      const serviceId = process.env.RENDER_SERVICE_ID || '';
+      const apiKey = process.env.RENDER_API_KEY || '';
+      const parseStatus = (json) => {
+        try {
+          if (!json) return { healthy: true, status: 'unknown' };
+          // Support both list and single objects
+          const svc = Array.isArray(json) ? json.find((s) => s && (s.service && (s.service.id === serviceId || s.service.slug))) || json[0] : json;
+          const state = (svc && (svc.service || svc).status) || (svc && svc.status) || 'unknown';
+          const healthy = !/deploying|building|degraded|unhealthy|failed|error|restarting/i.test(String(state))
+          return { healthy, status: String(state) };
+        } catch { return { healthy: true, status: 'unknown' } }
+      };
+      const poll = async () => {
+        try {
+          let statusObj = { healthy: true, status: 'unknown' };
+          // Prefer explicit health checks if available
+          const healthUrl = process.env.RENDER_HEALTH_URL || '';
+          if (healthUrl) {
+            try {
+              const res = await fetch(healthUrl, { cache: 'no-store' }).catch(() => null);
+              if (res) statusObj.healthy = res.ok;
+              statusObj.status = res && res.ok ? 'healthy' : 'unavailable';
+            } catch {}
+          }
+          // Fallback to Render API if configured
+          if ((!statusObj.healthy || statusObj.status === 'unknown') && apiKey && serviceId) {
+            try {
+              const res = await fetch(`https://api.render.com/v1/services/${serviceId}`, {
+                headers: { 'Authorization': `Bearer ${apiKey}` },
+                cache: 'no-store'
+              }).catch(() => null);
+              const json = res ? await res.json().catch(() => null) : null;
+              statusObj = parseStatus(json);
+            } catch {}
+          }
+          // Emit to everyone; clients decide UI
+          try { io.emit('server_status', { source: 'render', ...statusObj, ts: Date.now() }); } catch {}
+        } catch {}
+      };
+      // Kick and schedule
+      poll();
+      global.__render_status_interval = setInterval(poll, intervalMs);
+    }
+  } catch {}
+
   // Check if lobby is ready to start
   async function checkLobbyReadyStatus(lobbyId, io) {
     try {

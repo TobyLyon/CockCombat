@@ -64,12 +64,32 @@ export default function NavBar() {
     }
   }
 
+  // Measure header height and expose as CSS variable for HUD safe offset
+  const headerRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     setIsMounted(true);
+    const el = headerRef.current
+    if (!el) return
+    const setVar = () => {
+      try {
+        const h = el.getBoundingClientRect().height
+        document.documentElement.style.setProperty('--cc-nav-h', `${Math.max(0, Math.round(h))}px`)
+      } catch {}
+    }
+    setVar()
+    let ro: ResizeObserver | null = null
+    try {
+      ro = new ResizeObserver(() => setVar())
+      ro.observe(el)
+    } catch {}
+    const onResize = () => setVar()
+    window.addEventListener('resize', onResize)
+    return () => { try { if (ro && el) ro.unobserve(el) } catch {}; window.removeEventListener('resize', onResize) }
   }, []);
 
   return (
     <header 
+      ref={headerRef as any}
       className="relative z-[100004] flex items-center px-2 sm:px-4 md:px-8 py-2 sm:py-3 md:py-4 bg-[#222222] border-b-4 border-[#111111] text-white shadow-md gap-2 sm:gap-4 md:gap-8 flex-shrink-0"
       style={{
         paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',

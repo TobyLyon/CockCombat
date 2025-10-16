@@ -393,6 +393,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   // Majority grace seconds left (server-driven)
   const [majoritySeconds, setMajoritySeconds] = useState<number | null>(null)
   const [activeHumans, setActiveHumans] = useState<number>(0)
+  const [serverStatus, setServerStatus] = useState<{ healthy: boolean; status: string; ts?: number } | null>(null)
 
   // Keep a ref of latest players for cross-effect consistency
   useEffect(() => {
@@ -433,8 +434,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       } catch {}
     }
     socket.on('lobby_counts_snapshot', onCountsSnapshot)
+    const onServerStatus = (payload: any) => {
+      try {
+        setServerStatus({ healthy: Boolean(payload?.healthy), status: String(payload?.status || 'unknown'), ts: Number(payload?.ts) || Date.now() })
+      } catch {}
+    }
+    socket.on('server_status', onServerStatus)
+    // Request immediate snapshot
+    try { socket.emit('get_render_status') } catch {}
     try { socket.emit('get_lobby_counts') } catch {}
-    return () => { socket.off('majority_grace', onGrace); socket.off('lobby_counts', onLobbyCounts); socket.off('lobby_counts_snapshot', onCountsSnapshot) }
+    return () => { socket.off('majority_grace', onGrace); socket.off('lobby_counts', onLobbyCounts); socket.off('lobby_counts_snapshot', onCountsSnapshot); socket.off('server_status', onServerStatus) }
   }, [socket])
 
   const handleReadyToggle = async () => {
@@ -622,6 +631,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   return (
     <div ref={rootRef} className="relative h-full w-full flex flex-col bg-gray-900/50 pointer-events-auto" style={{ minHeight: '100dvh' }}>
+      {/* Render/Server Status Banner */}
+      {!!serverStatus && !serverStatus.healthy && (
+        <div className="absolute top-0 left-0 right-0 z-50">
+          <div className="mx-2 mt-2 rounded-md border border-red-600/50 bg-red-900/80 backdrop-blur px-3 py-2 text-red-100 text-xs text-center">
+            Server updating/restarting ({serverStatus.status}). Matches and bets are temporarily paused.
+          </div>
+        </div>
+      )}
       {/* Countdown Overlay - restored retro minimal style */}
       <AnimatePresence>
         {countdown !== null && countdown > 0 && (

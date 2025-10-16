@@ -51,8 +51,9 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     // Fixed positioning with proper z-index and spacing - no overflow, better responsive margins
     <div className="absolute inset-0 z-20 pointer-events-none pixel-font text-white overflow-hidden">
 
-      {/* Top Bar Area - Better spacing with safe margins and responsive design */}
-      <div className="absolute top-0 left-0 right-0 p-1 sm:p-2 md:p-4 flex justify-between items-start flex-wrap gap-1 sm:gap-2">
+      {/* Top Bar Area - push below global nav via CSS var set by NavBar */}
+      <div className="absolute left-0 right-0 p-1 sm:p-2 md:p-4 flex justify-between items-start flex-wrap gap-1 sm:gap-2"
+           style={{ top: 'calc(var(--cc-nav-h, 56px) + 4px)' }}>
         
         {/* Top Left: Chickens Left */}
         <div className="bg-black/80 border border-yellow-500/60 rounded px-1.5 sm:px-2 py-0.5 sm:py-1 shadow backdrop-blur-sm">
@@ -108,8 +109,9 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
         </div>
       </div>
 
-      {/* Bottom Center: Player Health - Better positioning with safe margins */}
-      <div className="absolute bottom-2 sm:bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+      {/* Bottom Center: Player Health - safe bottom inset */}
+      <div className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center"
+           style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
         {/* Health Bar */}
         <div className="w-40 sm:w-56 lg:w-72 h-3 sm:h-4 lg:h-5 bg-black/80 border border-yellow-500/60 rounded-lg overflow-hidden p-0.5 shadow backdrop-blur-sm">
           <div 
@@ -126,8 +128,9 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
         </div>
       </div>
 
-      {/* Bottom Right: Control Panel - Better positioning with safe margins */}
-      <div className="absolute bottom-1.5 sm:bottom-3 lg:bottom-5 right-1.5 sm:right-3 lg:right-5 scale-90 sm:scale-95 lg:scale-100">
+      {/* Bottom Right: Control Panel - safe bottom/right inset */}
+      <div className="absolute right-1.5 sm:right-3 lg:right-5 scale-90 sm:scale-95 lg:scale-100"
+           style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
         <ControlPanel />
       </div>
 
