@@ -728,6 +728,14 @@ function SceneContent({
         if (!targetId) return
         const hp = Number(payload?.hp)
         if (!Number.isFinite(hp)) return
+        // If this update targets the local player, show a brief hit flash
+        try {
+          if (selfIdRef.current && targetId === selfIdRef.current) {
+            if (selfHitTimerRef.current) { clearTimeout(selfHitTimerRef.current); selfHitTimerRef.current = null }
+            setSelfHitActive(true)
+            selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
+          }
+        } catch {}
         // Apply via damage handler by inferring delta; prefer direct set when delta cannot be inferred
         try {
           if (onPlayerDamage) {
@@ -1410,7 +1418,7 @@ function SceneContent({
       />
       {selfHitActive && (
         <Html fullscreen style={{ pointerEvents: 'none' }}>
-          <div className="fixed inset-0 z-[100]" style={{ background: 'rgba(255,0,0,0.18)', transition: 'opacity 120ms ease-out' }} />
+          <div className="fixed inset-0 z-[10050]" style={{ background: 'rgba(255,0,0,0.22)', transition: 'opacity 120ms ease-out' }} />
         </Html>
       )}
     </>

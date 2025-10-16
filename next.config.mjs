@@ -53,7 +53,7 @@ const nextConfig = {
       ...(config.resolve.alias || {}),
       '@': path.resolve(process.cwd()),
     }
-    // Enable filesystem cache locally; disable in production builds to reduce artifact size/upload time
+    // Enable filesystem cache for faster rebuilds in both dev and prod
     if (dev) {
       config.cache = {
         type: 'filesystem',
@@ -62,7 +62,12 @@ const nextConfig = {
         },
       }
     } else {
-      config.cache = false
+      config.cache = {
+        type: 'filesystem',
+        buildDependencies: {
+          config: [fileURLToPath(import.meta.url)],
+        },
+      }
     }
     return config
   },
