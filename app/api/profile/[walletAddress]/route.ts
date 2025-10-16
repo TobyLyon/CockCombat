@@ -11,7 +11,8 @@ export async function GET(
   context: { params: Promise<{ walletAddress: string }> }
 ) {
   try {
-    const { walletAddress } = await context.params;
+    let { walletAddress } = await context.params;
+    walletAddress = String(walletAddress || '').trim();
     
     if (!walletAddress) {
       return NextResponse.json(
@@ -104,6 +105,7 @@ export async function PATCH(
       );
     }
     
+    // Normalize wallet address matching for updates: accept either case variant
     const updatedProfile = await ProfileService.updateProfile(walletAddress, validUpdates);
     
     if (!updatedProfile) {

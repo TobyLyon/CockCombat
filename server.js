@@ -73,8 +73,12 @@ async function getUsernameForWallet(wallet) {
     if (!key) return '';
     const cached = usernameCache.get(key);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.name;
-                const baseUrl = `http://localhost:${port}`;
-    const res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
+    const baseUrl = `http://localhost:${port}`;
+    // Try canonical (as-is) then lowercase variant to handle stored lowercase records
+    let res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
+    if (!res || !res.ok) {
+      try { res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key.toLowerCase())}`).catch(() => null); } catch {}
+    }
     let name = null;
     if (res && res.ok) {
       try { const data = await res.json(); name = (data && data.username) ? String(data.username) : null; } catch {}

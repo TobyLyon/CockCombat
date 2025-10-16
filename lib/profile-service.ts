@@ -13,10 +13,13 @@ export class ProfileService {
     console.log('Fetching profile for:', walletAddress)
     try {
       const db = getWriteClient()
+      const addr = String(walletAddress || '').trim()
+      const addrLower = addr.toLowerCase()
       const { data, error } = await db
         .from('profiles')
         .select('*')
-        .eq('wallet_address', walletAddress)
+        // Match exact wallet or its lowercase variant to be resilient to case normalization
+        .or(`wallet_address.eq.${addr},wallet_address.eq.${addrLower}`)
         .maybeSingle()
 
       if (error && error.code !== 'PGRST116') {
