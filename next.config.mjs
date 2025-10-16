@@ -26,9 +26,19 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Reduce output artifact size to speed upload/deploy on Render
+  outputFileTracingExcludes: {
+    '*': [
+      '**/*.map',
+      '**/*.md',
+      '**/test/**',
+      '**/__tests__/**',
+      '**/*.tsbuildinfo',
+    ],
+  },
   // Prevent R3F/Three from being bundled on the server
   serverExternalPackages: ['three', '@react-three/fiber', '@react-three/drei'],
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     // Don't attempt to bundle Three.js on server
     if (isServer) {
       config.externals.push({
@@ -43,12 +53,16 @@ const nextConfig = {
       ...(config.resolve.alias || {}),
       '@': path.resolve(process.cwd()),
     }
-    // Enable filesystem cache to speed up rebuilds
-    config.cache = {
-      type: 'filesystem',
-      buildDependencies: {
-        config: [fileURLToPath(import.meta.url)],
-      },
+    // Enable filesystem cache locally; disable in production builds to reduce artifact size/upload time
+    if (dev) {
+      config.cache = {
+        type: 'filesystem',
+        buildDependencies: {
+          config: [fileURLToPath(import.meta.url)],
+        },
+      }
+    } else {
+      config.cache = false
     }
     return config
   },
