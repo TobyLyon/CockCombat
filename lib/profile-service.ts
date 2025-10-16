@@ -20,8 +20,8 @@ export class ProfileService {
       const { data, error } = await db
         .from('profiles')
         .select('*')
-        // Match exact wallet or its lowercase variant to be resilient to case normalization
-        .or(`wallet_address.eq.${addr},wallet_address.eq.${addrLower}`)
+        // Case-insensitive exact match on wallet address
+        .ilike('wallet_address', addr)
         .maybeSingle()
 
       if (error && error.code !== 'PGRST116') {
