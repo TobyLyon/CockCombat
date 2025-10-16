@@ -362,7 +362,26 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     socket.on('match_starting', handleMatchStarting);
     socket.on('match_started', handleMatchStarted);
     socket.on('round_start', handleMatchStarted);
-    // no refresh_lobby_state listener
+    // Refresh handler: ask server for authoritative snapshot when nudged
+    const onRefresh = () => {
+      try { socket.emit('get_lobby_state', lobby.id) } catch {}
+    }
+    socket.on('refresh_lobby_state', onRefresh)
+    // Also accept lobby_synced as a full snapshot
+    const onLobbySynced = (payload: any) => {
+      try {
+        if (!payload || payload.id !== lobby.id) return
+        const next = (payload.players || []).map((p: any) => ({
+          playerId: String(p.playerId || '').toLowerCase(),
+          username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
+          chickenName: p.chickenName || p.chickenId || 'Default',
+          isReady: p.isAi ? true : Boolean(p.isReady),
+          isAi: !!p.isAi,
+        }))
+        setPlayers(next)
+      } catch {}
+    }
+    socket.on('lobby_synced', onLobbySynced)
 
     return () => {
       // no snapshot handlers to remove
@@ -374,11 +393,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('match_starting', handleMatchStarting);
       socket.off('match_started', handleMatchStarted);
       socket.off('round_start', handleMatchStarted);
+      socket.off('refresh_lobby_state', onRefresh)
+      socket.off('lobby_synced', onLobbySynced)
       // no refresh timer
     };
   }, [socket, onStartMatch]);
 
   // Removed snapshot-based HTTP fallbacks and initial snapshot; server events are authoritative
+  // On mount, proactively request a full snapshot to populate usernames and readiness accurately
+  useEffect(() => {
+    if (!socket) return
+    try { socket.emit('get_lobby_state', lobby.id) } catch {}
+  }, [socket, lobby.id])
 
   // Countdown effect
   useEffect(() => {

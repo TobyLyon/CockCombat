@@ -1057,7 +1057,17 @@ function SceneContent({
       let followRotY = selfRotation.y
       if (isLocalDead) {
         try {
-          const spectateId = (typeof window !== 'undefined') ? (window as any).__spectate_target_id : null
+          let spectateId = (typeof window !== 'undefined') ? (window as any).__spectate_target_id : null
+          // Auto-pick a spectate target if none selected
+          if (!spectateId) {
+            try {
+              const firstAlive = (players as any[] || []).find(p => p && !p.isPlayer && p.isAlive)
+              if (firstAlive && typeof window !== 'undefined') {
+                spectateId = firstAlive.id
+                ;(window as any).__spectate_target_id = spectateId
+              }
+            } catch {}
+          }
           if (spectateId) {
             const tgt = (players as any[] || []).find(p => p && p.id === spectateId && p.isAlive)
             if (tgt) {

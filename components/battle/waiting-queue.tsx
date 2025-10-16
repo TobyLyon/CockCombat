@@ -414,20 +414,33 @@ export default function WaitingQueue({
       console.log('[WaitingQueue] Updated currentLobby players:', (payload.players || []).length || 0)
     }
 
-    const onLobbySync = (_payload: any) => {}
+    const onLobbySync = (payload: any) => {
+      try {
+        if (!payload || payload.id !== lobby.id) return
+        const arr = Array.isArray(payload.players) ? payload.players : []
+        applyRosterToLobby(arr.map((p: any) => ({ playerId: p.playerId, wallet: p.playerId, username: p.username, isAi: p.isAi, chickenName: p.chickenName, isReady: p.isReady })))
+      } catch {}
+    }
 
-    // no refresh_lobby_state hooks
+    // refresh_lobby_state: re-request snapshot for safety
+    const onRefresh = () => { try { socket.emit('get_lobby_state', lobby.id) } catch {} }
 
     socket.on('lobby_updated', onLobbyUpdated)
     socket.on('lobby_synced', onLobbySync)
-    // no refresh_lobby_state hooks
+    socket.on('refresh_lobby_state', onRefresh)
 
     return () => {
       socket.off('lobby_updated', onLobbyUpdated)
       socket.off('lobby_synced', onLobbySync)
-      // no refresh_lobby_state cleanup
+      socket.off('refresh_lobby_state', onRefresh)
     }
   }, [socket, isConnected, lobby.id, lobby.matchType, currentLobby.players])
+
+  // Proactively request a full snapshot on mount and when socket connects
+  useEffect(() => {
+    if (!socket || !isConnected) return
+    try { socket.emit('get_lobby_state', lobby.id) } catch {}
+  }, [socket, isConnected, lobby.id])
 
   // Ensure we are in the lobby room while on the waiting screen
   useEffect(() => {
