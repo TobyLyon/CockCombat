@@ -1751,7 +1751,7 @@ export default React.memo(function EnhancedArenaScene({
       <KeyboardControls map={controlsMap}>
       <Canvas 
           style={{ width: '100%', height: '100%', display: 'block' }}
-          shadows
+          shadows={typeof window !== 'undefined' ? window.innerWidth >= 768 : true}
           camera={{ 
             fov: 75, 
             near: 0.1, 
@@ -1759,14 +1759,14 @@ export default React.memo(function EnhancedArenaScene({
             position: [0, 10, 20] 
           }}
           gl={{ 
-            antialias: true,
+            antialias: !(typeof window !== 'undefined' && window.innerWidth < 768),
             alpha: false,
             preserveDrawingBuffer: false,
             powerPreference: "high-performance",
             stencil: false
           }}
           frameloop="always"
-          dpr={[1, 1.5]}
+          dpr={typeof window !== 'undefined' && window.devicePixelRatio > 1.5 ? (window.innerWidth < 768 ? [1, 1.25] : [1, 1.5]) : [1, 1.25]}
           onCreated={({ gl }) => {
             try {
               const canvas = gl.domElement as HTMLCanvasElement;

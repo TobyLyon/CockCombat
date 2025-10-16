@@ -247,13 +247,14 @@ export default function EnhancedChickenRoyale({
       <div className="w-full h-full">
         <Canvas 
           style={{ width: '100%', height: '100%', display: 'block' }}
-          shadows
+          shadows={typeof window !== 'undefined' ? window.innerWidth >= 768 : true}
           camera={{ fov: 75, near: 0.1, far: 50000 }}
           gl={{ 
-            antialias: true, 
+            antialias: !(typeof window !== 'undefined' && window.innerWidth < 768), 
             alpha: false,
             preserveDrawingBuffer: false
           }}
+          dpr={typeof window !== 'undefined' && window.devicePixelRatio > 1.5 ? (window.innerWidth < 768 ? [1, 1.25] : [1, 1.5]) : [1, 1.25]}
         >
           <color attach="background" args={['#87CEEB']} />
           <fog attach="fog" args={['#87CEEB', 30, 500]} />
