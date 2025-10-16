@@ -560,8 +560,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     const totalChickens = roster.length;
     const positions = generateOpponentPositions(totalChickens, ringRadius);
     const positionedPlayers: PlayerStatus[] = roster.map((entry: any, index) => {
-      const id = String(entry.id);
-      const isSelf = id === myId;
+      const rawId = String(entry.id || '');
+      const id = rawId;
+      const isSelf = (rawId.toLowerCase() === String(myId || '').toLowerCase());
       // Ensure every entry has colors. Guests sometimes arrive without colors; assign deterministically.
       const colors = (entry as any).colors && Object.keys((entry as any).colors).length > 0
         ? (entry as any).colors
