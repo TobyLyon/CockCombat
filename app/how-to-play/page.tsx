@@ -232,12 +232,12 @@ export default function HowToPlayPage() {
           </motion.p>
 
           {/* Beta notes / small graces */}
-          <div className="mx-auto max-w-3xl mb-5">
-            <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/20 backdrop-blur-md p-3 text-[11px] text-yellow-200/90">
-              <div className="flex items-center gap-2 font-bold text-yellow-300 text-xs">
+          <div className="mx-auto max-w-md md:max-w-lg mb-5">
+            <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/20 backdrop-blur-md p-3 text-[11px] leading-snug text-yellow-200/90 text-center">
+              <div className="flex items-center justify-center gap-2 font-bold text-yellow-300 text-xs">
                 <span>⚠️ Beta notes</span>
               </div>
-              <ul className="mt-1 grid gap-1.5">
+              <ul className="mt-2 space-y-1.5">
                 <li>• Payments and refunds typically confirm in seconds on Solana.</li>
                 <li>• If the UI looks desynced, refresh the page to resync state.</li>
                 <li>• Cleanest refund path: toggle Ready OFF, then tap "Leave Lobby" before countdown starts.</li>
