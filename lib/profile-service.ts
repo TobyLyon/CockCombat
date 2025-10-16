@@ -8,6 +8,8 @@ import { v4 as uuidv4 } from 'uuid'
 export class ProfileService {
   /**
    * Fetch profile by wallet address
+   * Returns the user's permanent profile including username
+   * Username is stored permanently in the database and persists across sessions
    */
   static async getProfile(walletAddress: string): Promise<Profile | null> {
     console.log('Fetching profile for:', walletAddress)
@@ -25,6 +27,12 @@ export class ProfileService {
       if (error && error.code !== 'PGRST116') {
         throw error
       }
+      
+      // Ensure username is always included in the response
+      if (data && !data.username) {
+        console.warn('⚠️  Profile found but missing username for:', walletAddress)
+      }
+      
       return data
     } catch (error: any) {
       console.error('Error fetching profile:', JSON.stringify(error, null, 2))

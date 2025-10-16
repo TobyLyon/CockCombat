@@ -303,6 +303,7 @@ body.arena-active {
 /* Ensure overlay is below modal so clicks are not blocked */
 .wallet-adapter-modal-overlay {
   z-index: 100000 !important; /* overlay */
+  pointer-events: none !important; /* do not block clicks */
 }
 
 #wallet-adapter-modal,
