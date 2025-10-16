@@ -47,7 +47,7 @@ export default function NavBar() {
   const [copied, setCopied] = useState(false)
 
   const TOKEN_MINT = "V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump"
-  const tokenEndPreview = TOKEN_MINT
+  const tokenEndPreview = `…${TOKEN_MINT.slice(-6)}`
 
   const handleCopyTokenAddress = async () => {
     try {
@@ -112,7 +112,7 @@ export default function NavBar() {
 
         {/* Copy Token - moved to left group after music controls */}
         <div
-          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[140px] border-white/20 bg-white/5 text-white/80`}
+          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[110px] border-white/20 bg-white/5 text-white/80`}
           aria-label="Token contract address"
           title={TOKEN_MINT}
         >
