@@ -102,22 +102,11 @@ export default function SpectatorPanel({
             
             <TabsContent value="chat" className="flex-1 p-0 m-0 overflow-hidden">
               <div className="relative h-full">
-                <div className="absolute top-2 right-2 z-10">
-                  {!xConnected && (
-                    <a
-                      href="/api/auth/x/login"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2 py-0.5 rounded bg-[#1DA1F2] text-white text-[10px] font-semibold shadow hover:opacity-90"
-                    >
-                      Connect X to chat
-                    </a>
-                  )}
-                </div>
+                <div className="absolute top-2 right-2 z-10" />
                 <SpectatorChat 
                   matchId={matchId} 
                   onNewMessage={handleNewMessage}
-                  canSend={xConnected}
+                  canSend={true}
                 />
               </div>
             </TabsContent>

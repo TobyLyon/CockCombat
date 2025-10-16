@@ -733,19 +733,11 @@ export default function BattleArena() {
                   💬 ARENA CHAT
                 </div>
                 <div className="flex items-center gap-2">
-                  {!xConnected && (
-                    <button
-                      onClick={() => { try { window.open('/api/auth/x/login', '_blank', 'noopener,noreferrer') } catch {} }}
-                      className="px-2.5 py-1 rounded-md bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white text-[11px] font-bold pixel-font shadow-md transition-all"
-                    >
-                      🔗 X
-                    </button>
-                  )}
                   <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-[11px] text-yellow-300 hover:text-yellow-400 font-bold pixel-font leading-none">−</button>
                 </div>
               </div>
               <div className="h-[calc(480px-52px)]">
-                <SpectatorChat matchId={activeMatchId} canSend={xConnected} />
+                <SpectatorChat matchId={activeMatchId} canSend={true} />
               </div>
             </div>
           )}
