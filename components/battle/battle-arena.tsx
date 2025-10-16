@@ -389,8 +389,8 @@ export default function BattleArena() {
   }, [lobbies, filter]);
 
   const handleJoinLobby = async (lobby: Lobby) => {
-    // For FREE tutorial matches, allow guest join when no wallet
-    const joiningAsGuest = (!publicKey && lobby.matchType === 'tutorial' && lobby.amount === 0);
+    // For any FREE matches (amount === 0), allow guest join when no wallet
+    const joiningAsGuest = (!publicKey && lobby.amount === 0);
     // Require wallet for paid/ranked lobbies
     if (!publicKey && !joiningAsGuest) {
       toast.error("Connect your wallet to join ranked matches", { duration: 2500 });
@@ -540,7 +540,7 @@ export default function BattleArena() {
                       const playerCount = live ? Math.max(0, Number(live.liveHumans) || 0) : 0
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
-                      const isTutorialLobby = (lobby as any).name === 'Tutorial' || lobby.id === 'tutorial'
+                      const isTutorialLobby = (lobby as any).name === 'Tutorial' || lobby.id.startsWith('tutorial')
                       return (
                       <motion.div
                         key={lobby.id}
