@@ -268,6 +268,32 @@ body.arena-active {
 
 /* Remove custom overrides for wallet adapter UI to use default styles */
 
+/* Ensure wallet adapter modal/dropdowns are always on top of the app UI */
+.wallet-adapter-modal,
+.wallet-adapter-modal-container,
+.wallet-adapter-modal-overlay,
+.wallet-adapter-dropdown,
+.wallet-adapter-dropdown-list,
+.wallet-adapter-dropdown-list-active,
+#wallet-adapter-modal,
+#wallet-adapter-modal-container {
+  z-index: 100000 !important;
+  position: fixed;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
+/* Do not hide wallet adapter UI when arena-mode is active */
+.arena-mode ~ .wallet-adapter-modal,
+.arena-mode ~ .wallet-adapter-modal-container,
+.arena-mode ~ .wallet-adapter-modal-overlay,
+.arena-mode ~ .wallet-adapter-dropdown,
+.arena-mode ~ #wallet-adapter-modal,
+.arena-mode ~ #wallet-adapter-modal-container {
+  display: block !important;
+  visibility: visible !important;
+}
+
 /* Ensure safe areas on mobile devices */
 @supports (padding: env(safe-area-inset-top)) {
   body {
