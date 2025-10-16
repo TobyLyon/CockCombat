@@ -573,7 +573,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         id,
         name: displayName,
         isPlayer: isSelf,
-        isAi: Boolean(entry.isAi),
+        // Robust AI detection: trust flag, otherwise infer from id
+        isAi: Boolean(entry.isAi || (typeof id === 'string' && id.startsWith('ai-'))),
         position: positions[index].position,
         rotation: positions[index].rotation,
         colors,

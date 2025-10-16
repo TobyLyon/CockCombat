@@ -855,8 +855,9 @@ function SceneContent({
             // Respect invulnerability window at round start for opponents
             const isInvulnerable = Date.now() < invulnerableUntilRef.current
             if (isInvulnerable) break
-            // Emit damage for humans via network; still apply local for AI
-            if (!opponent.isAi && socket) {
+            // Emit damage over network when the target is a human; otherwise apply locally.
+            // If the opponent isn't explicitly flagged, fall back to network emit (symmetric rules).
+            if ((opponent as any).isAi === false && socket) {
               try {
                 const msid = (window as any)?.__last_match_session_id
                 // Send once and locally show hit flash immediately
@@ -864,7 +865,17 @@ function SceneContent({
                 socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
                 try { if (onPlayerDamage) onPlayerDamage(opponent.id, 0.5) } catch {}
               } catch {}
+            } else if ((opponent as any).isAi === true && onPlayerDamage) {
+              onPlayerDamage(opponent.id, 1)
+            } else if (socket) {
+              // Unknown type: prefer networked damage to keep consistency
+              try {
+                const msid = (window as any)?.__last_match_session_id
+                socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
+                try { if (onPlayerDamage) onPlayerDamage(opponent.id, 0.5) } catch {}
+              } catch {}
             } else if (onPlayerDamage) {
+              // Fallback: apply locally
               onPlayerDamage(opponent.id, 1)
             }
             break;
