@@ -673,10 +673,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  // Tutorial allows solo human (with AI) so minimum is 1; ranked remains 2
-  const minRequired = lobby.matchType === 'tutorial' ? 1 : 2
+  // Tutorial: 1; Free: 2; Ranked: 4 humans
+  const minRequired = lobby.matchType === 'tutorial' ? 1 : (lobby.amount === 0 ? 2 : 4)
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
-  const allPlayersReady = players.length >= minRequired && players.every(p => p.isReady || p.isAi)
+  const humanPlayersJoined = players.filter(p => !p.isAi).length
+  const allPlayersReady = (humanPlayersJoined >= minRequired) && players.every(p => p.isReady || p.isAi)
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()
 
   // Countdown is driven by server; no client nudges

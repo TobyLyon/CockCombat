@@ -47,6 +47,18 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * Lightweight session probe (used by client to detect X/sol session presence)
+ */
+export async function GET() {
+  // We do not use NextAuth; return a stable shape for client probes
+  try {
+    return NextResponse.json({ connected: false });
+  } catch {
+    return NextResponse.json({ connected: false }, { status: 200 });
+  }
+}
+
+/**
  * Invalidate a session (logout)
  */
 export async function DELETE(req: NextRequest) {

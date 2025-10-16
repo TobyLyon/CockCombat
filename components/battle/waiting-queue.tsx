@@ -465,6 +465,11 @@ export default function WaitingQueue({
 
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
+  // Tutorial: 1; Free: 2; Ranked: 4 humans (secondary confirmation screen)
+  const minRequired = lobby.matchType === 'tutorial' ? 1 : (lobby.amount === 0 ? 2 : 4)
+  const humanPlayersJoined = (players || []).filter((p: any) => !p.isAi).length
+  // Keep local allPlayersReady aligned with min humans rule to control UI banners
+  try { if (!allPlayersReady && humanPlayersJoined >= minRequired && (players || []).every((p: any) => p.isReady || p.isAi)) setAllPlayersReady(true) } catch {}
   
   // Remove immediate local start; rely on arena_lock_roster schedule or server round_start
   
@@ -647,7 +652,7 @@ export default function WaitingQueue({
                  <h4 className="text-sm lg:text-lg font-bold text-white pixel-font mb-2">Requirements</h4>
                 <div className="flex items-center text-xs lg:text-sm text-gray-300">
                  <AlertCircle className="h-3 w-3 lg:h-4 lg:w-4 mr-2 text-yellow-400 flex-shrink-0" />
-                 <span>2 players minimum to start.</span>
+                 <span>{lobby.amount === 0 ? '2' : '4'} human players minimum to start.</span>
                </div>
               </div>
             )}

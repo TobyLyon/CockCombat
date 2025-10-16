@@ -7,8 +7,10 @@ type AnyFn = (...args: any[]) => any
 
 // Solana wallet hook backed by wallet-adapter
 export function useWallet() {
-  // Access the adapter, but guard property reads so we don't throw
-  const base = useSolanaWallet() as any
+  // Access the adapter; if provider is missing, return a safe fallback to avoid throwing
+  const base = (() => {
+    try { return useSolanaWallet() as any } catch { return {} as any }
+  })()
 
   const safeGet = <T,>(getter: () => T, fallback: T): T => {
     try { return getter() } catch { return fallback }
