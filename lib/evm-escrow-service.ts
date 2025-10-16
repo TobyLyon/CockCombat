@@ -104,7 +104,7 @@ class EvmEscrowService {
       const tx = await w.wallet.sendTransaction({ to, value: wei });
       const receipt = await tx.wait(1);
       if (!receipt || receipt.status !== 1) {
-        throw new Error('BNB transfer failed');
+        throw new Error('Transfer failed');
       }
       return tx.hash;
     });

@@ -105,7 +105,7 @@ export async function sendIdempotentPayment(args: SendArgs) {
         type,
         from_address: from.address,
         to_address: to,
-        token: 'BNB',
+        token: 'SOL',
         amount_wei: amountWei.toString(),
         state: 'pending',
       }, { onConflict: 'op_id' })

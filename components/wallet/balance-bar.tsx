@@ -67,7 +67,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
           fetchBalances()
           try {
             const amt = typeof p?.amount === 'number' ? p.amount : null
-            const cur = p?.currency || (isBsc() ? 'BNB' : 'SOL')
+            const cur = p?.currency || 'SOL'
             const nice = amt !== null ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(amt) : ''
             toast.success(`Winnings received${nice ? `: ${nice} ${cur}` : ''}`)
           } catch {}
@@ -100,7 +100,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
         <div className="flex items-center gap-1.5 text-white/90">
           <BnbLogo className="h-4 w-4" />
           <span className="font-semibold">{bnb.toFixed(4)}</span>
-          {!compact && <span className="text-xs text-white/70 ml-1">BNB</span>}
+          {!compact && <span className="text-xs text-white/70 ml-1">SOL</span>}
         </div>
       )}
 
@@ -127,7 +127,7 @@ function SolanaLogo({ className = "h-4 w-4" }: { className?: string }) {
 
 
 function BnbLogo({ className = "h-4 w-4" }: { className?: string }) {
-  // Simplified BNB glyph constructed from diamonds
+  // Simplified SOL glyph placeholder
   return (
     <svg className={className} viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
       <g fill="#F0B90B">

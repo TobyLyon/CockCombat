@@ -688,7 +688,7 @@ export default function BattleArena() {
                       // Capture match meta for post-game display
                       try {
                         const humans = (joinedLobby.players || []).filter(p => !p.isAi).length || 0;
-                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || (isBsc() ? 'BNB' : 'SOL'), matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
+                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || 'SOL', matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
                       } catch {}
                     }}
                   />

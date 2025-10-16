@@ -521,7 +521,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           } catch (e: any) {
             if (e && (e.code === 4902 || e.code === -32603)) {
               try {
-                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BNB Smart Chain', nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com'] }] });
+            await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BSC', nativeCurrency: { name: 'BSC', symbol: 'BSC', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com'] }] });
               } catch {}
             }
           }
