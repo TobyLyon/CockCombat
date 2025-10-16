@@ -306,6 +306,23 @@ body.arena-active {
   pointer-events: none !important; /* do not block clicks */
 }
 
+/* Ensure modal content always renders above overlay (no dimming on the modal itself) */
+#wallet-adapter-modal,
+.wallet-adapter-modal,
+.wallet-adapter-modal-wrapper,
+.wallet-adapter-modal-list {
+  position: relative !important;
+  z-index: 100002 !important;
+  opacity: 1 !important;
+}
+
+/* Keep dropdowns above everything for proper layering */
+.wallet-adapter-dropdown,
+.wallet-adapter-dropdown-list,
+.wallet-adapter-dropdown-list-active {
+  z-index: 100003 !important;
+}
+
 #wallet-adapter-modal,
 .wallet-adapter-modal,
 .wallet-adapter-dropdown,

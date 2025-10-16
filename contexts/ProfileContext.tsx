@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from "react"
+import { primeUsernameCache } from "@/hooks/use-username"
 import { useWallet } from "@/hooks/use-wallet"
 import { UserProfile, Chicken, getProfile, getUserChickens } from "@/lib/supabase"
 import { ProfileSetupModal } from "@/components/profile/setup-modal"
@@ -87,6 +88,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
             created: apiProfile.date_created
           })
           setProfile(apiProfile)
+          // Prime username cache for the current user so UI always has it
+          try {
+            if (apiProfile?.wallet_address && apiProfile?.username) {
+              primeUsernameCache({ [apiProfile.wallet_address]: apiProfile.username })
+            }
+          } catch {}
           
           // Note: Skipping last_login update due to schema cache issues
           // This can be re-enabled once the database schema is fully synchronized
