@@ -150,7 +150,7 @@ export default function GameLandingPage() {
             <div className="mt-2">
               <div
                 className="w-full text-left text-[11px] font-mono tracking-tight p-2 rounded-md border border-white/10 bg-white/5"
-                aria-label="Token contract address coming soon"
+                aria-label="Token contract address"
               >
                 <span className="text-purple-200">Token:</span>
                 <span className="ml-1 text-purple-100">{process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || 'V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump'}</span>
