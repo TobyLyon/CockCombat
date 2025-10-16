@@ -11,6 +11,7 @@ import { truncateAddress, getRandomColor, getRandomChickenName } from "@/lib/uti
 import { Lobby } from "@/lib/lobbies"
 import { useSocket } from "@/hooks/use-socket"
 import { useGameState } from "@/contexts/GameStateContext"
+import { useUsername } from "@/hooks/use-username"
 
 interface WaitingQueueProps {
   lobby: Lobby;
@@ -31,6 +32,9 @@ export default function WaitingQueue({
   playSound,
 }: WaitingQueueProps) {
   const { publicKey } = useWallet()
+  const walletAddress = (() => { try { return (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '' } catch { return '' } })()
+  const walletLower = (walletAddress || '').toLowerCase()
+  const myUsername = useUsername(walletAddress || "")
   // Resolve a stable identifier for guests so sockets/pings work without a wallet
   const resolvePlayerId = () => {
     try {
@@ -512,7 +516,12 @@ export default function WaitingQueue({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center">
                           <span className="text-white text-xs lg:text-sm mr-1 truncate">
-                            {player.username || (player.playerId === publicKey?.toBase58() ? "You" : (player.playerId ? (player.playerId.slice(0,8)+"...") : 'Player'))}
+                            {(() => { 
+                              const pid = String(player.playerId||'')
+                              const isMe = walletLower && pid.toLowerCase() === walletLower
+                              if (isMe && myUsername) return myUsername
+                              return player.username || (isMe ? "You" : (pid ? (pid.slice(0,8)+"...") : 'Player'))
+                            })()}
                           </span>
                           {player.isAi && (
                             <Badge variant="secondary" className="text-xs bg-blue-600/20 text-blue-400 border-blue-600/30 ml-1">

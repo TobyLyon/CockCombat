@@ -13,6 +13,7 @@ import { Lobby } from "@/lib/lobbies"
 // Solana tx helpers removed in EVM-only build
 import { toast } from "sonner"
 import { useAudio } from "@/contexts/AudioContext"
+import { useUsername } from "@/hooks/use-username"
 
 interface LobbyPlayer {
   playerId: string
@@ -109,6 +110,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     } catch {}
     return undefined
   }
+  // Resolve wallet address for username lookup (guests won't have one)
+  const walletAddress = (() => {
+    try { return (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '' } catch { return '' }
+  })()
+  const myUsername = useUsername(walletAddress || "")
+  const meWalletLower = (walletAddress || '').toLowerCase()
 
   // Join lobby room on mount, leave on unmount/navigation/refresh
   useEffect(() => {
@@ -745,7 +752,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-semibold truncate">
-                      {player.username || `Player ${index + 1}`}
+                      {(!player.isAi && meWalletLower && player.playerId === meWalletLower && myUsername)
+                        ? myUsername
+                        : (player.username || `Player ${index + 1}`)}
                     </span>
                     {player.isAi && (
                       <Badge variant="secondary" className="text-[9px] px-1 py-0">

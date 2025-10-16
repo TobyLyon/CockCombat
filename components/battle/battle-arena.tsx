@@ -789,7 +789,7 @@ export default function BattleArena() {
 
             {/* Defeated overlay with spectate controls */}
             {canSpectate && (
-              <div className="absolute bottom-40 sm:bottom-48 left-1/2 -translate-x-1/2 z-[10000] pointer-events-auto">
+              <div className="absolute bottom-32 sm:bottom-40 left-1/2 -translate-x-1/2 z-[10000] pointer-events-auto">
                 <div className="flex items-center gap-2 bg-black/60 border border-yellow-500/30 rounded-xl px-3 py-2 shadow-2xl">
                   <button
                     onClick={() => cycleSpectate(-1)}

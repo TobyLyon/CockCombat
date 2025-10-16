@@ -104,7 +104,7 @@ export default function UserProfile() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold">{getDisplayName(username, walletAddress)}</h2>
-          <p className="text-sm text-purple-300">Wallet: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''}</p>
+          <p className="text-sm text-purple-300">Wallet: {username || (walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : '')}</p>
         </div>
 
         <div className="mt-4 md:mt-0 flex items-center space-x-4">
