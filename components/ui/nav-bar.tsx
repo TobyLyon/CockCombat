@@ -46,10 +46,8 @@ export default function NavBar() {
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const tokenAddressPlaceholder = "0x3f7d7299f4ea30a6b5f0095268567a0bcef14444"
-  const tokenEndPreview = tokenAddressPlaceholder.length > 6
-    ? `…${tokenAddressPlaceholder.slice(-4)}`
-    : tokenAddressPlaceholder
+  const tokenAddressPlaceholder = "COMING SOON"
+  const tokenEndPreview = tokenAddressPlaceholder
 
   const handleCopyTokenAddress = async () => {
     try {
@@ -113,20 +111,14 @@ export default function NavBar() {
         <span className="hidden sm:block text-sm text-yellow-100 w-8 md:w-10 text-right select-none font-medium">{Math.round(volume * 100)}%</span>
 
         {/* Copy Token - moved to left group after music controls */}
-        <button
-          onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
-          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[140px] ${
-            copied
-              ? 'border-green-400/40 bg-green-500/10 text-green-300'
-              : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10 hover:border-yellow-500/40'
-          }`}
-          aria-label="Copy token contract address"
-          title="Copy token contract address"
-          type="button"
+        <div
+          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[140px] border-white/20 bg-white/5 text-white/80`}
+          aria-label="Token contract address coming soon"
+          title="Token contract address coming soon"
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 text-yellow-300" />}
+          <Copy className="h-3.5 w-3.5 text-yellow-300" />
           <span className="text-xs font-mono tracking-wide">Token: {tokenEndPreview}</span>
-        </button>
+        </div>
 
         {/* Copy Token - mobile icon (hidden on mobile to declutter) */}
         <button

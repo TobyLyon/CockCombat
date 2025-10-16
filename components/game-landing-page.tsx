@@ -148,14 +148,13 @@ export default function GameLandingPage() {
               </div>
             </div>
             <div className="mt-2">
-              <button
-                onClick={() => { try { navigator.clipboard.writeText('0x3f7d7299f4ea30a6b5f0095268567a0bcef14444') } catch {} }}
+              <div
                 className="w-full text-left text-[11px] font-mono tracking-tight p-2 rounded-md border border-white/10 bg-white/5"
-                aria-label="Copy token contract address"
+                aria-label="Token contract address coming soon"
               >
                 <span className="text-purple-200">Token:</span>
-                <span className="ml-1 text-purple-100">0x3f7d...4444</span>
-              </button>
+                <span className="ml-1 text-purple-100">COMING SOON</span>
+              </div>
             </div>
           </div>
         </section>
