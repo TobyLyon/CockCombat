@@ -685,8 +685,13 @@ preparePromise.then(() => {
               for (const p of (liveLobby.players || [])) {
                 const pid = String(p.playerId || '');
                 if (!pid) continue;
+                // Hydrate username from profile if missing to avoid wallet fallback for guests
+                let uname = p.username;
+                if (!uname || !String(uname).trim()) {
+                  try { uname = await getUsernameForWallet(pid); } catch {}
+                }
                 const patch = {
-                  username: p.username || undefined,
+                  username: uname || (pid ? pid.slice(0,8)+'...' : 'Player'),
                   chickenName: p.chickenId || 'Default',
                   isAi: !!p.isAi,
                   hasWagered: Boolean(p.hasWagered),
@@ -2964,6 +2969,20 @@ preparePromise.then(() => {
           }
         }
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
+        // Hydrate missing usernames for humans to avoid wallet fallback for remote clients
+        try {
+          const hydrated = await Promise.all((expectedRoster || []).map(async (e) => {
+            try {
+              if (e.isAi) return e;
+              if (e.username && String(e.username).trim()) return e;
+              const name = await getUsernameForWallet(e.wallet);
+              return { ...e, username: (name && String(name).trim()) ? name : (e.wallet ? e.wallet.slice(0,8)+'...' : 'Player') };
+            } catch {
+              return { ...e, username: e.wallet ? e.wallet.slice(0,8)+'...' : 'Player' };
+            }
+          }));
+          expectedRoster = hydrated;
+        } catch {}
       }
 
       // Enforce hard capacity cap (prefer humans first; fill remaining with AI only for tutorial)
