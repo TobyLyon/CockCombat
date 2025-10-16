@@ -112,12 +112,17 @@ export default function NavBar() {
 
         {/* Copy Token - moved to left group after music controls */}
         <div
-          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[110px] border-white/20 bg-white/5 text-white/80`}
-          aria-label="Token contract address"
+          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[110px] border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10`}
+          aria-label="Copy token contract address"
           title={TOKEN_MINT}
+          onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
         >
-          <Copy className="h-3.5 w-3.5 text-yellow-300" />
-          <span className="text-xs font-mono tracking-wide">Token: {tokenEndPreview}</span>
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-400" />
+          ) : (
+            <Copy className="h-3.5 w-3.5 text-yellow-300" />
+          )}
+          <span className="text-xs font-mono tracking-wide">{copied ? 'Copied!' : `Token: ${tokenEndPreview}`}</span>
         </div>
 
         {/* Copy Token - mobile icon (hidden on mobile to declutter) */}
