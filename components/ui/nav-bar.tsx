@@ -46,7 +46,7 @@ export default function NavBar() {
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || "V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump"
+  const TOKEN_MINT = "V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump"
   const tokenEndPreview = TOKEN_MINT
 
   const handleCopyTokenAddress = async () => {
