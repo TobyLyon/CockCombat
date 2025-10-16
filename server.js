@@ -2358,7 +2358,9 @@ preparePromise.then(() => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
             isReady = Boolean(player.hasWagered) || connectionReady;
           } else if (lobby.matchType !== 'tutorial' && (!player.isAi)) {
-            isReady = connectionReady || Boolean((player as any).isReady);
+            // Accept either socket flag or API isReady (tolerate undefined without TS syntax)
+            const apiReady = !!(player && player.isReady);
+            isReady = connectionReady || apiReady;
           }
           
             return {
@@ -2437,7 +2439,8 @@ preparePromise.then(() => {
         // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
-            return Boolean(p.isReady) || Boolean((p && (p as any).hasWagered));
+            const hasWageredFlag = !!(p && p.hasWagered);
+            return Boolean(p.isReady) || hasWageredFlag;
           }
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
@@ -2751,7 +2754,8 @@ preparePromise.then(() => {
                   // Free humans: accept socket ready or API flag
                   let socketReady = false;
                   try { for (const [, c] of activeConnections.entries()) { if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(p.playerId || '').toLowerCase()) { socketReady = !!c.isReady; break; } } } catch {}
-                  return socketReady || Boolean((p as any).isReady);
+                  const apiReady = !!(p && p.isReady);
+                  return socketReady || apiReady;
                 });
                 const hasHumanReadyNow = isTutorialNow ? eligibleNow.some(p => !p.isAi && readyNow.some(r => r.playerId === p.playerId)) : true;
                 const allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
