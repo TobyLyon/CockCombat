@@ -289,6 +289,7 @@ body.arena-active {
   inset: 0 !important;            /* fill viewport */
   display: grid !important;       /* enable centering */
   place-items: center !important; /* center modal */
+  z-index: 2147483600 !important; /* ensure container is above app UI */
 }
 
 /* Ensure the modal itself doesn't inherit stray offsets */
@@ -302,7 +303,7 @@ body.arena-active {
 
 /* Ensure overlay is below modal so clicks are not blocked */
 .wallet-adapter-modal-overlay {
-  z-index: 100000 !important; /* overlay */
+  z-index: 1 !important; /* behind modal within container */
   pointer-events: none !important; /* do not block clicks */
 }
 
@@ -312,7 +313,7 @@ body.arena-active {
 .wallet-adapter-modal-wrapper,
 .wallet-adapter-modal-list {
   position: relative !important;
-  z-index: 100002 !important;
+  z-index: 2 !important; /* above overlay within container */
   opacity: 1 !important;
 }
 
@@ -320,7 +321,7 @@ body.arena-active {
 .wallet-adapter-dropdown,
 .wallet-adapter-dropdown-list,
 .wallet-adapter-dropdown-list-active {
-  z-index: 100003 !important;
+  z-index: 3 !important; /* top-most within container */
 }
 
 #wallet-adapter-modal,

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useWallet } from "@/hooks/use-wallet"
+import { useUsername, getDisplayName } from "@/hooks/use-username"
 import { ProfileService } from "@/lib/profile-service"
 // Solana-specific polling removed for EVM-only build
 import type { Profile, Transaction, Match } from "@/lib/supabase"
@@ -25,6 +26,7 @@ export default function UserProfilePro() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const username = useUsername(walletAddress)
   const [matches, setMatches] = useState<Match[]>([])
   const [txs, setTxs] = useState<Transaction[]>([])
 
@@ -139,7 +141,7 @@ export default function UserProfilePro() {
           </Avatar>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold">{profile?.username || 'Player'}</h2>
+              <h2 className="text-2xl font-bold">{getDisplayName(profile?.username || username, walletAddress)}</h2>
               <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="h-7 px-2 text-xs">
                 <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
               </Button>

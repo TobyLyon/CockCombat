@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { WalletMultiButton } from "@/components/wallet/wallet-multi-button"
+import { useWallet } from "@/hooks/use-wallet"
+import { useUsername, getDisplayName } from "@/hooks/use-username"
 import BalanceBar from "@/components/wallet/balance-bar"
 import { Button } from "@/components/ui/button"
 import { Volume2, VolumeX, Home, Copy, Check } from "lucide-react"
@@ -11,6 +13,9 @@ import { useGameState } from "@/contexts/GameStateContext"
 import Image from 'next/image';
 
 export default function NavBar() {
+  const { publicKey } = useWallet()
+  const walletAddress = typeof publicKey === 'string' ? publicKey : ((publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '')
+  const username = useUsername(walletAddress)
   const router = useRouter()
   const pathname = usePathname()
   const { 

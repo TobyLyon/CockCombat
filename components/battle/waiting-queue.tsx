@@ -512,7 +512,7 @@ export default function WaitingQueue({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center">
                           <span className="text-white text-xs lg:text-sm mr-1 truncate">
-                            {player.username || (player.playerId === publicKey?.toBase58() ? "You" : truncateAddress(player.playerId))}
+                            {player.username || (player.playerId === publicKey?.toBase58() ? "You" : (player.playerId ? (player.playerId.slice(0,8)+"...") : 'Player'))}
                           </span>
                           {player.isAi && (
                             <Badge variant="secondary" className="text-xs bg-blue-600/20 text-blue-400 border-blue-600/30 ml-1">

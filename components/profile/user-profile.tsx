@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
+import { useUsername, getDisplayName } from "@/hooks/use-username"
 import Image from "next/image"
 
 export default function UserProfile() {
@@ -15,6 +16,7 @@ export default function UserProfile() {
         ? (publicKey as any).toBase58()
         : (publicKey?.toString?.() || ''))
   const [userChickens, setUserChickens] = useState([])
+  const username = useUsername(walletAddress)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalFights: 0,
@@ -101,10 +103,8 @@ export default function UserProfile() {
     <div className="bg-purple-900/30 rounded-xl p-6 border border-purple-700/50">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <div>
-          <h2 className="text-2xl font-bold">My Cock Collection</h2>
-          <p className="text-sm text-purple-300">
-            Wallet: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''}
-          </p>
+          <h2 className="text-2xl font-bold">{getDisplayName(username, walletAddress)}</h2>
+          <p className="text-sm text-purple-300">Wallet: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''}</p>
         </div>
 
         <div className="mt-4 md:mt-0 flex items-center space-x-4">
