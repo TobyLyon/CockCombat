@@ -2456,6 +2456,25 @@ preparePromise.then(() => {
                       const allNow = resNow ? await resNow.json().catch(() => []) : [];
                       const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
                       if (!liveLobbyNow) return;
+                      // Tutorial prefill: before starting the 5s countdown, ensure AI are present in the lobby roster up to capacity
+                      try {
+                        if (liveLobbyNow.matchType === 'tutorial') {
+                          const capacity = typeof liveLobbyNow.capacity === 'number' ? liveLobbyNow.capacity : 8;
+                          const cur = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players.slice() : [];
+                          const need = Math.max(0, capacity - cur.length);
+                          if (need > 0) {
+                            const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                            for (let i = 0; i < need; i++) {
+                              const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+                              cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
+                            }
+                            // Mutate in-memory lobby so clients see AI before countdown begins
+                            try { const mem = lobbies.find(l => l && l.id === lobbyId); if (mem) mem.players = cur; } catch {}
+                            // Emit immediate snapshot update
+                            try { const versionPre = nextLobbyVersion(lobbyId); const snapPre = await buildLobbySnapshot(lobbyId); if (snapPre) io.to(lobbyId).emit('lobby_updated', { ...snapPre, version: versionPre }); } catch {}
+                          }
+                        }
+                      } catch {}
                       // Merge with socket readiness
                       const mergedPlayers = (liveLobbyNow.players || []).reduce((acc, player) => {
                         const pid = String(player.playerId || '').toLowerCase();
