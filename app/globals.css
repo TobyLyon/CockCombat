@@ -313,6 +313,25 @@ body.arena-active {
   z-index: 100001 !important; /* modal and dropdown above overlay */
 }
 
+/* Enable pointer events on all wallet adapter interactive elements */
+.wallet-adapter-modal-wrapper,
+.wallet-adapter-modal-button-close,
+.wallet-adapter-modal-list,
+.wallet-adapter-modal-list li,
+.wallet-adapter-modal-list button,
+.wallet-adapter-button,
+.wallet-adapter-button-trigger {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Ensure wallet options are not disabled */
+.wallet-adapter-modal-list li button {
+  opacity: 1 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
 /* Do not hide wallet adapter UI when arena-mode is active */
 .arena-mode ~ .wallet-adapter-modal,
 .arena-mode ~ .wallet-adapter-modal-container,
