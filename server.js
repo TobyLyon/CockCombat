@@ -1840,7 +1840,8 @@ preparePromise.then(() => {
         if (!matchSessionId || !wallet) return;
         const session = global.queueSessions && global.queueSessions.get(matchSessionId);
         if (!session) return;
-        session.presenceAcks.set(wallet, Date.now());
+        const key = String(wallet).toLowerCase();
+        session.presenceAcks.set(key, Date.now());
         // Optional: broadcast presence update to lobby
         const lobbyId = session.lobbyId;
         try { io.to(lobbyId).emit('queue_presence_update', { wallet, latencyMs }); } catch {}
@@ -1861,7 +1862,8 @@ preparePromise.then(() => {
         if (!matchSessionId || !wallet) return;
         const session = global.queueSessions && global.queueSessions.get(matchSessionId);
         if (!session) return;
-        session.assetsAcks.set(wallet, Date.now());
+        const key = String(wallet).toLowerCase();
+        session.assetsAcks.set(key, Date.now());
         // Broadcast asset readiness to lobby participants
         try {
           const lobbyId = session.lobbyId;
@@ -2747,7 +2749,11 @@ preparePromise.then(() => {
       } catch {}
 
       if (Array.isArray(rosterOverride) && rosterOverride.length > 0) {
-        expectedRoster = rosterOverride;
+        // Normalize override roster wallet identities to lowercase for consistent ack matching
+        expectedRoster = rosterOverride.map((r) => ({
+          ...r,
+          wallet: String(r.wallet || '').toLowerCase(),
+        }));
         isTutorial = lobbyMeta ? lobbyMeta.matchType === 'tutorial' : false;
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
         // Ensure tutorial override roster is backfilled with AI to capacity
@@ -2766,7 +2772,7 @@ preparePromise.then(() => {
         if (!lobbyMeta) return;
         // Build expected roster from API (tutorial may include AI; ranked is humans only)
         expectedRoster = (lobbyMeta.players || []).map(p => ({
-          wallet: p.playerId,
+          wallet: String(p.playerId || '').toLowerCase(),
           isAi: !!p.isAi,
           username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
           chickenName: p.chickenId || 'Default'
@@ -2916,7 +2922,7 @@ preparePromise.then(() => {
 
   // Finalize a queue session: lock roster and schedule round start (or cancel/refund)
   async function finalizeQueueSession(matchSessionId, io) {
-    const session = global.queueSessions && global.queueSessions.get(matchSessionId);
+      const session = global.queueSessions && global.queueSessions.get(matchSessionId);
     if (!session) return;
     const { lobbyId, expectedRoster, presenceAcks, assetsAcks } = session;
     try {
@@ -2926,8 +2932,12 @@ preparePromise.then(() => {
       const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
       const isTutorial = lobby ? lobby.matchType === 'tutorial' : false;
 
-      const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => p.wallet);
-      const presentHumans = requiredHumans.filter(w => isTutorial ? presenceAcks.has(w) : (presenceAcks.has(w) && assetsAcks.has(w)));
+      // Normalize required humans and ack maps to lowercase for consistent matching
+      const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => String(p.wallet || '').toLowerCase());
+      const presentHumans = requiredHumans.filter((w) => {
+        const key = String(w).toLowerCase();
+        return isTutorial ? presenceAcks.has(key) : (presenceAcks.has(key) && assetsAcks.has(key));
+      });
 
       // Ranked cancellation if insufficient humans
       const minHumans = isTutorial ? 1 : 2;
@@ -2953,10 +2963,10 @@ preparePromise.then(() => {
       let finalRoster = [];
       if (isTutorial) {
         const aiEntries = expectedRoster.filter(p => p.isAi);
-        const presentHumanEntries = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
+        const presentHumanEntries = expectedRoster.filter(p => !p.isAi && presentHumans.includes(String(p.wallet || '').toLowerCase()));
         finalRoster = [...presentHumanEntries, ...aiEntries];
       } else {
-        finalRoster = expectedRoster.filter(p => !p.isAi && presentHumans.includes(p.wallet));
+        finalRoster = expectedRoster.filter(p => !p.isAi && presentHumans.includes(String(p.wallet || '').toLowerCase()));
       }
       // Remove over-eager tutorial fallback; require at least one human ready AND AI roster populated by prior steps
 

@@ -106,7 +106,8 @@ export default function WaitingQueue({
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
       const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
-      latestRosterRef.current = expected
+      // Normalize wallet identities to lowercase to match server acks
+      latestRosterRef.current = expected.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(expected.map((p: any) => {
         const idStr = String(p.wallet || '')
@@ -129,7 +130,7 @@ export default function WaitingQueue({
         const id = resolvePlayerId()
         const msid = matchSessionIdRef.current
         if (id && msid) {
-          socket.emit('queue_presence', { matchSessionId: msid, wallet: id, latencyMs: 0 })
+          socket.emit('queue_presence', { matchSessionId: msid, wallet: String(id).toLowerCase(), latencyMs: 0 })
           // Prefetch minimal arena assets, then send assets_loaded (guarded by current msid)
           const prefetch = async () => {
             const img = (src: string) => new Promise<void>((resolve) => { const i = new Image(); i.onload = () => resolve(); i.onerror = () => resolve(); i.src = src })
@@ -157,7 +158,7 @@ export default function WaitingQueue({
             assetsReadyRef.current = true
             if (lastAssetsAckMsIdRef.current !== localMsid) {
               lastAssetsAckMsIdRef.current = localMsid
-              try { socket.emit('assets_loaded', { matchSessionId: localMsid, wallet: id }) } catch {}
+              try { socket.emit('assets_loaded', { matchSessionId: localMsid, wallet: String(id).toLowerCase() }) } catch {}
             }
           }
           prefetch()
@@ -171,7 +172,7 @@ export default function WaitingQueue({
       console.log('[WaitingQueue] arena_lock_roster', payload)
       // Replace roster with locked list and keep provided names with guest rule
       const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
-      latestRosterRef.current = finalR
+      latestRosterRef.current = finalR.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
@@ -198,8 +199,9 @@ export default function WaitingQueue({
         if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
       } catch {}
     }
+    // Only honor authoritative round_start for battle entry (avoid double triggers with match_started)
     const onStarted = (payload?: any) => {
-      console.log('[WaitingQueue] round_start/match_started received')
+      console.log('[WaitingQueue] round_start received')
       try {
         const fr = Array.isArray((payload as any)?.finalRoster) ? (payload as any).finalRoster : []
         if (fr.length > 0) {
@@ -238,7 +240,14 @@ export default function WaitingQueue({
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
-    socket.on('match_started', onStarted)
+    // ignore non-authoritative match_started to prevent duplicate starts
+    const onCancelled = (_payload: any) => {
+      try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
+      try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
+      try { playSound('click') } catch {}
+      try { onLeaveQueue() } catch {}
+    }
+    socket.on('match_cancelled', onCancelled)
     // Align roster handling with Match Room: consume roster_full/diff
     const onRosterFull = (payload: any) => {
       try {
@@ -353,7 +362,7 @@ export default function WaitingQueue({
       socket.off('arena_lock_roster', onArenaLockJoinRoom)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
-      socket.off('match_started', onStarted)
+      socket.off('match_cancelled', onCancelled)
       socket.off('roster_full', onRosterFull)
       socket.off('roster_diff', onRosterDiff)
       socket.off('debug_trace', onDebug)
