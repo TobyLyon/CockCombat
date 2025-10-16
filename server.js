@@ -259,6 +259,10 @@ preparePromise.then(() => {
   if (!global.countdownActive) {
     global.countdownActive = Object.create(null);
   }
+  // Track active countdown interval handles per lobby so we can cancel on readiness drop
+  if (!global.countdownIntervals) {
+    global.countdownIntervals = Object.create(null);
+  }
 
   // Presence map: lobbyId -> Set of wallet addresses currently in the socket room
   if (!global.lobbyPresence) {
@@ -1980,40 +1984,62 @@ preparePromise.then(() => {
       }
     });
 
-    // Handle spectate match
+    // Handle spectate match (supports legacy gameRooms and modern matchSessionId rooms)
     socket.on('spectate_match', ({ matchId }) => {
-      console.log(`👁️ Spectator ${socket.id} joining match ${matchId}`);
-      const room = gameRooms.get(matchId);
-      if (room) {
-        socket.join(matchId);
-        
-        // Mark as spectator
-        const connection = activeConnections.get(socket.id);
-        if (connection) {
-          connection.isSpectator = true;
-          connection.spectatingMatch = matchId;
+      try {
+        const id = String(matchId || '').trim();
+        if (!id) return;
+        console.log(`👁️ Spectator ${socket.id} joining match ${id}`);
+        const legacyRoom = gameRooms.get(id);
+        // Allow join if:
+        // - legacy game room exists, or
+        // - a Socket.IO room with this id exists (players joined via join_match_room), or
+        // - we have metadata for this match session (recentMatchMetaBySession), or
+        // - id looks like a modern session id (ms-...)
+        const adapterHasRoom = (() => { try { return !!io.sockets.adapter.rooms.get(id); } catch { return false; } })();
+        const hasMeta = (() => { try { return !!(global.recentMatchMetaBySession && global.recentMatchMetaBySession.get(id)); } catch { return false; } })();
+        const looksLikeSession = /^ms-/i.test(id);
+
+        if (legacyRoom || adapterHasRoom || hasMeta || looksLikeSession) {
+          try { socket.join(id); } catch {}
+          // Mark as spectator
+          try {
+            const connection = activeConnections.get(socket.id);
+            if (connection) {
+              connection.isSpectator = true;
+              connection.spectatingMatch = id;
+            }
+          } catch {}
+          // For legacy rooms, send initial state/metadata
+          if (legacyRoom) {
+            try { socket.emit('game_state_update', legacyRoom.gameState); } catch {}
+            try {
+              const now = Date.now();
+              const elapsed = Math.floor((now - legacyRoom.startTime) / 1000);
+              socket.emit('match_metadata', {
+                matchId: id,
+                startedAt: new Date(legacyRoom.startTime).toISOString(),
+                elapsedSeconds: elapsed,
+                spectatorCount: io.sockets.adapter.rooms.get(id)?.size - 2 || 0,
+              });
+            } catch {}
+          } else {
+            // Modern sessions may not have a legacy game state; still provide minimal metadata
+            try {
+              const size = io.sockets.adapter.rooms.get(id)?.size || 0;
+              socket.emit('match_metadata', { matchId: id, spectatorCount: Math.max(0, size) });
+            } catch {}
+          }
+          // Notify other spectators
+          try {
+            const size = io.sockets.adapter.rooms.get(id)?.size || 0;
+            socket.to(id).emit('spectator_joined', { spectatorId: socket.id, spectatorCount: Math.max(0, size - 2) });
+          } catch {}
+        } else {
+          socket.emit('spectate_error', { message: 'Match not found' });
         }
-        
-        // Send current game state
-        socket.emit('game_state_update', room.gameState);
-        
-        // Send match metadata
-        const now = Date.now();
-        const elapsed = Math.floor((now - room.startTime) / 1000);
-        socket.emit('match_metadata', {
-          matchId,
-          startedAt: new Date(room.startTime).toISOString(),
-          elapsedSeconds: elapsed,
-          spectatorCount: io.sockets.adapter.rooms.get(matchId)?.size - 2 || 0,
-        });
-        
-        // Notify other spectators
-        socket.to(matchId).emit('spectator_joined', {
-          spectatorId: socket.id,
-          spectatorCount: io.sockets.adapter.rooms.get(matchId)?.size - 2 || 0,
-        });
-      } else {
-        socket.emit('spectate_error', { message: 'Match not found' });
+      } catch (e) {
+        try { socket.emit('spectate_error', { message: 'Unable to spectate match' }); } catch {}
       }
     });
 
@@ -2398,6 +2424,18 @@ preparePromise.then(() => {
               console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} (not all ready anymore)`);
             }
           } catch {}
+          // If a countdown is already running, cancel it as well
+          try {
+            if (global.countdownActive && global.countdownActive[lobbyId]) {
+              if (global.countdownIntervals && global.countdownIntervals[lobbyId]) {
+                clearInterval(global.countdownIntervals[lobbyId]);
+                delete global.countdownIntervals[lobbyId];
+              }
+              delete global.countdownActive[lobbyId];
+              try { io.to(lobbyId).emit('match_start_cancelled'); } catch {}
+              console.log(`⏹️ Active countdown cancelled for lobby ${lobbyId} (readiness dropped)`);
+            }
+          } catch {}
           // Majority-ready grace logic
           try {
             const humans = eligiblePlayers.filter(p => !p.isAi);
@@ -2601,6 +2639,43 @@ preparePromise.then(() => {
 
           // Schedule a short pre-countdown delay so the roster is visible
           global.preCountdownTimers[lobbyId] = setTimeout(async () => {
+            // Re-check readiness right before starting countdown to avoid races
+            try {
+              const baseUrlLocal = `http://localhost:${port}`;
+              const resNow = await fetch(`${baseUrlLocal}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
+              const allNow = resNow ? await resNow.json().catch(() => []) : [];
+              const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
+              if (liveLobbyNow) {
+                // Build presence and recompute quick readiness
+                const presenceSetNow = new Set();
+                try { for (const [, c] of activeConnections.entries()) { if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSetNow.add(String(c.walletAddress).toLowerCase()); } } catch {}
+                const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
+                const minPlayersNow = isTutorialNow ? 1 : 2;
+                const roster = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players : [];
+                const eligibleNow = roster.filter(p => p.isAi || presenceSetNow.has(String(p.playerId || '').toLowerCase()));
+                const readyNow = eligibleNow.filter(p => {
+                  if (p.isAi && isTutorialNow) return true;
+                  // Paid ranked: require hasWagered (authoritative) or socket ready fallback
+                  if (!isTutorialNow && (liveLobbyNow.amount || 0) > 0 && !p.isAi) {
+                    let socketReady = false;
+                    try { for (const [, c] of activeConnections.entries()) { if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(p.playerId || '').toLowerCase()) { socketReady = !!c.isReady; break; } } } catch {}
+                    return Boolean(p.hasWagered) || socketReady;
+                  }
+                  // Free or tutorial humans: require socket ready flag
+                  let socketReady = false;
+                  try { for (const [, c] of activeConnections.entries()) { if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(p.playerId || '').toLowerCase()) { socketReady = !!c.isReady; break; } } } catch {}
+                  return socketReady;
+                });
+                const hasHumanReadyNow = isTutorialNow ? eligibleNow.some(p => !p.isAi && readyNow.some(r => r.playerId === p.playerId)) : true;
+                const allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
+                if (!allReadyNow) {
+                  // Abort start
+                  try { delete global.preCountdownTimers[lobbyId]; } catch {}
+                  console.log(`⏹️ Aborting countdown start for ${lobbyId} (recheck failed)`);
+                  return;
+                }
+              }
+            } catch {}
             try {
               // Mark countdown active
               if (!global.countdownActive) global.countdownActive = Object.create(null);
@@ -2643,6 +2718,8 @@ preparePromise.then(() => {
                 } catch {}
                 // Clear active flag at the end
                 try { if (global.countdownActive) delete global.countdownActive[lobbyId]; } catch {}
+                // Clear stored interval handle
+                try { if (global.countdownIntervals && global.countdownIntervals[lobbyId]) delete global.countdownIntervals[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
                 try {
                   // For tutorial, pass a presence-derived override roster to avoid API dependency
@@ -2659,6 +2736,8 @@ preparePromise.then(() => {
                 } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
               }
             }, 1000);
+            // Track interval so we can cancel if readiness drops mid-countdown
+            try { if (!global.countdownIntervals) global.countdownIntervals = Object.create(null); global.countdownIntervals[lobbyId] = countdownInterval; } catch {}
 
             // Clear the pre-countdown timer reference
             try { if (global.preCountdownTimers) delete global.preCountdownTimers[lobbyId]; } catch {}
@@ -2719,6 +2798,8 @@ preparePromise.then(() => {
               } catch {}
             }
           }, 1000);
+          // Track interval so we can cancel if readiness drops mid-countdown
+          try { if (!global.countdownIntervals) global.countdownIntervals = Object.create(null); global.countdownIntervals[lobbyId] = countdownInterval; if (!global.countdownActive) global.countdownActive = Object.create(null); global.countdownActive[lobbyId] = true; } catch {}
         }
       }
     } catch (error) {

@@ -380,8 +380,9 @@ export async function POST(req: NextRequest) {
       playerId: playerId, 
       chickenId: actualChickenId, 
       username: username,
-      hasWagered: lobby.amount === 0 ? true : false,
-      isReady: lobby.amount === 0 ? true : false,
+      // Do not auto-ready players on join (even in free lobbies). Readiness is driven by socket events.
+      hasWagered: false,
+      isReady: false,
     };
     // Insert player (AI removed entirely)
     lobby.players.push(player);

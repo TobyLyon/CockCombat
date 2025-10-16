@@ -550,6 +550,8 @@ function SceneContent({
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
   // Maintain a brief window for remote hit flash to guarantee visibility even if context lags
   const remoteHitUntilRef = useRef<Record<string, number>>({})
+  // Live Three.js groups for all non-player chickens; used for accurate hit positions
+  const opponentGroupsRef = useRef<Record<string, THREE.Group | null>>({})
 
   // Track my own player id for damage overlay checks
   const selfIdRef = useRef<string | null>(null)
@@ -831,13 +833,19 @@ function SceneContent({
         playerRef.current.getWorldPosition(playerPos);
         for (const opponent of opponents) {
           if (!opponent.position || !opponent.isAlive) continue;
-          // Prefer latest networked transform if available
+          // Prefer actual world position from rendered group; fallback to net pos, then static
           const net = remoteHumansRef.current[opponent.id]
-        const opponentPos = net && net.pos
-            ? net.pos.clone()
-            : (opponent.position instanceof THREE.Vector3
-                ? opponent.position.clone()
-                : new THREE.Vector3().fromArray(opponent.position as number[]))
+          let opponentPos = new THREE.Vector3()
+          const g = opponentGroupsRef.current[opponent.id]
+          if (g && typeof g.getWorldPosition === 'function') {
+            g.getWorldPosition(opponentPos)
+          } else if (net && net.pos) {
+            opponentPos = net.pos.clone()
+          } else if (opponent.position instanceof THREE.Vector3) {
+            opponentPos = opponent.position.clone()
+          } else {
+            opponentPos = new THREE.Vector3().fromArray(opponent.position as number[])
+          }
 
           // Compute horizontal distance only to avoid Y glitches during jumps
           const dx = playerPos.x - opponentPos.x;
@@ -1218,6 +1226,8 @@ function SceneContent({
           invulnerableUntilMs={invulnerableUntilRef.current}
           remoteHumans={remoteHumansRef.current}
           remoteHitUntil={remoteHitUntilRef.current}
+          // Expose live group refs of opponents so player hit detection can use accurate positions
+          groupMapRef={opponentGroupsRef}
           onAiDamagePlayer={() => { 
             try {
               if (playerChicken?.id) {
@@ -1413,6 +1423,7 @@ function ChickenInstances({
     invulnerableUntilMs,
     remoteHumans,
     remoteHitUntil,
+      groupMapRef,
       onAiDamagePlayer,
       onAiDamageTarget
   }: {
@@ -1423,6 +1434,7 @@ function ChickenInstances({
     invulnerableUntilMs?: number,
     remoteHumans?: Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>,
     remoteHitUntil?: Record<string, number>,
+      groupMapRef?: React.RefObject<Record<string, THREE.Group | null>>,
       onAiDamagePlayer?: () => void,
       onAiDamageTarget?: (targetId: string, amount?: number, byId?: string) => void
   }) {
@@ -1737,7 +1749,7 @@ function ChickenInstances({
           return (
             <group
               key={chicken.id}
-              ref={(el) => { groupsRef.current[chicken.id] = el }}
+              ref={(el) => { groupsRef.current[chicken.id] = el; try { if (groupMapRef && groupMapRef.current) groupMapRef.current[chicken.id] = el } catch {} }}
               position={chickenPos}
               rotation={chickenRot}
             >
