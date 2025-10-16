@@ -32,8 +32,8 @@ export const lobbies: Lobby[] = [
   { id: 'free-3', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'free-4', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   // Wagered lobbies temporarily disabled (coming soon)
-  { id: 'lobby-0p005', amount: 0.005, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
-  { id: 'lobby-0p005-2', amount: 0.005, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
+  { id: 'lobby-0p005', amount: 0.05, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
+  { id: 'lobby-0p005-2', amount: 0.1, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
 ];
 
 // Lobby timers for AI backfill
