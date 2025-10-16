@@ -2661,7 +2661,7 @@ preparePromise.then(() => {
         }
         
         // Check if we have minimum players and all are ready
-        const minPlayers = lobbyId.includes('tutorial') ? 2 : 2;
+        const minPlayers = lobbyId.includes('tutorial') ? 1 : 2;
         const hasHumanReady = lobbyId.includes('tutorial') ? lobbyPlayers.some(p => !p.isAi && p.isReady) : true;
         const allReady = lobbyPlayers.length >= minPlayers && 
                          lobbyPlayers.every(p => p.isReady || p.isAi) && hasHumanReady;
