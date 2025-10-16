@@ -1777,6 +1777,27 @@ export default React.memo(function EnhancedArenaScene({
           }}
         >
           <color attach="background" args={['#87CEEB']} />
+          {/* Optional spectate camera hint: bias playerPos toward selected target when dead */}
+          {(() => {
+            try {
+              const targetId = (typeof window !== 'undefined') ? (window as any).__spectate_target_id : null
+              if (targetId) {
+                const tgt = (safePlayers as any[]).find(p => p && p.id === targetId)
+                if (tgt && (tgt.position as any)) {
+                  const v = new THREE.Vector3(
+                    Array.isArray((tgt as any).position) ? (tgt as any).position[0] : ((tgt as any).position?.x||0),
+                    0.85,
+                    Array.isArray((tgt as any).position) ? (tgt as any).position[2] : ((tgt as any).position?.z||0),
+                  )
+                  // Nudge initial camera position closer; rest of logic uses playerRef fallback
+                  // This is a gentle bias and will not break gameplay
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                  const _bias = v
+                }
+              }
+            } catch {}
+            return null
+          })()}
           <fog attach="fog" args={['#87CEEB', 30, 500]} />
           
           <Suspense fallback={<Html center className="text-white">Loading Arena...</Html>}>

@@ -59,9 +59,24 @@ export default function BattleArena() {
     exitBattle,
     playSound,
     setGameState,
-    setMatchMeta
+    setMatchMeta,
+    lastDefeatedChickenId,
+    players: battlePlayers,
   } = useGameState();
   const { socket } = useSocket();
+  const [spectateIndex, setSpectateIndex] = useState<number>(0)
+
+  const aliveNonPlayerIds = (battlePlayers || []).filter((p: any) => p.isAlive && !p.isPlayer).map((p: any) => p.id)
+  const canSpectate = Boolean(gameState === 'battle' && lastDefeatedChickenId)
+
+  const cycleSpectate = (dir: number) => {
+    try {
+      if (!aliveNonPlayerIds.length) return
+      const next = (spectateIndex + dir + aliveNonPlayerIds.length) % aliveNonPlayerIds.length
+      setSpectateIndex(next)
+      try { (window as any).__spectate_target_id = aliveNonPlayerIds[next] } catch {}
+    } catch {}
+  }
   // Probe X session once
   useEffect(() => {
     // Initialize a stable guest identity for sessions without a wallet
@@ -770,6 +785,29 @@ export default function BattleArena() {
                 players={players}
               />
             </div>
+
+            {/* Defeated overlay with spectate controls */}
+            {canSpectate && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[10000] pointer-events-auto">
+                <div className="flex items-center gap-2 bg-black/60 border border-yellow-500/30 rounded-xl px-3 py-2 shadow-2xl">
+                  <button
+                    onClick={() => cycleSpectate(-1)}
+                    className="px-2 py-1 text-xs font-bold rounded bg-white/10 hover:bg-white/20 border border-white/20"
+                  >Prev</button>
+                  <div className="text-xs text-yellow-300 font-bold px-2">
+                    Spectating {aliveNonPlayerIds.length ? `${spectateIndex+1}/${aliveNonPlayerIds.length}` : '—'}
+                  </div>
+                  <button
+                    onClick={() => cycleSpectate(1)}
+                    className="px-2 py-1 text-xs font-bold rounded bg-white/10 hover:bg-white/20 border border-white/20"
+                  >Next</button>
+                  <button
+                    onClick={() => setGameState('lobby')}
+                    className="ml-2 px-2 py-1 text-xs font-bold rounded bg-red-600/70 hover:bg-red-600 text-white border border-red-400/60"
+                  >Exit</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         

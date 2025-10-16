@@ -2399,7 +2399,9 @@ preparePromise.then(() => {
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
             // Only allow majority logic when there are 3 or more humans (remove 2-human special-case)
-            const hasMajorityReady = (totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers);
+            // Majority rule also applies when there are exactly 2 humans and 1 is ready
+            const twoHumanMajority = (totalHumans === 2 && readyHumans.length === 1 && eligiblePlayers.length >= minPlayers)
+            const hasMajorityReady = ((totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers) || twoHumanMajority);
 
             if (!global.majorityGrace) global.majorityGrace = Object.create(null);
 
@@ -2488,6 +2490,20 @@ preparePromise.then(() => {
                         return acc;
                       }, []);
                       const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
+                      // Kick unready humans from ranked lobbies at the end of grace to prevent blocking starts
+                      if (!isTutorialNow) {
+                        try {
+                          for (const p of (liveLobbyNow.players || [])) {
+                            const pid = String(p.playerId || '')
+                            if (p.isAi) continue
+                            const present = presenceSet.has(pid.toLowerCase())
+                            const isReady = mergedPlayers.some(mp => mp.playerId === pid && mp.isReady)
+                            if (present && !isReady) {
+                              await fetch(`${`http://localhost:${port}`}/api/lobbies`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId: pid }) }).catch(() => {})
+                            }
+                          }
+                        } catch {}
+                      }
                       const readyHumansNow = mergedPlayers.filter(p => !p.isAi && p.isReady);
                       let majorityRoster = readyHumansNow;
                       if (isTutorialNow) {
