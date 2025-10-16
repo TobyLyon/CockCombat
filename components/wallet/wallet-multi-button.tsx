@@ -53,7 +53,7 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
           <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[12rem]">
+      <DropdownMenuContent align="end" className="min-w-[12rem] z-[100010]">
         <DropdownMenuItem onClick={onCopy}>
           <Copy className="mr-2 h-4 w-4" /> Copy Address
         </DropdownMenuItem>

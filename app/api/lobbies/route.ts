@@ -207,11 +207,13 @@ export async function POST(req: NextRequest) {
         try {
           const map = (global as any).recentMatchMetaBySession;
           if (!map || typeof map.values !== 'function') return false;
-          const lockMs = Math.max(60_000, parseInt(String(process.env.LOBBY_LOCK_MS || ''), 10) || 240_000); // default 4m
+          const lockMs = Math.max(5_000, parseInt(String(process.env.LOBBY_LOCK_MS || ''), 10) || 45_000); // default 45s, min 5s
           for (const meta of map.values()) {
             if (meta && meta.lobbyId === lobbyId) {
-              // Only treat as active if a round actually started
+              // Only treat as active if a round actually started, and not after round end
               const startedAt = Number((meta as any).roundStartedAt || 0);
+              const endedAt = Number((meta as any).roundEndedAt || 0);
+              if (endedAt && endedAt > startedAt) return false;
               if (startedAt && Date.now() < (startedAt + lockMs)) return true;
             }
           }

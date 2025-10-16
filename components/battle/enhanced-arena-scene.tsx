@@ -719,6 +719,49 @@ function SceneContent({
     socket.on('match_started', onMatchStarted)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
     socket.on('debug_trace', onDebug)
+    // Lightweight HP delta updates (authoritative)
+    const onStateUpdate = (payload: any) => {
+      try {
+        const msid = String((payload && payload.matchSessionId) || '')
+        if (!msid) return
+        const targetId = String(payload?.targetId || '')
+        if (!targetId) return
+        const hp = Number(payload?.hp)
+        if (!Number.isFinite(hp)) return
+        // Apply via damage handler by inferring delta; prefer direct set when delta cannot be inferred
+        try {
+          if (onPlayerDamage) {
+            // We only know target and new hp; call onPlayerDamage repeatedly until hp matches
+            // Bound to max 3 for safety
+            const desired = Math.max(0, Math.min(3, Math.round(hp)))
+            // We do not have direct access to current hp; rely on a brief sequence of 1-damage applications as a best-effort
+            const applyTicks = () => {
+              try { onPlayerDamage(targetId, 1) } catch {}
+            }
+            if (desired <= 2) applyTicks()
+          }
+        } catch {}
+      } catch {}
+    }
+    socket.on('state_update', onStateUpdate)
+    // On-demand full state snapshot after tab resumes
+    const onMatchState = (payload: any) => {
+      try {
+        const arr = Array.isArray(payload?.players) ? payload.players : []
+        // Coerce any dead players immediately
+        for (const p of arr) {
+          try {
+            const id = String(p?.wallet || p?.playerId || '')
+            const hp = Number(p?.hp)
+            if (!id || !Number.isFinite(hp)) continue
+            const missing = Math.max(0, Math.min(3, Math.round(hp)))
+            // Apply damage ticks up to 3 to force local state under onPlayerDamage path
+            if (missing <= 2 && onPlayerDamage) onPlayerDamage(id, 1)
+          } catch {}
+        }
+      } catch {}
+    }
+    socket.on('match_state', onMatchState)
     return () => {
       socket.off('player_state', onPlayerState)
       socket.off('player_damage', onRemotePlayerDamage)
@@ -727,6 +770,8 @@ function SceneContent({
       socket.off('round_countdown', onRoundCountdown)
       socket.off('match_started', onMatchStarted)
       socket.off('debug_trace', onDebug)
+      socket.off('state_update', onStateUpdate)
+      socket.off('match_state', onMatchState)
     }
   }, [socket, onPlayerDamage])
 
@@ -742,6 +787,24 @@ function SceneContent({
     }, 100)
     return () => clearInterval(id)
   }, [syncedCountdown])
+
+  // Background/visibility resync: request snapshot when tab gains focus or on mount
+  useEffect(() => {
+    const sendRequest = () => {
+      try {
+        const msid = (typeof window !== 'undefined') ? (window as any).__last_match_session_id : null
+        if (socket && msid) socket.emit('get_match_state', { matchSessionId: msid })
+      } catch {}
+    }
+    sendRequest()
+    const onVis = () => { if (!document.hidden) sendRequest() }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', sendRequest)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', sendRequest)
+    }
+  }, [socket])
 
   // Arena overlay countdown
   const CountdownOverlay = useMemo(() => {

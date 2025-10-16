@@ -1848,6 +1848,16 @@ preparePromise.then(() => {
         const peckAt = isPecking ? Date.now() : undefined;
         const isJumping = Boolean(payload?.isJumping);
         const targetRoom = matchId ? matchId : lobbyId;
+        // Update authoritative last-known transform for resync
+        try {
+          if (matchId && global.matchStateBySession && typeof global.matchStateBySession.get === 'function') {
+            const store = global.matchStateBySession.get(matchId);
+            if (store && store.pos) {
+              const k = String(wallet || '').toLowerCase();
+              store.pos[k] = { x: Number(pos[0])||0, y: Number(pos[1])||0.85, z: Number(pos[2])||0, rotY: isFinite(rotY)?rotY:0, ts: Date.now() };
+            }
+          }
+        } catch {}
         io.to(targetRoom).emit('player_state', {
           playerId: wallet,
           position: { x: Number(pos[0]) || 0, y: Number(pos[1]) || 0.85, z: Number(pos[2]) || 0 },
@@ -1895,7 +1905,39 @@ preparePromise.then(() => {
           global.__lastDamageMap[key] = now;
         } catch {}
         const targetRoom = matchId ? matchId : lobbyId;
+        // Update authoritative HP and broadcast a lightweight state update
+        try {
+          if (matchId && global.matchStateBySession && typeof global.matchStateBySession.get === 'function') {
+            const store = global.matchStateBySession.get(matchId);
+            if (store && store.hp) {
+              const tKey = String(targetId || '').toLowerCase();
+              const curHp = Math.max(0, Math.min(3, Number(store.hp[tKey] ?? 3)));
+              const nextHp = Math.max(0, Math.min(3, curHp - amount));
+              store.hp[tKey] = nextHp;
+              const isAlive = nextHp > 0;
+              try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId, hp: nextHp, isAlive }); } catch {}
+            }
+          }
+        } catch {}
         io.to(targetRoom).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
+      } catch {}
+    });
+
+    // Provide an on-demand match snapshot for clients resuming from background
+    socket.on('get_match_state', (payload) => {
+      try {
+        const msid = String((payload && payload.matchSessionId) || '');
+        if (!msid) return;
+        const store = (global.matchStateBySession && global.matchStateBySession.get && global.matchStateBySession.get(msid)) || null;
+        if (!store) return;
+        const players = [];
+        try {
+          const hpMap = store.hp || {};
+          for (const k in hpMap) {
+            players.push({ wallet: k, hp: Number(hpMap[k] || 0), isAlive: Number(hpMap[k] || 0) > 0 });
+          }
+        } catch {}
+        socket.emit('match_state', { matchSessionId: msid, players, startedAt: (store.startedAt || null) });
       } catch {}
     });
 
@@ -3230,6 +3272,16 @@ preparePromise.then(() => {
       try {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
+        // Initialize authoritative state store for resync
+        try {
+          if (!global.matchStateBySession) global.matchStateBySession = new Map();
+          const state = { lobbyId, hp: Object.create(null), pos: Object.create(null), startedAt: roundStartAtEpochMs, createdAt: Date.now() };
+          for (const r of (finalRoster || [])) {
+            const k = String(r.wallet || '').toLowerCase();
+            if (k) state.hp[k] = 3;
+          }
+          global.matchStateBySession.set(matchSessionId, state);
+        } catch {}
         try {
           const humans = (finalRoster || []).filter(r => !r.isAi).map(r => r.wallet);
           console.log(`[match] arena_lock_roster`, { lobbyId, matchSessionId, humansCount: humans.length, roundStartAtEpochMs });
@@ -3297,6 +3349,8 @@ preparePromise.then(() => {
           } catch {}
           // Release per-lobby lock on successful round start
           try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
+          // Clear authoritative match state now that start fired and clients are in-scene
+          try { if (global.matchStateBySession && global.matchStateBySession.delete) global.matchStateBySession.delete(matchSessionId); } catch {}
           // Immediately unlock lobby state for back-to-back starts
           try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
         }
