@@ -2036,6 +2036,21 @@ preparePromise.then(() => {
           console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
         }
         try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.delete(idempoKey); } catch {}
+        // Unlock lobby immediately after match end for back-to-back games
+        try {
+          const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(msid)) || null;
+          const lobbyId = meta && meta.lobbyId;
+          if (lobbyId) {
+            try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+            try { meta.roundEndedAt = Date.now(); } catch {}
+            // Optionally emit a snapshot update so clients refresh lobby cards/state
+            try {
+              const version = nextLobbyVersion(lobbyId);
+              const snap = await buildLobbySnapshot(lobbyId).catch(() => null);
+              if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version });
+            } catch {}
+          }
+        } catch {}
       } catch (err) {
         console.warn('match_end handler error:', err?.message || err);
         try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.delete(`${String(payload?.matchSessionId||'')}:${String((payload?.winnerWallet||'')).toLowerCase()}`); } catch {}
@@ -3282,6 +3297,8 @@ preparePromise.then(() => {
           } catch {}
           // Release per-lobby lock on successful round start
           try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
+          // Immediately unlock lobby state for back-to-back starts
+          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
         }
       }, 1000);
     } catch (e) {
