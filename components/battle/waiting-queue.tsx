@@ -81,6 +81,28 @@ export default function WaitingQueue({
   // Listen for queue phase events; advance on round_start (no local countdown display)
   useEffect(() => {
     if (!socket) return
+    // Helper to apply a roster payload (queue_begin/arena_lock or roster_full) to local lobby state
+    const applyRosterToLobby = (roster: any[]) => {
+      try {
+        const list = (Array.isArray(roster) ? roster : []).map((p: any) => {
+          const rawId = String((p && (p.wallet ?? p.playerId)) || '')
+          const isGuest = rawId.startsWith('guest_')
+          const username = (p && p.username) || (isGuest ? rawId : (rawId ? rawId.slice(0,8)+"..." : ''))
+          return {
+            playerId: rawId,
+            username,
+            chickenName: (p && (p.chickenName || p.chickenId)) || 'Default',
+            isReady: Boolean(p && (p.isReady || p.ready)),
+            isAi: Boolean(p && p.isAi),
+          }
+        })
+        setCurrentLobby(prev => ({ ...prev, players: list }))
+        // Keep latest roster cached for start override
+        latestRosterRef.current = (Array.isArray(roster) ? roster : []).map((p: any) => ({ wallet: (p && (p.wallet ?? p.playerId)) || '', username: p?.username, isAi: !!p?.isAi }))
+        try { (window as any).__latest_roster_override = list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) } catch {}
+        try { syncLobbyPlayers(list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
+      } catch {}
+    }
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
       const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
@@ -92,6 +114,8 @@ export default function WaitingQueue({
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
         return { playerId: p.wallet, username, isAi: false }
       })) } catch {}
+      // Apply roster to local UI for accurate secondary confirmation list
+      applyRosterToLobby(expected)
       // Track session id for subsequent acks/timing
       const prevMsid = matchSessionIdRef.current
       matchSessionIdRef.current = payload?.matchSessionId || null
@@ -149,12 +173,14 @@ export default function WaitingQueue({
       const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
       latestRosterRef.current = finalR
       try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
-    try { syncLobbyPlayers(finalR.map((p: any) => {
+      try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
-      return { playerId: p.wallet, username, isAi: false }
+        return { playerId: p.wallet, username, isAi: false }
       })) } catch {}
+      // Apply locked roster to local UI for accuracy
+      applyRosterToLobby(finalR)
       // Schedule a local start aligned to the server-provided epoch to avoid missing 'match_started' during screen transition
       try {
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
@@ -213,6 +239,53 @@ export default function WaitingQueue({
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
     socket.on('match_started', onStarted)
+    // Align roster handling with Match Room: consume roster_full/diff
+    const onRosterFull = (payload: any) => {
+      try {
+        if (!payload || payload.lobbyId !== lobby.id) return
+        const arr = Array.isArray(payload.players) ? payload.players : []
+        // Normalize to generic roster shape and apply
+        applyRosterToLobby(arr.map((p: any) => ({ playerId: p.playerId, wallet: p.playerId, username: p.username, isAi: p.isAi, chickenName: p.chickenName, isReady: p.isReady })))
+      } catch {}
+    }
+    const onRosterDiff = (payload: any) => {
+      try {
+        if (!payload || payload.lobbyId !== lobby.id) return
+        const pidRaw = String((payload.player && (payload.player.playerId || payload.player.wallet)) || '')
+        const updated = {
+          playerId: pidRaw,
+          username: (payload.player && payload.player.username) || (pidRaw ? pidRaw.slice(0,8)+"..." : 'Player'),
+          chickenName: (payload.player && (payload.player.chickenName || payload.player.chickenId)) || 'Default',
+          isReady: Boolean(payload.player && payload.player.isReady),
+          isAi: Boolean(payload.player && payload.player.isAi),
+        }
+        setCurrentLobby(prev => {
+          const prevArr = Array.isArray(prev.players) ? prev.players.slice() : []
+          const idx = prevArr.findIndex(p => String(p.playerId || '').toLowerCase() === pidRaw.toLowerCase())
+          if (payload.action === 'remove') {
+            if (idx >= 0) prevArr.splice(idx, 1)
+          } else {
+            if (idx >= 0) prevArr[idx] = updated as any
+            else prevArr.push(updated as any)
+          }
+          return { ...prev, players: prevArr }
+        })
+        // Keep override caches in sync
+        try {
+          const list = (window as any).__latest_roster_override as any[] || []
+          const idx2 = list.findIndex((p: any) => String(p.playerId || '').toLowerCase() === pidRaw.toLowerCase())
+          if (payload.action === 'remove') {
+            if (idx2 >= 0) list.splice(idx2, 1)
+          } else {
+            const entry = { playerId: pidRaw, username: updated.username, isAi: updated.isAi }
+            if (idx2 >= 0) list[idx2] = entry; else list.push(entry)
+          }
+          ;(window as any).__latest_roster_override = list
+        } catch {}
+      } catch {}
+    }
+    socket.on('roster_full', onRosterFull)
+    socket.on('roster_diff', onRosterDiff)
     // Presence/latency updates
     const onPresence = (p: any) => {
       try {
@@ -281,6 +354,8 @@ export default function WaitingQueue({
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)
+      socket.off('roster_full', onRosterFull)
+      socket.off('roster_diff', onRosterDiff)
       socket.off('debug_trace', onDebug)
       socket.off('queue_presence_update', onPresence)
       socket.off('queue_assets_update', onAssets)

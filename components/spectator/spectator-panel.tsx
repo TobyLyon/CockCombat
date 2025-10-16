@@ -108,7 +108,7 @@ export default function SpectatorPanel({
                       href="/api/auth/x/login"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1 rounded bg-[#1DA1F2] text-white text-xs font-semibold shadow hover:opacity-90"
+                      className="px-2 py-0.5 rounded bg-[#1DA1F2] text-white text-[10px] font-semibold shadow hover:opacity-90"
                     >
                       Connect X to chat
                     </a>

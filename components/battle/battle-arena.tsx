@@ -60,14 +60,15 @@ export default function BattleArena() {
     playSound,
     setGameState,
     setMatchMeta,
-    lastDefeatedChickenId,
     players: battlePlayers,
   } = useGameState();
   const { socket } = useSocket();
   const [spectateIndex, setSpectateIndex] = useState<number>(0)
 
   const aliveNonPlayerIds = (battlePlayers || []).filter((p: any) => p.isAlive && !p.isPlayer).map((p: any) => p.id)
-  const canSpectate = Boolean(gameState === 'battle' && lastDefeatedChickenId)
+  // Only allow spectating when the local player has been defeated during an active battle
+  const isPlayerDead = Boolean(players.find(p => p.isPlayer)?.isAlive === false)
+  const canSpectate = Boolean(gameState === 'battle' && isPlayerDead)
 
   const cycleSpectate = (dir: number) => {
     try {

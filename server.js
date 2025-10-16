@@ -2303,7 +2303,7 @@ preparePromise.then(() => {
         }
 
         // Check if we have minimum players and all are ready (uniform policy)
-        const minPlayers = lobbyId.includes('tutorial') ? 1 : 2;
+        const minPlayers = (lobby && lobby.matchType === 'tutorial') ? 1 : 2;
         // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
@@ -2312,7 +2312,7 @@ preparePromise.then(() => {
           }
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
-        const hasHumanReady = lobbyId.includes('tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
+        const hasHumanReady = (lobby && lobby.matchType === 'tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = eligiblePlayers.length >= minPlayers && 
                        readyPlayers.length === eligiblePlayers.length && hasHumanReady;
 
@@ -2399,9 +2399,9 @@ preparePromise.then(() => {
             const totalHumans = humans.length;
             const majorityThreshold = Math.floor(totalHumans / 2) + 1;
             // Only allow majority logic when there are 3 or more humans (remove 2-human special-case)
-            // Majority rule only applies when there are 3 or more humans for free/wagered lobbies.
+            // Majority rule only applies when there are 3 or more humans for non-tutorial lobbies.
             // For tutorial lobbies we allow a two-human majority (1 ready) to start a grace.
-            const isTutorialLobby = /tutorial/i.test(String(lobbyId || ''));
+            const isTutorialLobby = Boolean(lobby && lobby.matchType === 'tutorial');
             const twoHumanMajority = (isTutorialLobby && totalHumans === 2 && readyHumans.length === 1 && eligiblePlayers.length >= minPlayers);
             const hasMajorityReady = ((totalHumans >= 3 && readyHumans.length >= majorityThreshold && eligiblePlayers.length >= minPlayers) || twoHumanMajority);
 

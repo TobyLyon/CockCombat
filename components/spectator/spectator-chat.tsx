@@ -36,6 +36,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageText, setMessageText] = useState("")
   const [spectatorCount, setSpectatorCount] = useState(0)
+  const [countsByLobby, setCountsByLobby] = useState<Record<string, { humans: number; total: number }>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const { socket, isConnected } = useSocket()
   const { publicKey } = useWallet()
@@ -61,27 +62,36 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       if (onNewMessage) onNewMessage(msg.message);
     };
     
-    // Listen for global lobby/visitor counts and sum
+    // Listen for global lobby/visitor counts and sum totals across all lobbies
     const handleLobbyCounts = (payload: any) => {
       try {
+        const id = String(payload?.id || '')
         const humans = Number(payload?.liveHumans || 0)
         const total = Number(payload?.liveTotal || 0)
-        setSpectatorCount((prev) => {
-          // We'll just display the max seen across lobbies quickly; UI uses snapshots too
-          return Math.max(prev, Math.max(humans, total))
+        if (!id) return
+        setCountsByLobby(prev => {
+          const next = { ...prev, [id]: { humans, total } }
+          try {
+            const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.total) || 0), 0)
+            setSpectatorCount(sum)
+          } catch {}
+          return next
         })
       } catch {}
     }
     const handleSnapshot = (snap: any) => {
       try {
         const counts = snap?.counts || {}
-        let maxLive = 0
+        const next: Record<string, { humans: number; total: number }> = {}
         for (const k in counts) {
           const c = counts[k]
-          const v = Math.max(Number(c?.liveHumans||0), Number(c?.liveTotal||0))
-          if (v > maxLive) maxLive = v
+          next[k] = { humans: Number(c?.liveHumans||0), total: Number(c?.liveTotal||0) }
         }
-        if (maxLive > 0) setSpectatorCount(maxLive)
+        setCountsByLobby(next)
+        try {
+          const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.total) || 0), 0)
+          setSpectatorCount(sum)
+        } catch {}
       } catch {}
     }
     
@@ -201,7 +211,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
           <p className="text-xs text-yellow-300/60 mt-2 pixel-font">⏳ Connecting to chat...</p>
         )}
         {isConnected && !canSend && (
-          <p className="text-[8px] leading-none text-yellow-300/80 mt-1 pixel-font">🔒 Connect X to send messages</p>
+          <p className="text-[7px] leading-none text-yellow-300/70 mt-1 pixel-font">🔒 Connect X to send messages</p>
         )}
       </form>
     </div>

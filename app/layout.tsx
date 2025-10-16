@@ -6,7 +6,7 @@ import NavBar from "@/components/ui/nav-bar"
 import { GameStateProvider } from "@/contexts/GameStateContext"
 
 export const metadata = {
-  title: "COCK COMBAT - 8-Bit Fighting Arena",
+  title: "COCK COMBAT",
   description: `The ultimate 8-bit chicken fighting arena on Solana.`,
   icons: {
     icon: "/images/logo%202.png",
@@ -18,7 +18,7 @@ export const metadata = {
   openGraph: {
     type: 'website',
     url: 'https://www.cockcombat.xyz',
-    title: 'COCK COMBAT - 8-Bit Fighting Arena',
+    title: 'COCK COMBAT',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: [
       {
@@ -31,7 +31,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'COCK COMBAT - 8-Bit Fighting Arena',
+    title: 'COCK COMBAT',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: ['/images/cock-combat-banner.png']
   }
