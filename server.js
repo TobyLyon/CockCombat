@@ -2350,13 +2350,18 @@ preparePromise.then(() => {
               break;
             }
           }
-          // Ranked authority: consider a human ready if they have wagered, regardless of socket flag
+          // Readiness policy:
+          // - Ranked wagered (amount>0): ready if hasWagered OR socket says ready
+          // - Free (amount==0, non-tutorial): accept socket OR API isReady to tolerate HTTP fallback
+          // - Tutorial handled below for AI auto-ready
           let isReady = connectionReady;
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
             isReady = Boolean(player.hasWagered) || connectionReady;
+          } else if (lobby.matchType !== 'tutorial' && (!player.isAi)) {
+            isReady = connectionReady || Boolean((player as any).isReady);
           }
           
-          return {
+            return {
             playerId: player.playerId,
             username: player.username || player.playerId.slice(0, 8) + '...',
             chickenName: player.chickenId || 'Default',
@@ -2429,11 +2434,10 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready (uniform policy)
         const minPlayers = (lobby && lobby.matchType === 'tutorial') ? 1 : 2;
-        // In ranked, a human counts as ready if they have wagered (authoritative), even if socket flag is late
+        // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
-            // Avoid TS syntax in Node: check both props safely
-            return Boolean(p.isReady) || Boolean((p && p.hasWagered));
+            return Boolean(p.isReady) || Boolean((p && (p as any).hasWagered));
           }
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
@@ -2738,16 +2742,16 @@ preparePromise.then(() => {
                 const eligibleNow = roster.filter(p => p.isAi || presenceSetNow.has(String(p.playerId || '').toLowerCase()));
                 const readyNow = eligibleNow.filter(p => {
                   if (p.isAi && isTutorialNow) return true;
-                  // Paid ranked: require hasWagered (authoritative) or socket ready fallback
+                  // Ranked paid: require hasWagered or socket ready
                   if (!isTutorialNow && (liveLobbyNow.amount || 0) > 0 && !p.isAi) {
                     let socketReady = false;
                     try { for (const [, c] of activeConnections.entries()) { if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(p.playerId || '').toLowerCase()) { socketReady = !!c.isReady; break; } } } catch {}
                     return Boolean(p.hasWagered) || socketReady;
                   }
-                  // Free or tutorial humans: require socket ready flag
+                  // Free humans: accept socket ready or API flag
                   let socketReady = false;
                   try { for (const [, c] of activeConnections.entries()) { if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(p.playerId || '').toLowerCase()) { socketReady = !!c.isReady; break; } } } catch {}
-                  return socketReady;
+                  return socketReady || Boolean((p as any).isReady);
                 });
                 const hasHumanReadyNow = isTutorialNow ? eligibleNow.some(p => !p.isAi && readyNow.some(r => r.playerId === p.playerId)) : true;
                 const allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
