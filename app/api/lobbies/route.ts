@@ -210,8 +210,9 @@ export async function POST(req: NextRequest) {
           const lockMs = Math.max(60_000, parseInt(String(process.env.LOBBY_LOCK_MS || ''), 10) || 240_000); // default 4m
           for (const meta of map.values()) {
             if (meta && meta.lobbyId === lobbyId) {
-              const startAt = Number(meta.startAt || 0);
-              if (startAt && Date.now() < (startAt + lockMs)) return true;
+              // Only treat as active if a round actually started
+              const startedAt = Number((meta as any).roundStartedAt || 0);
+              if (startedAt && Date.now() < (startedAt + lockMs)) return true;
             }
           }
         } catch {}

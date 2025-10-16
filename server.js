@@ -633,6 +633,11 @@ preparePromise.then(() => {
           }
         } catch {}
         
+        // After any join (including when a pre-countdown was cancelled),
+        // immediately re-evaluate readiness so a valid 5s countdown is re-scheduled
+        // when two+ ready players are still present in the lobby.
+        try { await checkLobbyReadyStatus(lobbyId, io); } catch {}
+
         // Update connection data for this lobby
         if (connection) {
           connection.lastLobbyActivity = Date.now();
@@ -1256,8 +1261,17 @@ preparePromise.then(() => {
           console.log(`🧭 ensure_queue_progress: finalizing active queue session ${msId} for ${lobbyId}`)
           await finalizeQueueSession(msId, io);
         } else {
-          console.log(`🧭 ensure_queue_progress: starting queue phase for ${lobbyId}`)
-          await startQueuePhase(lobbyId, io);
+          // Only start a queue phase if a real start is imminent (pre-countdown/countdown/grace)
+          const hasCountdown = !!(global.countdownActive && global.countdownActive[lobbyId]);
+          const hasPreCountdown = !!(global.preCountdownTimers && global.preCountdownTimers[lobbyId]);
+          const hasGrace = !!(global.majorityGrace && global.majorityGrace[lobbyId]);
+          if (hasCountdown || hasPreCountdown || hasGrace) {
+            console.log(`🧭 ensure_queue_progress: starting queue phase for ${lobbyId}`)
+            await startQueuePhase(lobbyId, io);
+          } else {
+            // No-op if lobby isn't actually starting; prevents false locks
+            console.log(`🧭 ensure_queue_progress: no active start signals for ${lobbyId}, skipping startQueuePhase`)
+          }
         }
       } catch (e) {
         console.warn('ensure_queue_progress failed:', e?.message || e);
@@ -2719,6 +2733,8 @@ preparePromise.then(() => {
         }
 
         if (allReady) {
+          // Memoize the all-ready moment for soft tolerance in free lobby flaps
+          try { if (!global.__lastAllReadyAt) global.__lastAllReadyAt = Object.create(null); global.__lastAllReadyAt[lobbyId] = Date.now(); } catch {}
           // If countdown already running or scheduled, do nothing
           if (global.countdownActive && global.countdownActive[lobbyId]) {
             return;
@@ -2758,13 +2774,27 @@ preparePromise.then(() => {
                   return socketReady || apiReady;
                 });
                 const hasHumanReadyNow = isTutorialNow ? eligibleNow.some(p => !p.isAi && readyNow.some(r => r.playerId === p.playerId)) : true;
-                const allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
+                // Free lobbies can be stricter on the initial check, but allow presence flaps: if everyone
+                // was ready moments ago and still appears ready, proceed. Keep ranked strict.
+                let allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
+                if (!isTutorialNow && (liveLobbyNow.amount || 0) === 0 && !allReadyNow) {
+                  // Soft tolerance window for free lobbies: allow tiny presence races
+                  const recentlyReady = (() => {
+                    try {
+                      const stamp = (global.__lastAllReadyAt && global.__lastAllReadyAt[lobbyId]) || 0;
+                      return Date.now() - stamp < 2000; // 2s tolerance
+                    } catch { return false }
+                  })();
+                  if (recentlyReady) allReadyNow = true;
+                }
                 if (!allReadyNow) {
                   // Abort start
                   try { delete global.preCountdownTimers[lobbyId]; } catch {}
                   console.log(`⏹️ Aborting countdown start for ${lobbyId} (recheck failed)`);
                   return;
                 }
+                // Record that we saw an all-ready state
+                try { if (!global.__lastAllReadyAt) global.__lastAllReadyAt = Object.create(null); global.__lastAllReadyAt[lobbyId] = Date.now(); } catch {}
               }
             } catch {}
             try {
@@ -3212,7 +3242,16 @@ preparePromise.then(() => {
         if (c < 0) {
           clearInterval(interval);
           // Mark lobby in-progress and emit start
-          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'in-progress'; } catch {}
+          try {
+            const lob = lobbies.find(l => l && l.id === lobbyId);
+            if (lob) lob.status = 'in-progress';
+            // Mark round started time for API lock checks
+            try {
+              if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
+              const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
+              if (meta) meta.roundStartedAt = Date.now();
+            } catch {}
+          } catch {}
           try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
           try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
           try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
