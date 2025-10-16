@@ -541,10 +541,12 @@ function SceneContent({
     return decorations;
   }, [/* Add dependencies for staticDecorations if any, e.g., if ARENA_CONFIG.someValue is used inside */]);
 
-  const opponents = useMemo(() =>
-    players.filter(p => p.id !== playerChicken?.id && p.isAlive),
-    [players, playerChicken?.id]
-  );
+  const opponents = useMemo(() => {
+    const seen = new Set<string>()
+    return players
+      .filter(p => p && p.id && p.id !== playerChicken?.id && p.isAlive)
+      .filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
+  }, [players, playerChicken?.id]);
 
   // Maintain a brief decay window for remote jump flags to avoid flicker
   const remoteJumpUntilRef = useRef<Record<string, number>>({})

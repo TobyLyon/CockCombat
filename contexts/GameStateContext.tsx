@@ -555,9 +555,18 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
     // Build battle roster: prefer override list if provided; otherwise use sync'd lobbyPlayers
     const ringRadius = 10;
-    const roster = Array.isArray(rosterOverride) && rosterOverride.length > 0
+    const base = Array.isArray(rosterOverride) && rosterOverride.length > 0
       ? rosterOverride.map(r => ({ id: String(r.playerId), name: r.username, isAi: Boolean(r.isAi) }))
       : lobbyPlayers.slice().map(lp => ({ id: lp.id, name: lp.name, isAi: lp.isAi }))
+    // De-duplicate by id to avoid double entries across handoff events
+    const seen = new Set<string>()
+    const roster = base.filter(e => {
+      const k = String(e.id || '')
+      if (!k) return false
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
 
     const totalChickens = roster.length;
     const positions = generateOpponentPositions(totalChickens, ringRadius);
@@ -572,7 +581,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       const displayName = isSelf
         ? (profile?.username || 'You')
         : (entry.name || (id.startsWith('guest_') ? id : id.slice(0, 8) + '...'));
-      return {
+      const player: PlayerStatus = {
         id,
         name: displayName,
         isPlayer: isSelf,
@@ -588,6 +597,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
         // Carry over any flag fields used by HUD/animations if present on roster entry
         ...(entry as any).isHitFlashing ? { isHitFlashing: (entry as any).isHitFlashing } : {},
       };
+      return player
     });
     
     // Set initial chickens count

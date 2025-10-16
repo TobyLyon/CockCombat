@@ -423,6 +423,11 @@ export default function WaitingQueue({
         console.log('[WaitingQueue] Ignoring lobby_updated - wrong lobby or no payload', { payloadId: payload?.id, expectedId: lobby.id })
         return
       }
+      // Ignore transient empty player lists to avoid clearing UI/roster during handoff
+      if (Array.isArray(payload.players) && payload.players.length === 0) {
+        try { socket.emit('get_lobby_state', lobby.id) } catch {}
+        return
+      }
       // Merge only the fields we expect; keep existing fields like highRoller/status
       let mergedPlayersLocal: any[] = []
       setCurrentLobby(prev => {
