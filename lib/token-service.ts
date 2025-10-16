@@ -25,8 +25,8 @@ import {
 import { toast } from 'sonner';
 
 // The mint address for our custom $COCK token
-// Get from environment variable or null
-let COCK_TOKEN_MINT_ADDRESS: string | null = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || null;
+// Get from environment variable or use default fallback
+let COCK_TOKEN_MINT_ADDRESS: string | null = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || 'V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump';
 
 // Token decimals from environment or default to 6
 const TOKEN_DECIMALS = parseInt(process.env.NEXT_PUBLIC_TOKEN_DECIMALS || '6', 10);

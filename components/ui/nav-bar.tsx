@@ -46,12 +46,12 @@ export default function NavBar() {
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const tokenAddressPlaceholder = "COMING SOON"
-  const tokenEndPreview = tokenAddressPlaceholder
+  const TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || "V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump"
+  const tokenEndPreview = TOKEN_MINT
 
   const handleCopyTokenAddress = async () => {
     try {
-      await navigator.clipboard.writeText(tokenAddressPlaceholder)
+      await navigator.clipboard.writeText(TOKEN_MINT)
       setCopied(true)
       setTimeout(() => setCopied(false), 1200)
     } catch (_err) {
@@ -113,8 +113,8 @@ export default function NavBar() {
         {/* Copy Token - moved to left group after music controls */}
         <div
           className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[140px] border-white/20 bg-white/5 text-white/80`}
-          aria-label="Token contract address coming soon"
-          title="Token contract address coming soon"
+          aria-label="Token contract address"
+          title={TOKEN_MINT}
         >
           <Copy className="h-3.5 w-3.5 text-yellow-300" />
           <span className="text-xs font-mono tracking-wide">Token: {tokenEndPreview}</span>

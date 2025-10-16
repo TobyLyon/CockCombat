@@ -11,7 +11,7 @@ export function useToken() {
 // EVM-only: token actions disabled
 
 // Default token configuration from environment variables
-const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || '';
+const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || 'V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump';
 const GAME_ESCROW_WALLET = process.env.NEXT_PUBLIC_GAME_ESCROW_WALLET || '';
 
 // Admin wallet for token creation/airdrop (should be in environment variables)
