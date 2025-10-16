@@ -27,8 +27,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
     const isProd = process.env.NODE_ENV === 'production';
-    // Allow polling fallback in prod if websocket hard-fails
-    const transports = isProd ? ['websocket'] : ['polling', 'websocket'];
+    // Allow env override of transports; default to ws-only in prod and polling+ws in dev
+    const rawTransports = process.env.NEXT_PUBLIC_SOCKET_TRANSPORTS;
+    const transports = (rawTransports && rawTransports.trim())
+      ? rawTransports.split(',').map(s => s.trim()).filter(Boolean)
+      : (isProd ? ['websocket'] : ['polling', 'websocket']);
 
     // Attempt connection with configured path; if it errors with 404, retry with default '/socket.io'
     const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
@@ -71,6 +74,19 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         if (id) {
           try { socketInstance.emit('register_identity', id) } catch {}
         }
+        // On reconnect, rejoin rooms and request fresh snapshots
+        try {
+          const lobbyId = (typeof window !== 'undefined') ? ((window as any).currentLobbyId || localStorage.getItem('currentLobbyId')) : undefined;
+          if (lobbyId) {
+            try { socketInstance.emit('ensure_queue_progress', lobbyId) } catch {}
+            try { socketInstance.emit('get_lobby_state', lobbyId) } catch {}
+          }
+          const matchId = (typeof window !== 'undefined') ? ((window as any).currentMatchId || localStorage.getItem('currentMatchId')) : undefined;
+          if (matchId) {
+            try { socketInstance.emit('join_match_room', { matchSessionId: matchId }) } catch {}
+            try { socketInstance.emit('spectate_match', { matchId }) } catch {}
+          }
+        } catch {}
         // Listen for wallet address changes and re-register; fallback to guest when cleared
         const onWalletAddrChanged = (e: any) => {
           try {
@@ -142,6 +158,19 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
           try {
             const id = resolveIdentity()
             if (id) socketInstance.emit('register_identity', id)
+            // On reconnect via fallback path, also rejoin rooms and request snapshots
+            try {
+              const lobbyId = (typeof window !== 'undefined') ? ((window as any).currentLobbyId || localStorage.getItem('currentLobbyId')) : undefined;
+              if (lobbyId) {
+                try { socketInstance.emit('ensure_queue_progress', lobbyId) } catch {}
+                try { socketInstance.emit('get_lobby_state', lobbyId) } catch {}
+              }
+              const matchId = (typeof window !== 'undefined') ? ((window as any).currentMatchId || localStorage.getItem('currentMatchId')) : undefined;
+              if (matchId) {
+                try { socketInstance.emit('join_match_room', { matchSessionId: matchId }) } catch {}
+                try { socketInstance.emit('spectate_match', { matchId }) } catch {}
+              }
+            } catch {}
             const onWalletAddrChanged = (e: any) => {
               try {
                 const raw = (e && e.detail) ? String(e.detail) : null

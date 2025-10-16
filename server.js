@@ -102,6 +102,14 @@ preparePromise.then(() => {
     try {
       const parsedUrl = parse(req.url, true);
 
+      // Render health checks
+      if (req.method === 'GET' && parsedUrl.pathname === '/healthz') {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
       // Internal admin refund endpoint (Solana). Token-gated.
       if (req.method === 'POST' && parsedUrl.pathname === '/_internal/refund') {
         try {
@@ -166,15 +174,22 @@ preparePromise.then(() => {
     }
   });
 
+  // Tune HTTP timeouts to support long polling without premature disconnects
+  try {
+    httpServer.keepAliveTimeout = 65_000;
+    httpServer.headersTimeout = 66_000;
+    httpServer.requestTimeout = 0;
+  } catch {}
+
   // Initialize Socket.io
   const io = new Server(httpServer, {
     path: '/api/socketio',
     addTrailingSlash: false,
-    cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      methods: ['GET', 'POST'],
-      credentials: true,
-    },
+    cors: (() => {
+      const allow = [process.env.NEXT_PUBLIC_APP_URL, process.env.RENDER_EXTERNAL_URL, 'http://localhost:3000']
+        .filter(Boolean);
+      return { origin: allow, methods: ['GET','POST'], credentials: true };
+    })(),
     // Performance optimizations
     pingTimeout: 60000,        // 60 seconds before considering connection dead
     pingInterval: 25000,       // Ping every 25 seconds to keep connection alive
@@ -183,6 +198,27 @@ preparePromise.then(() => {
     transports: ['websocket', 'polling'],
     perMessageDeflate: false,  // Disable compression to save CPU
   });
+
+  // Optional Redis adapter for horizontal scaling on Render
+  try {
+    const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+    if (redisUrl) {
+      const { createAdapter } = require('@socket.io/redis-adapter');
+      const { createClient } = require('redis');
+      const pubClient = createClient({ url: redisUrl });
+      const subClient = pubClient.duplicate();
+      Promise.all([pubClient.connect(), subClient.connect()])
+        .then(() => {
+          io.adapter(createAdapter(pubClient, subClient));
+          console.log('🔗 Socket.IO Redis adapter enabled');
+        })
+        .catch((e) => {
+          console.warn('⚠️ Redis adapter connect failed:', e?.message || e);
+        });
+    }
+  } catch (e) {
+    console.warn('⚠️ Redis adapter not enabled:', e?.message || e);
+  }
 
   // Store the socket instance globally so API routes can access it
   global.socketIo = io;
@@ -1771,10 +1807,12 @@ preparePromise.then(() => {
     // Realtime arena sync: receive local player transform and broadcast to lobby room
     socket.on('player_state', (payload) => {
       try {
-        // Allow ~25 Hz per minute cap (slightly higher for smoother jumps)
-        if (!checkRateLimit('player_state', 1800)) {
+        // ~20 updates/sec cap to balance smoothness and server load
+        if (!checkRateLimit('player_state', 1200)) {
           return;
         }
+        // Hard cap payload size to prevent abuse
+        try { if (payload && JSON.stringify(payload).length > 1024) return; } catch {}
         const connection = activeConnections.get(socket.id);
         if (!connection) return;
         const lobbyId = connection.currentLobby || String(payload?.lobbyId || '');
@@ -1809,10 +1847,11 @@ preparePromise.then(() => {
     if (!global.__lastAttackerHitTs) global.__lastAttackerHitTs = Object.create(null);
     socket.on('player_damage', (payload) => {
       try {
-        // Allow more frequent peck hits without throttling legitimate gameplay
-        if (!checkRateLimit('player_damage', 420)) {
+        // Guard bursts and large payloads
+        if (!checkRateLimit('player_damage', 240)) {
           return;
         }
+        try { if (payload && JSON.stringify(payload).length > 512) return; } catch {}
         const connection = activeConnections.get(socket.id);
         if (!connection) return;
         const lobbyId = connection.currentLobby || String(payload?.lobbyId || '');
@@ -2063,25 +2102,25 @@ preparePromise.then(() => {
 
     // Handle spectator chat messages
     socket.on('spectator_chat', ({ matchId, message, username }) => {
-      if (!checkRateLimit('spectator_chat', 20)) {
-        console.warn(`⚠️ Rate limit exceeded for spectator_chat: ${socket.id}`);
-        return;
-      }
-      
-      console.log(`💬 Spectator ${socket.id} sent message in match ${matchId}`);
-      
-      // Broadcast to all in the match room
-      io.to(matchId).emit('chat_message', {
-        id: `${socket.id}-${Date.now()}`,
-        user: {
-          id: socket.id,
-          name: username || `Spectator_${socket.id.slice(0, 6)}`,
-          address: socket.id.slice(0, 10),
-        },
-        message: message,
-        timestamp: new Date().toISOString(),
-        isSpectator: true,
-      });
+      try {
+        if (!checkRateLimit('spectator_chat', 20)) {
+          console.warn(`⚠️ Rate limit exceeded for spectator_chat: ${socket.id}`);
+          return;
+        }
+        const roomId = String(matchId || '').trim();
+        if (!roomId) return;
+        let text = String(message || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        text = text.slice(0, 240);
+        const name = String(username || `Spectator_${socket.id.slice(0, 6)}`).slice(0, 64);
+        io.to(roomId).emit('chat_message', {
+          id: `${socket.id}-${Date.now()}`,
+          user: { id: socket.id, name, address: socket.id.slice(0, 10) },
+          message: text,
+          timestamp: new Date().toISOString(),
+          isSpectator: true,
+        });
+      } catch {}
     });
 
     // Handle disconnect

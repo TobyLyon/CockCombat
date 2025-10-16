@@ -33,7 +33,11 @@ class SocketService {
         // Initialize Socket.io connection
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined
         const isProd = process.env.NODE_ENV === 'production'
-        const transports = isProd ? ["websocket"] : ["polling", "websocket"]
+        // Env override for transports; useful on Render if WS gets flaky
+        const rawTransports = process.env.NEXT_PUBLIC_SOCKET_TRANSPORTS
+        const transports = (rawTransports && rawTransports.trim())
+          ? rawTransports.split(',').map(s => s.trim()).filter(Boolean)
+          : (isProd ? ["websocket"] : ["polling", "websocket"])
 
         const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || "/api/socketio"
         const fallbackPath = "/socket.io"
