@@ -193,8 +193,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    // Block joins when lobby is not open
-    if (lobby.status !== 'open') {
+    // Block joins when lobby is LIVE/in-progress; allow during starting/ACTIVE only for presence refresh
+    if (lobby.status === 'in-progress') {
       return NextResponse.json({ error: 'Lobby is not open for joining' }, { status: 409 });
     }
 

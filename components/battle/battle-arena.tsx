@@ -591,7 +591,7 @@ export default function BattleArena() {
                               {isTutorialLobby ? 'Tutorial' : (lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`)}
                             </div>
                             <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
-                              {isTutorialLobby ? 'Tutorial Match' : (lobby.amount === 0 ? 'Free Match' : 'Entry Fee')}
+                              {isTutorialLobby ? 'AI Populated' : (lobby.amount === 0 ? 'Free Match' : 'Entry Fee')}
                             </div>
                           </div>
                           
@@ -605,15 +605,15 @@ export default function BattleArena() {
                             </div>
                             {/* Status Indicator */}
                             <div className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                              isLocked
-                                ? 'bg-red-500/15 text-red-300 border-red-400/30'
-                                : playerCount > 0
+                              lobby.status === 'in-progress'
+                                ? 'bg-green-600/15 text-green-300 border-green-400/30'
+                                : lobby.status === 'starting'
                                 ? 'bg-yellow-500/15 text-yellow-300 border-yellow-400/30'
+                                : playerCount >= lobby.capacity
+                                ? 'bg-red-500/15 text-red-300 border-red-400/30'
                                 : 'bg-emerald-600/15 text-emerald-300 border-emerald-400/30'
                             }`}>
-                              {isLocked
-                                ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL')
-                                : (playerCount > 0 ? 'ACTIVE' : 'OPEN')}
+                              {lobby.status === 'in-progress' ? 'LIVE' : lobby.status === 'starting' ? 'ACTIVE' : (playerCount >= lobby.capacity ? 'FULL' : 'OPEN')}
                             </div>
                           </div>
                           {/* Capacity Progress */}
