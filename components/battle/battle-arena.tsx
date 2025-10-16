@@ -64,6 +64,21 @@ export default function BattleArena() {
   const { socket } = useSocket();
   // Probe X session once
   useEffect(() => {
+    // Initialize a stable guest identity for sessions without a wallet
+    try {
+      if (typeof window !== 'undefined') {
+        let existing = localStorage.getItem('guest_id');
+        if (!existing) {
+          const gen = (() => {
+            try { return 'guest_' + (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 12)); } catch { return 'guest_' + Math.random().toString(36).slice(2, 12) }
+          })();
+          existing = gen;
+          try { localStorage.setItem('guest_id', existing) } catch {}
+        }
+        try { (window as any).__guestId = existing } catch {}
+        setGuestId(existing);
+      }
+    } catch {}
     const probe = async () => {
       try {
         const res = await fetch('/api/auth/session', { cache: 'no-store' })
@@ -348,7 +363,11 @@ export default function BattleArena() {
   const getCurrentPlayerId = (): string | undefined => {
     try {
       if (publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58();
-      // Do not fallback to cached guest id; only explicit wallet
+      // Fallback to stable guest identity if no wallet
+      if (typeof window !== 'undefined') {
+        const gid = localStorage.getItem('guest_id') || (window as any).__guestId
+        if (gid && typeof gid === 'string') return gid
+      }
     } catch {}
     return undefined;
   };
@@ -660,7 +679,7 @@ export default function BattleArena() {
                 <div className="flex-1 min-h-0 overflow-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
                   <LobbyRoom
                     lobby={joinedLobby}
-                    playerIdentifier={guestId || (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || undefined}
+                    playerIdentifier={(publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || guestId || undefined}
                     onLeaveLobby={leaveCurrentLobby}
                     onStartMatch={() => {
                       setInLobbyRoom(false);

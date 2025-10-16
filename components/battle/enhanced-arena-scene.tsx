@@ -192,6 +192,8 @@ function SceneContent({
   onDrumstickCollected // Destructure callback
 }: SceneContentAndLogicProps) {
   // ALL HOOKS MUST BE CALLED AT THE TOP, UNCONDITIONALLY
+  // Track player death position for static corpse rendering when spectating
+  const deathPosRef = useRef<THREE.Vector3 | null>(null)
   const { isLoading: texturesLoading, error: textureError } = useTexturePreloader([
     'ARENA_FLOOR',
     'STONE',
@@ -1184,26 +1186,81 @@ function SceneContent({
         />
       )}
 
-      {/* Player Chicken */}
+      {/* Player Chicken (alive) or corpse (dead) */}
       {playerChicken && (
-        <group
-          ref={playerRef}
-          // Position and rotation are now handled directly in useFrame via playerRef.current
-        >
-          <PixelChicken
-            position={[0, 0, 0]} // Relative to the group
-            colors={playerChicken?.colors}
-            isPecking={selfIsPecking}
-            isWalking={isWalking || Math.hypot(selfVelocity.current.x, selfVelocity.current.z) > 0.05}
-            isJumping={selfIsJumping}
-            isHitFlashing={Boolean((playerChicken as any)?.isHitFlashing) || (((remoteHitUntilRef.current||{})[playerChicken.id]||0) > Date.now())}
-            disableBobbing={true} // Player chicken should NOT bob
-            isPlayer={true}
-            health={playerChicken.hp} // Assuming hp is part of playerChicken
-            maxHealth={playerChicken.maxHp} // Assuming maxHp is part of playerChicken
-          />
-        </group>
+        playerChicken.isAlive ? (
+          <group ref={playerRef}>
+            <PixelChicken
+              position={[0, 0, 0]}
+              colors={playerChicken?.colors}
+              isPecking={selfIsPecking}
+              isWalking={isWalking || Math.hypot(selfVelocity.current.x, selfVelocity.current.z) > 0.05}
+              isJumping={selfIsJumping}
+              isHitFlashing={Boolean((playerChicken as any)?.isHitFlashing) || (((remoteHitUntilRef.current||{})[playerChicken.id]||0) > Date.now())}
+              disableBobbing={true}
+              isPlayer={true}
+              health={playerChicken.hp}
+              maxHealth={playerChicken.maxHp}
+            />
+          </group>
+        ) : (
+          (() => {
+            if (!deathPosRef.current) {
+              try { if (playerRef.current) deathPosRef.current = playerRef.current.position.clone() } catch {}
+              if (!deathPosRef.current) deathPosRef.current = new THREE.Vector3(0, 0.85, 0)
+            }
+            const pos = deathPosRef.current?.clone() || new THREE.Vector3(0, 0.85, 0)
+            pos.y = 0.85
+            return (
+              <group position={pos} rotation={[0, 0, -Math.PI / 2]}>
+                <PixelChicken
+                  position={[0, 0, 0]}
+                  colors={playerChicken?.colors}
+                  isPecking={false}
+                  isWalking={false}
+                  isJumping={false}
+                  isHitFlashing={false}
+                  disableBobbing={true}
+                  isPlayer={true}
+                  health={0}
+                  maxHealth={playerChicken.maxHp}
+                />
+              </group>
+            )
+          })()
+        )
       )}
+
+      {/* Corpses for KO'd opponents (static, no collisions) */}
+      {players && playerChicken && players.filter(p => !p.isAlive && !p.isPlayer).map((p) => {
+        const pos = (() => {
+          try {
+            const rec = (remoteHumansRef.current || {})[p.id]
+            if (rec && rec.pos) return rec.pos.clone()
+          } catch {}
+          try {
+            if (p.position instanceof THREE.Vector3) return p.position.clone()
+            if (Array.isArray(p.position)) return new THREE.Vector3(p.position[0], p.position[1], p.position[2])
+          } catch {}
+          return new THREE.Vector3(0, 0.85, 0)
+        })()
+        pos.y = 0.85
+        return (
+          <group key={`corpse-${p.id}`} position={pos} rotation={[0, 0, -Math.PI / 2]}>
+            <PixelChicken
+              position={[0, 0, 0]}
+              colors={p.colors}
+              isPecking={false}
+              isWalking={false}
+              isJumping={false}
+              isHitFlashing={false}
+              disableBobbing={true}
+              health={0}
+              maxHealth={p.maxHp}
+            />
+          </group>
+        )
+      })}
       
       {/* Drumstick models would be rendered here based on their state */}
       {/* Example: drumsticks.map(stick => <DrumstickModel key={stick.id} position={stick.position} />) */}

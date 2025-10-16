@@ -2106,6 +2106,19 @@ preparePromise.then(() => {
                 if (lobby.matchType === 'tutorial') {
                   const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
                   lobby.players = lobby.players.filter((p) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
+                  // If presence indicates zero humans, run pruning again and log a prune-candidate
+                  try {
+                    const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')))
+                    if (humans.length === 0) {
+                      console.log(`[tutorial][prune-candidate] presence=0 but roster=${Array.isArray(lobby.players)? lobby.players.filter(p=>!p.isAi).length:0}`)
+                      try { if (io) io.to(lobbyAtDisconnect).emit('debug_trace', { t: 'prune_candidate', lobbyId: lobbyAtDisconnect }) } catch {}
+                      // Hard prune tutorial ghosts when no humans present
+                      try {
+                        if (!Array.isArray(lobby.players)) lobby.players = []
+                        lobby.players = lobby.players.filter(p => p.isAi)
+                      } catch {}
+                    }
+                  } catch {}
                 }
                 let lobbyPlayers = lobby.players.map(player => {
                   let isReady = false;

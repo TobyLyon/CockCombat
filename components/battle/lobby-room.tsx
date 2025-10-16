@@ -99,9 +99,13 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   const getCurrentPlayerId = () => {
     try {
-      if (playerIdentifier) return playerIdentifier
-      if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') return (publicKey as any).toBase58()
-      // Do not fallback to cached guest id; only use explicit playerIdentifier
+      if (playerIdentifier) return String(playerIdentifier).toLowerCase()
+      if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') return String((publicKey as any).toBase58()).toLowerCase()
+      // Fallback: stable guest identity when no wallet present
+      if (typeof window !== 'undefined') {
+        const gid = localStorage.getItem('guest_id') || (window as any).__guestId
+        if (gid && typeof gid === 'string') return String(gid).toLowerCase()
+      }
     } catch {}
     return undefined
   }
@@ -113,7 +117,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
       // Register the player identifier (wallet or guest id) with the socket
-      socket.emit('register_wallet', id);
+      socket.emit('register_wallet', String(id).toLowerCase());
       try { (window as any).currentLobbyId = lobby.id } catch {}
       
       // Wait for wallet_registered ACK before joining room (prevents race)
@@ -151,6 +155,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       };
     }
   }, [socket, isConnected, lobby.id]);
+
+  // Defensive UI: if no identifier could be resolved, block actions and prompt to init guest session
+  const missingIdentity = (() => { try { return !getCurrentPlayerId() } catch { return true } })()
 
   // Ensure scroll area never hides the bottom actions and fits viewport
   useEffect(() => {
@@ -806,14 +813,16 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
-          disabled={isProcessingWager}
+          disabled={isProcessingWager || missingIdentity}
           className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
             isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'
               : 'bg-green-600 hover:bg-green-500 text-white'
           } disabled:bg-gray-600 disabled:cursor-not-allowed`}
         >
-          {isProcessingWager ? (
+          {missingIdentity ? (
+            <>INITIALIZE GUEST SESSION</>
+          ) : isProcessingWager ? (
             <>
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               PROCESSING...
@@ -867,6 +876,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
               All ready! Starting soon...
             </p>
           </motion.div>
+        )}
+        {missingIdentity && (
+          <div className="mt-2 p-2 bg-yellow-900/30 border border-yellow-600/40 rounded text-center">
+            <p className="text-[10px] text-yellow-300 font-semibold">Guest session not initialized. Please click JOIN from lobby list to initialize.</p>
+          </div>
         )}
          {/* Expanded Details - between Ready and Leave buttons */}
          <div className="mt-2 p-2 bg-gray-900/70 border border-gray-700/50 rounded">

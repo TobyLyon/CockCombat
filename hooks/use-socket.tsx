@@ -34,6 +34,22 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
     const fallbackPath = '/socket.io';
 
+    const resolveIdentity = (): string | null => {
+      try {
+        // Prefer current EVM wallet address when available (broadcast elsewhere)
+        const evm = (typeof window !== 'undefined') ? (window as any).__cock_wallet__?.evmAddress : null
+        if (evm && typeof evm === 'string' && evm.trim()) return String(evm).toLowerCase()
+      } catch {}
+      // Fallback to stable guest id
+      try {
+        if (typeof window !== 'undefined') {
+          const gid = localStorage.getItem('guest_id') || (window as any).__guestId
+          if (gid && typeof gid === 'string' && gid.trim()) return String(gid).toLowerCase()
+        }
+      } catch {}
+      return null
+    }
+
     let socketInstance = io(socketUrl, {
       path: primaryPath,
       addTrailingSlash: false,
@@ -49,21 +65,21 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     socketInstance.on('connect', () => {
       console.log('✅ Socket connected:', socketInstance.id);
       setIsConnected(true);
-      // Auto-register current identity (wallet or guest) on connect
+      // Auto-register chosen identity (wallet or guest) on connect
       try {
-        const tryRegister = (addr?: string | null) => {
-          const id = addr
-          if (id) {
-            try { socketInstance.emit('register_wallet', id) } catch {}
-          }
+        const id = resolveIdentity()
+        if (id) {
+          try { socketInstance.emit('register_wallet', id) } catch {}
         }
-        // Attempt with last-known wallet (broadcast via custom event elsewhere)
-        tryRegister((window as any)?.__cock_wallet__?.evmAddress || null)
-        // Listen for wallet address changes to re-register
+        // Listen for wallet address changes and re-register; fallback to guest when cleared
         const onWalletAddrChanged = (e: any) => {
-          tryRegister((e && e.detail) ? String(e.detail) : null)
+          try {
+            const raw = (e && e.detail) ? String(e.detail) : null
+            const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
+            if (next) socketInstance.emit('register_wallet', String(next).toLowerCase())
+          } catch {}
         }
-        window.addEventListener('wallet_address_changed', onWalletAddrChanged as any)
+        try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
         // Clean up listener on disconnect
         socketInstance.once('disconnect', () => {
           try { window.removeEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
@@ -119,6 +135,22 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         socketInstance.on('connect', () => {
           console.log('✅ Socket connected:', socketInstance.id);
           setIsConnected(true);
+          // Ensure identity registration happens on fallback connection as well
+          try {
+            const id = resolveIdentity()
+            if (id) socketInstance.emit('register_wallet', id)
+            const onWalletAddrChanged = (e: any) => {
+              try {
+                const raw = (e && e.detail) ? String(e.detail) : null
+                const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
+                if (next) socketInstance.emit('register_wallet', String(next).toLowerCase())
+              } catch {}
+            }
+            try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
+            socketInstance.once('disconnect', () => {
+              try { window.removeEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
+            })
+          } catch {}
         });
         socketInstance.on('disconnect', () => {
           console.log('❌ Socket disconnected');
