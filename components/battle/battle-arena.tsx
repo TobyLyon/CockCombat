@@ -575,11 +575,9 @@ export default function BattleArena() {
                             <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
                               {isTutorialLobby ? 'Tutorial' : (lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`)}
                             </div>
-                            {(isTutorialLobby || lobby.amount !== 0) && (
-                              <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
-                                {isTutorialLobby ? 'Tutorial Match' : 'Entry Fee'}
-                              </div>
-                            )}
+                            <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
+                              {isTutorialLobby ? 'Tutorial Match' : (lobby.amount === 0 ? 'Free Match' : 'Entry Fee')}
+                            </div>
                           </div>
                           
                           {/* Players Count */}
