@@ -1382,11 +1382,12 @@ function ChickenInstances({
   // Limit how many AIs actively engage the player at once to avoid ganging up
   const engagedWithPlayerRef = useRef<Record<string, number>>({}) // id -> untilMs
   const lastEngagementRecalcAtRef = useRef<number>(0)
-  const MAX_ACTIVE_ATTACKERS = 2
+  // Reduce simultaneous pressure on the human player
+  const MAX_ACTIVE_ATTACKERS = 1
     // Free-for-all targeting: allow AIs to target non-player opponents with per-target caps
     const aiFocusRef = useRef<Record<string, string>>({}) // aiId -> targetId (non-player preferred)
     const aiRetargetAfterRef = useRef<Record<string, number>>({}) // aiId -> timestamp
-    const MAX_ATTACKERS_PER_TARGET = 2
+  const MAX_ATTACKERS_PER_TARGET = 2
 
     useFrame((_, delta) => {
       const playerPos = (() => {
@@ -1413,7 +1414,7 @@ function ChickenInstances({
         const slotsOpen = Math.max(0, MAX_ACTIVE_ATTACKERS - Object.keys(engagedWithPlayerRef.current).length)
         if (slotsOpen > 0) {
           try {
-            const candidates: Array<{ id: string; d: number }> = []
+            const candidates: Array<{ id: string; d: number; isHuman: boolean }> = []
             for (const c of chickens) {
               if (!(c as any).isAi || !c.isAlive || c.id === playerChickenId) continue
               const g = groupsRef.current[c.id]
@@ -1421,9 +1422,10 @@ function ChickenInstances({
               const dx = g.position.x - playerPos.x
               const dz = g.position.z - playerPos.z
               const d = Math.hypot(dx, dz)
-              if (d <= 9) candidates.push({ id: c.id, d })
+              if (d <= 9) candidates.push({ id: c.id, d, isHuman: false })
             }
-            candidates.sort((a, b) => a.d - b.d)
+            // Prefer AIs to engage first; then nearest
+            candidates.sort((a, b) => (Number(a.isHuman) - Number(b.isHuman)) || (a.d - b.d))
             const pick = candidates
               .filter(c => !(engagedWithPlayerRef.current[c.id] || 0))
               .slice(0, slotsOpen)
@@ -1525,7 +1527,7 @@ function ChickenInstances({
           const shouldRetarget = (!targetId || !targetPos || (aiRetargetAfterRef.current[chicken.id] || 0) < now)
           if (shouldRetarget) {
             try {
-              const candidates: Array<{ id: string; d: number; pos: THREE.Vector3 }> = []
+              const candidates: Array<{ id: string; d: number; pos: THREE.Vector3; isHuman: boolean }> = []
               for (const other of chickens) {
                 if (!other.isAlive) continue
                 if (other.id === chicken.id) continue
@@ -1534,13 +1536,15 @@ function ChickenInstances({
                 const dx = og.position.x - pos.x
                 const dz = og.position.z - pos.z
                 const d = Math.hypot(dx, dz)
-                if (d <= 20) candidates.push({ id: other.id, d, pos: og.position.clone() })
+                if (d <= 20) candidates.push({ id: other.id, d, pos: og.position.clone(), isHuman: !Boolean((other as any).isAi) })
               }
-              candidates.sort((a, b) => a.d - b.d)
+              // Prefer AI-vs-AI skirmishes first; then nearest
+              candidates.sort((a, b) => (Number(a.isHuman) - Number(b.isHuman)) || (a.d - b.d))
               let picked: { id: string; pos: THREE.Vector3 } | null = null
               for (const c of candidates) {
                 const cur = focusCounts[c.id] || 0
-                if (cur < MAX_ATTACKERS_PER_TARGET) { picked = { id: c.id, pos: c.pos }; break }
+                const cap = c.isHuman ? 1 : MAX_ATTACKERS_PER_TARGET
+                if (cur < cap) { picked = { id: c.id, pos: c.pos }; break }
               }
               if (picked) {
                 targetId = picked.id
@@ -1573,7 +1577,8 @@ function ChickenInstances({
         }
         g.rotation.y = lerpAngle(g.rotation.y, targetAngle, 0.15)
 
-        let speed = 2.2 // easy chase speed
+        // Slightly slower when chasing the human; normal vs other AIs
+        let speed = targetId === playerChickenId ? 1.6 : 2.2
         let moveVec = new THREE.Vector3(0, 0, 0)
 
         const isFrozen = typeof freezeUntilMs === 'number' && now < freezeUntilMs
@@ -1617,7 +1622,8 @@ function ChickenInstances({
         } else {
           // In range: try to peck with cooldown
           const last = lastPeckRef.current[chicken.id] || 0
-          if (isEngaged && !isFrozen && !isInvulnerable && now - last > 1200) {
+          const cdMs = (targetId === playerChickenId ? 2000 : 1200)
+          if (isEngaged && !isFrozen && !isInvulnerable && now - last > cdMs) {
             // Require vertical alignment similar to player hits
             const dy = Math.abs(pos.y - actualTargetPos.y)
             const verticalWindow = 0.45
