@@ -117,19 +117,20 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
       // Register the player identifier (wallet or guest id) with the socket
-      socket.emit('register_wallet', String(id).toLowerCase());
+      socket.emit('register_identity', String(id).toLowerCase());
       try { (window as any).currentLobbyId = lobby.id } catch {}
       
-      // Wait for wallet_registered ACK before joining room (prevents race)
+      // Wait for identity_registered/wallet_registered ACK before joining room (prevents race)
       const tryJoin = () => socket.emit('join_lobby_room', lobby.id);
       const acked = (typeof window !== 'undefined') && (window as any).__socket_wallet_registered;
       if (acked) {
         tryJoin();
       } else {
-        const ackListener = () => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }
+        const ackListener = () => { tryJoin(); socket.off?.('wallet_registered', ackListener as any); socket.off?.('identity_registered', ackListener as any) }
         socket.on?.('wallet_registered', ackListener as any)
+        socket.on?.('identity_registered', ackListener as any)
         // Safety timeout (500ms) to proceed even if ACK missed
-        setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any) }, 500)
+        setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any); socket.off?.('identity_registered', ackListener as any) }, 500)
       }
       
       // Tutorial-only: request ghost pruning on join to clear stale guest entries

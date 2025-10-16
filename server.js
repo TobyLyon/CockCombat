@@ -478,8 +478,8 @@ preparePromise.then(() => {
       lastLobbyActivity: Date.now()
     });
 
-    // Handle registration of wallet address to socket connection
-    socket.on('register_wallet', (walletAddress) => {
+    // Handle registration of identity (wallet or guest) to socket connection
+    const handleRegisterIdentity = (walletAddress) => {
       // Normalize to lowercase for consistent identity matching
       const normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
       // Suppress rapid duplicate logs/updates from the same socket
@@ -492,13 +492,14 @@ preparePromise.then(() => {
         }
         global.__lastWalletRegisterTs[socket.id] = now;
       } catch {}
-      console.log(`🔗 Linking wallet ${normalized} to socket ${socket.id}`);
+      console.log(`🔗 Linking identity ${normalized} to socket ${socket.id}`);
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
         connection.walletAddress = normalized;
-        console.log(`✅ Wallet ${normalized} registered to socket ${socket.id}`);
+        console.log(`✅ Identity ${normalized} registered to socket ${socket.id}`);
         try { socket.emit('wallet_registered', { walletAddress: normalized }); } catch {}
+        try { socket.emit('identity_registered', { identity: normalized }); } catch {}
 
         // If this socket had already joined a lobby before registering wallet, refresh counts
         try {
@@ -508,12 +509,12 @@ preparePromise.then(() => {
           }
         } catch {}
 
-        // Guard: if there is an older socket with the same wallet, clean it up to avoid ghost presence
+        // Guard: if there is an older socket with the same identity, clean it up to avoid ghost presence
         try {
           for (const [otherId, otherConn] of activeConnections.entries()) {
             if (otherId !== socket.id && (otherConn.walletAddress || '').toLowerCase() === normalized) {
               const oldLobby = otherConn.currentLobby;
-              console.log(`🧹 Cleaning prior socket ${otherId} for wallet ${normalized}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
+              console.log(`🧹 Cleaning prior socket ${otherId} for identity ${normalized}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
               // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal
               try { otherConn.socket?.disconnect?.(true); } catch {}
               activeConnections.delete(otherId);
@@ -521,7 +522,9 @@ preparePromise.then(() => {
           }
         } catch {}
       }
-    });
+    };
+    socket.on('register_wallet', handleRegisterIdentity);
+    socket.on('register_identity', handleRegisterIdentity);
 
     // Simple in-memory rate limiting helper per socket
     const rateLimitMap = new Map();

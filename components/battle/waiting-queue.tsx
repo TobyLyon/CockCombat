@@ -347,7 +347,7 @@ export default function WaitingQueue({
     // register wallet only (no cached guest id fallback)
     try {
       const id = resolvePlayerId()
-      if (id) socket.emit('register_wallet', id)
+      if (id) socket.emit('register_identity', id)
     } catch {}
     socket.emit('join_lobby_room', lobby.id)
     try { (window as any).currentLobbyId = lobby.id } catch {}

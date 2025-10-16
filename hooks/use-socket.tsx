@@ -69,14 +69,14 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       try {
         const id = resolveIdentity()
         if (id) {
-          try { socketInstance.emit('register_wallet', id) } catch {}
+          try { socketInstance.emit('register_identity', id) } catch {}
         }
         // Listen for wallet address changes and re-register; fallback to guest when cleared
         const onWalletAddrChanged = (e: any) => {
           try {
             const raw = (e && e.detail) ? String(e.detail) : null
             const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
-            if (next) socketInstance.emit('register_wallet', String(next).toLowerCase())
+            if (next) socketInstance.emit('register_identity', String(next).toLowerCase())
           } catch {}
         }
         try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
@@ -89,6 +89,9 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     // Handshake ACKs
     socketInstance.on('wallet_registered', () => {
+      try { (window as any).__socket_wallet_registered = true } catch {}
+    })
+    socketInstance.on('identity_registered', () => {
       try { (window as any).__socket_wallet_registered = true } catch {}
     })
     socketInstance.on('lobby_synced', (payload: any) => {
@@ -138,12 +141,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
           // Ensure identity registration happens on fallback connection as well
           try {
             const id = resolveIdentity()
-            if (id) socketInstance.emit('register_wallet', id)
+            if (id) socketInstance.emit('register_identity', id)
             const onWalletAddrChanged = (e: any) => {
               try {
                 const raw = (e && e.detail) ? String(e.detail) : null
                 const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
-                if (next) socketInstance.emit('register_wallet', String(next).toLowerCase())
+                if (next) socketInstance.emit('register_identity', String(next).toLowerCase())
               } catch {}
             }
             try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
