@@ -65,7 +65,7 @@ export default function NavBar() {
 
   return (
     <header 
-      className="relative z-10 flex items-center px-2 sm:px-4 md:px-8 py-2 sm:py-3 md:py-4 bg-[#222222] border-b-4 border-[#111111] text-white shadow-md gap-2 sm:gap-4 md:gap-8 flex-shrink-0"
+      className="relative z-[100004] flex items-center px-2 sm:px-4 md:px-8 py-2 sm:py-3 md:py-4 bg-[#222222] border-b-4 border-[#111111] text-white shadow-md gap-2 sm:gap-4 md:gap-8 flex-shrink-0"
       style={{
         paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
       }}
