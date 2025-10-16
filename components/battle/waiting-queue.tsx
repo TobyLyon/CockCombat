@@ -96,7 +96,8 @@ export default function WaitingQueue({
             playerId: rawId,
             username,
             chickenName: (p && (p.chickenName || p.chickenId)) || 'Default',
-            isReady: Boolean(p && (p.isReady || p.ready)),
+            // Treat AI as ready for tutorial flow to allow auto-start
+            isReady: Boolean(p && ((p.isReady || p.ready) || p.isAi)),
             isAi: Boolean(p && p.isAi),
           }
         })
@@ -186,6 +187,24 @@ export default function WaitingQueue({
       })) } catch {}
       // Apply locked roster to local UI for accuracy
       applyRosterToLobby(finalR)
+      // If tutorial and everyone is ready (AI count included), start immediately without majority grace
+      try {
+        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
+        if (isTutorial) {
+          const arr = (Array.isArray(finalR)?finalR:[]).map((p:any)=>({
+            id: String(p.wallet||''),
+            isAi: Boolean(p.isAi),
+            isReady: Boolean(p.isReady)
+          }))
+          const allReady = arr.length>0 && arr.every(p=> p.isAi || p.isReady)
+          if (allReady) {
+            if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
+            try { playSound('button') } catch {}
+            onStartBattle()
+            return
+          }
+        }
+      } catch {}
       // Schedule a local start aligned to the server-provided epoch to avoid missing 'match_started' during screen transition
       try {
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
@@ -239,12 +258,25 @@ export default function WaitingQueue({
           onStartBattle()
         }
       }
+      // Tutorial: immediate start path
+      try {
+        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
+        if (isTutorial) {
+          const cached = Array.isArray(latestRosterRef.current) ? latestRosterRef.current : []
+          const override = (cached.length > 0
+            ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
+            : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) : []))
+          onStartBattle(override)
+          return
+        }
+      } catch {}
       startWithOverride()
     }
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
-    // ignore non-authoritative match_started to prevent duplicate starts
+    // Also treat match_started as a start signal (robust for FREE/tutorial re-queues)
+    socket.on('match_started', onStarted)
     const onCancelled = (_payload: any) => {
       try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
       try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
@@ -358,14 +390,17 @@ export default function WaitingQueue({
     }
     socket.on('queue_begin', onQueueBeginJoin)
     socket.on('arena_lock_roster', onArenaLockJoinRoom)
+    socket.on('match_started', onArenaLockJoinRoom)
     const onDebug = (p: any) => console.log('[MATCH][DEBUG]', p)
     socket.on('debug_trace', onDebug)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('queue_begin', onQueueBeginJoin)
       socket.off('arena_lock_roster', onArenaLockJoinRoom)
+      socket.off('match_started', onArenaLockJoinRoom)
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
+      socket.off('match_started', onStarted)
       socket.off('match_cancelled', onCancelled)
       socket.off('roster_full', onRosterFull)
       socket.off('roster_diff', onRosterDiff)

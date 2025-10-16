@@ -710,7 +710,12 @@ function SceneContent({
     }
     socket.on('round_countdown', onRoundCountdown)
     // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
-    const onMatchStarted = () => {
+    const onMatchStarted = (payload?: any) => {
+      // Ensure we are in the match room and arm freeze if needed
+      try {
+        const msid = payload?.matchSessionId || (window as any)?.__last_match_session_id
+        if (msid) socket.emit('join_match_room', { matchSessionId: msid })
+      } catch {}
       if (!roundStartAtMsRef.current) {
         freezeUntilRef.current = Date.now()
         invulnerableUntilRef.current = Date.now() + 1000

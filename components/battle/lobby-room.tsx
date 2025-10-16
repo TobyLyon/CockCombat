@@ -269,6 +269,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const handleMatchStarting = (data: { countdown: number }) => {
       console.log('🚀 Match starting in:', data.countdown);
       setCountdown(data.countdown);
+      // Tutorial: if server emitted starting and all (incl. AI) are ready, immediately transition
+      try {
+        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
+        if (isTutorial) {
+          const everyoneReady = (playersRef.current||[]).every(p=> p.isAi || p.isReady)
+          if (everyoneReady) {
+            transitionedToQueueRef.current = true;
+            onStartMatch();
+          }
+        }
+      } catch {}
     };
 
     const handleMatchStarted = () => {

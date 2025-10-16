@@ -528,6 +528,8 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     // Proceed to queue state
     setInQueue(true);
     setGameState('queue');
+    try { (window as any).__last_match_session_id = null } catch {}
+    try { (window as any).__last_round_start_at = null } catch {}
     playSound('button');
   }, [playSound, lobbyPlayers.length]);
   
@@ -680,6 +682,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setLobbyPlayers([]);
     setPlayers(initialPlayers);
     setGameState('lobby');
+    try { (window as any).__last_match_session_id = null } catch {}
+    try { (window as any).__latest_roster_override = [] } catch {}
+    try { (window as any).__spectate_target_id = null } catch {}
     playSound('button');
   }, [playSound]);
   
