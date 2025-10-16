@@ -602,22 +602,23 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
   const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {
-    // Replace roster while preserving existing per-chicken colors; assign realistic colors for new entries
+    // Replace roster while preserving existing per-chicken colors; include AI for tutorial only
     setLobbyPlayers(prev => {
       const byId = new Map(prev.map(p => [p.id, p]));
       const source = Array.isArray(list) ? list : []
-      const next: PlayerStatus[] = source.filter(p => !(p as any).isAi).map((p) => {
+      const includeAi = Boolean((matchMeta?.matchType || '').toLowerCase() === 'tutorial')
+      const filtered = includeAi ? source : source.filter(p => !(p as any).isAi)
+      const next: PlayerStatus[] = filtered.map((p: any) => {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
         const colors = prevEntry?.colors || getDeterministicColorsForId(id);
         const isGuest = id.startsWith('guest_')
-        // Prefer username if present; otherwise wallet short form; keep AI labeled as AI
-        const displayName = ((p as any).username || (isGuest ? id : id.slice(0, 8) + '...'))
+        const displayName = (p.isAi ? (p.username || 'AI') : ((p as any).username || (isGuest ? id : id.slice(0, 8) + '...')))
         return {
           id,
           name: displayName,
           isPlayer: false,
-          isAi: false,
+          isAi: Boolean(p.isAi),
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
           rotation: new THREE.Euler(0, 0, 0),
           colors,
@@ -629,7 +630,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       });
       return next;
     });
-  }, [publicKey]);
+  }, [publicKey, matchMeta?.matchType]);
 
   // Hydrate usernames when battle starts (inside match) to replace wallets on any stale entries
   useEffect(() => {

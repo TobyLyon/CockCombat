@@ -6,6 +6,7 @@ import { SocketProvider } from "../hooks/use-socket";
 import { WalletPromptProvider } from "../contexts/WalletPromptContext";
 import { isBsc } from "../lib/chain";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
+import { WalletEnvProvider } from "../contexts/WalletEnvContext";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { clusterApiUrl } from "@solana/web3.js";
 import {
@@ -55,17 +56,19 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <ConnectionProvider endpoint={endpoint}>
         <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>
-            <WalletPromptProvider>
-              <ProfileProvider>
-                <SocketProvider>
-                  <AudioProvider>
-                    {children}
-                  </AudioProvider>
-                </SocketProvider>
-              </ProfileProvider>
-            </WalletPromptProvider>
-          </WalletModalProvider>
+          <WalletEnvProvider>
+            <WalletModalProvider>
+              <WalletPromptProvider>
+                <ProfileProvider>
+                  <SocketProvider>
+                    <AudioProvider>
+                      {children}
+                    </AudioProvider>
+                  </SocketProvider>
+                </ProfileProvider>
+              </WalletPromptProvider>
+            </WalletModalProvider>
+          </WalletEnvProvider>
         </WalletProvider>
       </ConnectionProvider>
     </AuthProvider>

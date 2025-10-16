@@ -15,7 +15,7 @@ export interface WalletMultiButtonProps {
 
 export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
   const { connected, publicKey, disconnect } = useWallet()
-  const modal = useWalletModal() as any
+  const modal = (() => { try { return useWalletModal() as any } catch { return { setVisible: () => {} } as any } })()
   const address = useMemo(() => {
     try {
       if (!publicKey) return ""

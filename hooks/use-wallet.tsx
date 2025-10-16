@@ -2,13 +2,16 @@
 
 import { useMemo } from "react"
 import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
+import { useWalletEnv } from "@/contexts/WalletEnvContext"
 
 type AnyFn = (...args: any[]) => any
 
 // Solana wallet hook backed by wallet-adapter
 export function useWallet() {
-  // Access the adapter; if provider is missing, return a safe fallback to avoid throwing
+  // Access the adapter; if provider is missing at runtime, return a safe fallback
+  const { hasWalletProvider } = (() => { try { return useWalletEnv() } catch { return { hasWalletProvider: false } as any } })()
   const base = (() => {
+    if (!hasWalletProvider) return {} as any
     try { return useSolanaWallet() as any } catch { return {} as any }
   })()
 

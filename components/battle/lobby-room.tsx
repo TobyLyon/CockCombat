@@ -210,7 +210,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       try { if (updatedLobby && updatedLobby.id && updatedLobby.id !== lobby.id) return } catch {}
       const next = (updatedLobby?.players || []).map((p: any) => ({
         playerId: String(p.playerId || '').toLowerCase(),
-        username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
+        username: (p.isAi ? (p.username || 'AI') : (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...')),
         chickenName: p.chickenId || p.chickenName || 'Default',
         isReady: p.isAi ? true : Boolean(p.isReady),
         isAi: !!p.isAi,

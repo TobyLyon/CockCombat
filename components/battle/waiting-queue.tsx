@@ -117,7 +117,7 @@ export default function WaitingQueue({
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
-        return { playerId: p.wallet, username, isAi: false }
+        return { playerId: p.wallet, username, isAi: Boolean(p.isAi) }
       })) } catch {}
       // Apply roster to local UI for accurate secondary confirmation list
       applyRosterToLobby(expected)
@@ -182,7 +182,7 @@ export default function WaitingQueue({
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
         const username = p.isAi ? (p.username || 'AI') : (p.username || (isGuest ? idStr : (idStr ? idStr.slice(0,8)+"..." : '')))
-        return { playerId: p.wallet, username, isAi: false }
+        return { playerId: p.wallet, username, isAi: Boolean(p.isAi) }
       })) } catch {}
       // Apply locked roster to local UI for accuracy
       applyRosterToLobby(finalR)
