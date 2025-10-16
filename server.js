@@ -2463,18 +2463,8 @@ preparePromise.then(() => {
                 allWagered = humans.length > 0 && humans.every(p => Boolean(p.hasWagered));
               }
               // Ensure escrow is assigned if missing (best-effort)
-              if (!liveLobby.escrowWalletId) {
-                try {
-                  const { evmEscrowService } = require('./lib/evm-escrow-service.ts');
-                  const wallet = evmEscrowService.getNextWallet();
-                  if (wallet && wallet.id) {
-                    const mem = lobbies.find(l => l && l.id === lobbyId);
-                    if (mem) mem.escrowWalletId = wallet.id;
-                    liveLobby.escrowWalletId = wallet.id;
-                    console.log(`🔐 Auto-assigned escrow ${wallet.id} to ${lobbyId} during ready check`);
-                  }
-                } catch {}
-              }
+              // Solana-only: do not auto-assign EVM escrow. Escrow assignment handled via Solana config elsewhere.
+              // if (!liveLobby.escrowWalletId) { /* no-op in Solana build */ }
               if (!allWagered) {
                 // Debug which wallets are missing wager evidence (API vs roster)
                 try {

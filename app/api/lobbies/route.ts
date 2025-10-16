@@ -413,17 +413,7 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    // Assign escrow wallet when first player joins (for non-tutorial matches)
-    if (!lobby.escrowWalletId && lobby.matchType !== 'tutorial' && lobby.amount > 0) {
-      const { evmEscrowService } = await import('@/lib/evm-escrow-service');
-      try {
-        const wallet = evmEscrowService.getNextWallet();
-        lobby.escrowWalletId = wallet.id;
-        console.log(`🔐 Assigned EVM Escrow Wallet ${wallet.id} to lobby ${lobbyId}`);
-      } catch (error) {
-        console.error('Failed to assign EVM escrow wallet:', error);
-      }
-    }
+    // Solana-only build: escrow assignment is handled via Solana escrow service/config elsewhere
 
     console.log(`Player ${player.playerId} (${username}) joined lobby ${lobbyId}. Current players: ${lobby.players.length}${lobby.escrowWalletId ? ` [Escrow: ${lobby.escrowWalletId}]` : ''}`);
 
