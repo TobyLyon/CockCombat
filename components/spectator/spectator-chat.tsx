@@ -201,7 +201,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
           <p className="text-xs text-yellow-300/60 mt-2 pixel-font">⏳ Connecting to chat...</p>
         )}
         {isConnected && !canSend && (
-          <p className="text-[10px] leading-none text-yellow-300/80 mt-1 pixel-font">🔒 Connect X to send messages</p>
+          <p className="text-[8px] leading-none text-yellow-300/80 mt-1 pixel-font">🔒 Connect X to send messages</p>
         )}
       </form>
     </div>
