@@ -25,7 +25,18 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta';
-  const endpoint = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network);
+  const endpointBase = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network);
+  // Optionally append Helius rebate-address on mainnet
+  const endpoint = (() => {
+    try {
+      const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || '';
+      if (network === 'mainnet-beta' && rebate) {
+        const sep = endpointBase.includes('?') ? '&' : '?';
+        return `${endpointBase}${sep}rebate-address=${encodeURIComponent(rebate)}`;
+      }
+    } catch {}
+    return endpointBase;
+  })();
   const wallets = [
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),

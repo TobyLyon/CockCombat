@@ -255,7 +255,17 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   } else {
     // Solana: transfer back from escrow to player (server-signed)
     const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
-    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+    const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+    const rpcUrl = (() => {
+      try {
+        const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
+        if (network === 'mainnet-beta' && rebate) {
+          const sep = base.includes('?') ? '&' : '?'
+          return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
+        }
+      } catch {}
+      return base
+    })()
     const connection = new Connection(rpcUrl)
     escrowService.setConnection(connection)
     const lamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)

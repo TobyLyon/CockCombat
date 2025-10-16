@@ -39,7 +39,17 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
         {
           try {
             const net = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
-            const url = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(net)
+            const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(net)
+            const url = (() => {
+              try {
+                const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
+                if (net === 'mainnet-beta' && rebate) {
+                  const sep = base.includes('?') ? '&' : '?'
+                  return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
+                }
+              } catch {}
+              return base
+            })()
             const conn = connection || new Connection(url)
             if (!connection) setConnection(conn)
             const balLamports = await conn.getBalance({ toBase58: () => publicKey.toString() } as any)

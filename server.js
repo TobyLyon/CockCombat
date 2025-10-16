@@ -3043,7 +3043,14 @@ preparePromise.then(() => {
 
       const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
       const arenaSeed = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-      const ackDeadlineMs = 4000;
+      // Longer deadline for tutorial and free (amount==0) lobbies to avoid premature cancels on asset acks
+      let ackDeadlineMs = 4000;
+      try {
+        const isFree = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+        if ((lobbyMeta && lobbyMeta.matchType === 'tutorial') || isFree) {
+          ackDeadlineMs = 7000;
+        }
+      } catch {}
 
       const session = {
         id: matchSessionId,
@@ -3151,12 +3158,14 @@ preparePromise.then(() => {
       const all = response ? await response.json().catch(() => []) : [];
       const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
       const isTutorial = lobby ? lobby.matchType === 'tutorial' : false;
+      const isFreeNonTutorial = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) === 0);
 
       // Normalize required humans and ack maps to lowercase for consistent matching
       const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => String(p.wallet || '').toLowerCase());
       const presentHumans = requiredHumans.filter((w) => {
         const key = String(w).toLowerCase();
-        return isTutorial ? presenceAcks.has(key) : (presenceAcks.has(key) && assetsAcks.has(key));
+        // Tutorial and free (amount==0) lobbies: presence-only; Ranked paid: require presence + assets
+        return (isTutorial || isFreeNonTutorial) ? presenceAcks.has(key) : (presenceAcks.has(key) && assetsAcks.has(key));
       });
 
       // Ranked cancellation if insufficient humans

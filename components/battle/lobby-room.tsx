@@ -629,8 +629,18 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const { transaction: serializedTransaction } = await wagerResponse.json();
         const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
         const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-        const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
-        const connection = new Connection(rpcUrl);
+        const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
+        const withRebate = (() => {
+          try {
+            const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
+            if (network === 'mainnet-beta' && rebate) {
+              const sep = base.includes('?') ? '&' : '?'
+              return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
+            }
+          } catch {}
+          return base
+        })()
+        const connection = new Connection(withRebate);
         const signature = await sendTransaction(transaction, connection);
         await connection.confirmTransaction(signature, 'confirmed');
 
