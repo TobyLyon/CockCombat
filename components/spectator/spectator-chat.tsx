@@ -10,6 +10,8 @@ import { Send, Users } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import { useSocket } from "@/hooks/use-socket"
 import { useWallet } from "@/hooks/use-wallet"
+import { supabase } from "@/lib/supabase"
+import { useUsername } from "@/hooks/use-username"
 
 interface ChatMessage {
   id: string
@@ -40,7 +42,35 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   const scrollRef = useRef<HTMLDivElement>(null)
   const { socket, isConnected } = useSocket()
   const { publicKey } = useWallet()
+  const walletAddr = (() => { try { return (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '' } catch { return '' } })()
+  const displayName = useUsername(walletAddr || "")
   
+  // Load existing messages from Supabase when matchId changes
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        if (!supabase || !matchId) return
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('match_id', matchId)
+          .order('created_at', { ascending: true })
+        if (!error && Array.isArray(data)) {
+          const initial = data.map((row: any) => ({
+            id: row.id || String(row.created_at),
+            user: { id: row.user_id || row.wallet || '', name: row.username || (row.wallet ? `${row.wallet.slice(0,4)}...${row.wallet.slice(-4)}` : 'Anonymous'), address: row.wallet || '' },
+            message: row.message,
+            timestamp: row.created_at,
+            isSpectator: true
+          }))
+          setMessages(initial)
+        }
+      } catch {}
+    }
+    setMessages([])
+    loadHistory()
+  }, [matchId])
+
   // Socket.IO event listeners for real-time chat
   useEffect(() => {
     if (!socket || !isConnected) return;
@@ -121,12 +151,14 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
     }
   }, [messages])
   
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!messageText.trim() || !socket || !matchId || !canSend) return
     
     // Get username from wallet or use fallback
-    const username = publicKey ? `${publicKey.toString().slice(0, 4)}...${publicKey.toString().slice(-4)}` : 'Anonymous';
+    const username = (displayName && displayName.trim())
+      ? displayName
+      : (walletAddr ? `${walletAddr.slice(0, 4)}...${walletAddr.slice(-4)}` : 'Anonymous');
     
     // Send via Socket.IO
     socket.emit('spectator_chat', {
@@ -134,6 +166,18 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       message: messageText,
       username,
     });
+    // Persist to Supabase for history
+    try {
+      if (supabase) {
+        await supabase.from('chat_messages').insert({
+          match_id: matchId,
+          message: messageText,
+          username,
+          wallet: walletAddr || null,
+          user_id: walletAddr || socket?.id || null
+        })
+      }
+    } catch {}
     
     setMessageText("")
     
@@ -194,7 +238,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
           <Input 
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder={!isConnected ? "Connecting..." : (canSend ? "Type a message..." : "Connect X to chat")}
+            placeholder={!isConnected ? "Connecting..." : "Type a message..."}
             className="bg-black/50 backdrop-blur-sm border-yellow-500/30 text-white placeholder:text-gray-500 focus:border-yellow-500/60 transition-all"
             disabled={!isConnected || !canSend}
           />
@@ -209,9 +253,6 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         </div>
         {!isConnected && (
           <p className="text-xs text-yellow-300/60 mt-2 pixel-font">⏳ Connecting to chat...</p>
-        )}
-        {isConnected && !canSend && (
-          <p className="text-[7px] leading-none text-yellow-300/70 mt-1 pixel-font">🔒 Connect X to send messages</p>
         )}
       </form>
     </div>

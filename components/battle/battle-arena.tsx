@@ -730,7 +730,7 @@ export default function BattleArena() {
             <div className="pointer-events-auto w-[340px] h-[480px] bg-black/40 backdrop-blur-xl border-2 border-yellow-500/30 rounded-2xl shadow-2xl mb-3 overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 backdrop-blur-md border-b-2 border-yellow-500/30">
                 <div className="text-[11px] font-bold text-yellow-400 pixel-font flex items-center gap-2 leading-none">
-                  💬 ARENA CHAT
+                  ARENA CHAT
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-[11px] text-yellow-300 hover:text-yellow-400 font-bold pixel-font leading-none">−</button>
@@ -747,7 +747,7 @@ export default function BattleArena() {
               className="pointer-events-auto rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold shadow-2xl px-5 py-3 pixel-font border-2 border-yellow-600/50 backdrop-blur-sm transition-all transform hover:scale-105"
               aria-label="Open chat"
             >
-              💬 CHAT
+              CHAT
             </button>
           )}
         </div>
