@@ -1021,23 +1021,63 @@ function SceneContent({
       playerRef.current.rotation.copy(selfRotation);
     }
 
-    // Update camera
+    // Update camera (support spectate following when local player is dead)
     if (cameraRef.current && playerRef.current) {
       if (!cameraTargetPosition.current) cameraTargetPosition.current = new THREE.Vector3();
       if (!lookAtPosition.current) lookAtPosition.current = new THREE.Vector3();
-      const cameraDistance = 8 * 1.5;
-      const cameraHeight = 5 * 1.5;
-      const camAngle = selfRotation.y;
+
+      // Determine if local player is dead (spectate mode eligibility)
+      let isLocalDead = false
+      try {
+        const selfP = (players as any[] || []).find(p => p && (p as any).isPlayer)
+        if (selfP) isLocalDead = !Boolean((selfP as any).isAlive)
+      } catch {}
+
+      // Resolve follow target: either self, or current spectate target if local is dead
+      let followPos = new THREE.Vector3(selfPosition.x, selfPosition.y, selfPosition.z)
+      let followRotY = selfRotation.y
+      if (isLocalDead) {
+        try {
+          const spectateId = (typeof window !== 'undefined') ? (window as any).__spectate_target_id : null
+          if (spectateId) {
+            const tgt = (players as any[] || []).find(p => p && p.id === spectateId && p.isAlive)
+            if (tgt) {
+              // Prefer latest networked transform for remote humans
+              const rec = remoteHumansRef.current?.[spectateId]
+              if (rec && rec.pos) {
+                followPos.set(rec.pos.x, 0.85, rec.pos.z)
+                followRotY = typeof rec.rotY === 'number' ? rec.rotY : 0
+              } else if ((tgt as any).position) {
+                const p = (tgt as any).position
+                if (p instanceof THREE.Vector3) {
+                  followPos.set(p.x, 0.85, p.z)
+                } else if (Array.isArray(p) && p.length >= 3) {
+                  followPos.set(Number(p[0])||0, 0.85, Number(p[2])||0)
+                }
+                if ((tgt as any).rotation && typeof (tgt as any).rotation.y === 'number') {
+                  followRotY = (tgt as any).rotation.y
+                } else {
+                  followRotY = 0
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      const cameraDistance = 8 * 1.5
+      const cameraHeight = 5 * 1.5
+      const camAngle = followRotY
       cameraTargetPosition.current.set(
-        selfPosition.x - Math.sin(camAngle) * cameraDistance,
-        selfPosition.y + cameraHeight,
-        selfPosition.z - Math.cos(camAngle) * cameraDistance
-      );
-      cameraRef.current.position.lerp(cameraTargetPosition.current, 0.1);
-      const lookAtVec = lookAtPosition.current;
-      if (lookAtVec) { // Ensure it's not null
-          lookAtVec.set(selfPosition.x, selfPosition.y + 1.5, selfPosition.z);
-          cameraRef.current.lookAt(lookAtVec);
+        followPos.x - Math.sin(camAngle) * cameraDistance,
+        followPos.y + cameraHeight,
+        followPos.z - Math.cos(camAngle) * cameraDistance
+      )
+      cameraRef.current.position.lerp(cameraTargetPosition.current, 0.1)
+      const lookAtVec = lookAtPosition.current
+      if (lookAtVec) {
+        lookAtVec.set(followPos.x, followPos.y + 1.5, followPos.z)
+        cameraRef.current.lookAt(lookAtVec)
       }
     }
 
