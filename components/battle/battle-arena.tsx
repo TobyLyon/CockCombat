@@ -490,7 +490,7 @@ export default function BattleArena() {
             {/* Main Lobby Selection */}
             <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${inLobbyRoom ? 'hidden lg:flex lg:w-[calc(100%-400px)]' : 'w-full lg:w-[calc(100%-350px)]'}`}>
               
-              <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 overflow-y-auto">
+              <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 pb-24 overflow-y-auto">
                 {isLoadingLobbies ? (
                   <div className="flex justify-center items-center h-64">
                     <div className="flex flex-col items-center gap-4">
@@ -549,7 +549,7 @@ export default function BattleArena() {
                         transition={{ duration: 0.25, ease: 'easeOut' }}
                         whileHover={{ y: -3, scale: 1.01 }}
                         whileTap={{ scale: 0.995 }}
-                        className={`relative overflow-hidden rounded-2xl p-6 md:p-7 cursor-pointer transition-all duration-300 group h-full flex flex-col
+                        className={`relative overflow-hidden rounded-2xl p-6 md:p-7 cursor-pointer transition-all duration-300 group h-full flex flex-col pointer-events-auto
                           bg-white/6 backdrop-blur-md border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)]
                           ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
                         min-h-[280px]
