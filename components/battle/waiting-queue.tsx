@@ -418,6 +418,11 @@ export default function WaitingQueue({
       try {
         if (!payload || payload.id !== lobby.id) return
         const arr = Array.isArray(payload.players) ? payload.players : []
+        // If we got an empty list, request a fresh snapshot to avoid clearing UI on transient server filters
+        if (arr.length === 0) {
+          try { socket.emit('get_lobby_state', lobby.id) } catch {}
+          return
+        }
         applyRosterToLobby(arr.map((p: any) => ({ playerId: p.playerId, wallet: p.playerId, username: p.username, isAi: p.isAi, chickenName: p.chickenName, isReady: p.isReady })))
       } catch {}
     }

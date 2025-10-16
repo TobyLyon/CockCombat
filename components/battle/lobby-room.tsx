@@ -367,18 +367,34 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       try { socket.emit('get_lobby_state', lobby.id) } catch {}
     }
     socket.on('refresh_lobby_state', onRefresh)
-    // Also accept lobby_synced as a full snapshot
+    // Also accept lobby_synced as a snapshot, but merge conservatively to avoid dropping entries on transient filters
     const onLobbySynced = (payload: any) => {
       try {
         if (!payload || payload.id !== lobby.id) return
-        const next = (payload.players || []).map((p: any) => ({
+        const incoming = Array.isArray(payload.players) ? payload.players : []
+        // If server sent an empty list unexpectedly, request a fresh authoritative state instead of clearing UI
+        if (incoming.length === 0) {
+          try { socket.emit('get_lobby_state', lobby.id) } catch {}
+          return
+        }
+        const mapped = incoming.map((p: any) => ({
           playerId: String(p.playerId || '').toLowerCase(),
           username: (p.username && p.username.trim()) || (String(p.playerId || '').slice(0,8)+'...'),
           chickenName: p.chickenName || p.chickenId || 'Default',
           isReady: p.isAi ? true : Boolean(p.isReady),
           isAi: !!p.isAi,
         }))
-        setPlayers(next)
+        // Merge into existing by id to keep any entries not present due to transient filters
+        setPlayers(prev => {
+          const byId = new Map(prev.map(p => [p.playerId, p]))
+          for (const n of mapped) {
+            const prevP = byId.get(n.playerId) || {}
+            byId.set(n.playerId, { ...prevP, ...n })
+          }
+          const merged = Array.from(byId.values())
+          merged.sort((a,b)=> (a.isAi!==b.isAi? (a.isAi?1:-1) : a.playerId.localeCompare(b.playerId)))
+          return merged
+        })
       } catch {}
     }
     socket.on('lobby_synced', onLobbySynced)
