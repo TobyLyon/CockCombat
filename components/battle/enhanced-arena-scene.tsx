@@ -553,6 +553,8 @@ function SceneContent({
   const remoteJumpUntilRef = useRef<Record<string, number>>({})
   // Maintain a brief window for remote hit flash to guarantee visibility even if context lags
   const remoteHitUntilRef = useRef<Record<string, number>>({})
+  // Track last known HP per player to only trigger flash when HP decreases
+  const lastHpRef = useRef<Record<string, number>>({})
   // Live Three.js groups for all non-player chickens; used for accurate hit positions
   const opponentGroupsRef = useRef<Record<string, THREE.Group | null>>({})
 
@@ -689,14 +691,15 @@ function SceneContent({
           try { (window as any).__last_match_session_id = msid } catch {}
           socket.emit('join_match_room', { matchSessionId: msid })
         }
-        const startAt = Number(payload?.roundStartAtEpochMs) || 0
+        const startAt = Number((payload as any)?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
-          try { (window as any).__last_round_start_at = startAt } catch {}
           const adj = startAt + serverOffsetRef.current
           roundStartAtMsRef.current = adj
           freezeUntilRef.current = adj
           invulnerableUntilRef.current = startAt + 1000
         }
+        // Reset HP tracking on new round to avoid stale flashes
+        try { lastHpRef.current = Object.create(null) } catch {}
       } catch {}
     }
     const onRoundStartJoin = (payload: any) => {
@@ -769,6 +772,8 @@ function SceneContent({
           if (delta > 0) {
             onPlayerDamage(targetId, delta)
           }
+          // Update last known HP for gating future flashes
+          try { lastHpRef.current[String(targetId).toLowerCase()] = desiredHp } catch {}
         } catch {}
       } catch {}
     }
@@ -778,13 +783,21 @@ function SceneContent({
       try {
         const arr = Array.isArray(payload?.players) ? payload.players : []
         // Do not mutate HP here; rely strictly on server 'state_update' deltas.
-        // Optionally mark a brief hit flash for any player with hp < 3 for visual continuity.
+        // Gate flashes on HP decreases only; avoid periodic resync pulses
         for (const p of arr) {
           try {
             const id = String(p?.wallet || p?.playerId || '')
             const hp = Number(p?.hp)
             if (!id || !Number.isFinite(hp)) continue
-            if (hp < 3) { try { (remoteHitUntilRef.current as any)[id] = Date.now() + 400 } catch {} }
+            const key = id.toLowerCase()
+            const prev = lastHpRef.current[key]
+            if (typeof prev === 'number') {
+              if (hp < prev) {
+                try { (remoteHitUntilRef.current as any)[id] = Date.now() + 450 } catch {}
+              }
+            }
+            // Always record latest HP
+            lastHpRef.current[key] = hp
           } catch {}
         }
       } catch {}
