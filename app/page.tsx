@@ -1,5 +1,5 @@
-import BattleArena from "@/components/battle/battle-arena";
+import LandingPage from "@/components/landing-page";
 
 export default function Home() {
-  return <BattleArena />;
+  return <LandingPage />;
 }
