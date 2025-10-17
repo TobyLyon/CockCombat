@@ -872,8 +872,20 @@ function SceneContent({
         setTimeout(() => { setHitMarkers(cur => cur.filter(m => (Date.now() - m.ts) < 900)) }, 950)
       } catch {}
     }
-    const onDamage = (payload: any) => { try { const tid = String(payload?.targetId||''); if (tid) addMarkerAt(tid) } catch {} }
-    const onDelta = (payload: any) => { try { const tid = String(payload?.targetId||''); if (tid) addMarkerAt(tid) } catch {} }
+    const onDamage = (payload: any) => {
+      try {
+        const tid = String(payload?.targetId||'')
+        if (!tid) return
+        addMarkerAt(tid)
+      } catch {}
+    }
+    const onDelta = (payload: any) => {
+      try {
+        const tid = String(payload?.targetId||'')
+        if (!tid) return
+        addMarkerAt(tid)
+      } catch {}
+    }
     socket.on('player_damage', onDamage)
     socket.on('state_update', onDelta)
     return () => { socket.off('player_damage', onDamage); socket.off('state_update', onDelta) }
@@ -893,13 +905,7 @@ function SceneContent({
     // Skip if game is not in battle state
     if (gameState !== 'battle') return; // Note: 'battle' might need to be GameState.PLAYING or similar
 
-    // Arm a 3s freeze and 4s invulnerability once at mount
-    if (!hasArmedCountdownRef.current) {
-      const nowMs = Date.now()
-      freezeUntilRef.current = nowMs + 3000
-      invulnerableUntilRef.current = nowMs + 4000
-      hasArmedCountdownRef.current = true
-    }
+    // Do not locally arm a freeze window here; rely strictly on server epoch from socket events
     
     // Skip if player is not alive
     if (playerChicken && !playerChicken.isAlive) return;
@@ -1692,10 +1698,13 @@ function ChickenInstances({
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try {
               const peckEventAt = (net as any)?.peckAt
-              if (peckEventAt && Date.now() - peckEventAt < 250) {
+              if (peckEventAt && Date.now() - peckEventAt < 200) {
                 lastPeckRef.current[chicken.id] = Date.now()
               }
-              if (net.isPecking) lastPeckRef.current[chicken.id] = Date.now()
+              // Avoid continuous visual spam; rely on peckAt edge or a short active flag
+              if (net.isPecking && (!lastPeckRef.current[chicken.id] || (Date.now() - lastPeckRef.current[chicken.id]) > 200)) {
+                lastPeckRef.current[chicken.id] = Date.now()
+              }
             } catch {}
           } else {
             try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}

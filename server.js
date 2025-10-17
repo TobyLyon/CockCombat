@@ -2727,8 +2727,16 @@ preparePromise.then(() => {
         const hasHumanReady = (lobby && lobby.matchType === 'tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = false;
         if (isTutorialLobby) {
-          // Tutorial: one ready human is enough regardless of AI/presence flaps
-          allReady = readyPlayers.some(p => !p.isAi);
+          // Tutorial: if only 1 human is present, allow immediate start when that human is ready.
+          // If 2+ humans are present, require ALL humans ready for the regular countdown;
+          // otherwise, fall back to majority grace (handled below).
+          const humansOnly = eligiblePlayers.filter(p => !p.isAi);
+          const readyHumansOnly = readyPlayers.filter(p => !p.isAi);
+          if (humansOnly.length <= 1) {
+            allReady = readyHumansOnly.length >= 1;
+          } else {
+            allReady = readyHumansOnly.length === humansOnly.length;
+          }
           if (allReady) {
             // Auto-backfill AI to capacity before pre-countdown so roster won't flap to 0/0
             try {
@@ -2853,7 +2861,7 @@ preparePromise.then(() => {
                 const endsAt = Date.now() + 15000;
                 console.log(`⏱️ Majority ready in ${lobbyId}. Starting 15s grace.`);
               // Immediately normalize readiness to avoid glitches:
-              // - Tutorial: mark every player ready
+              // - Tutorial: do NOT mass-mark humans ready (keeps majority vs. regular countdown behavior distinct)
               // - Ranked: mark paid humans ready; remove unpaid humans
               ;(async () => {
                 try {
@@ -2867,10 +2875,7 @@ preparePromise.then(() => {
                   for (const p of roster) {
                     const playerId = String(p.playerId || '');
                     if (!playerId) continue;
-                    if (isTutorial) {
-                      // Push everyone ready
-                      try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
-                    } else {
+                    if (!isTutorial) {
                       if (!p.isAi) {
                         const hasWagered = Boolean(p.hasWagered);
                         if (hasWagered) {

@@ -115,7 +115,10 @@ export default function WaitingQueue({
     // Use helper above for roster application
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
-      const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
+      // Always include AI entries for tutorial; server may already include them, but ensure consistency
+      const rawExpected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
+      const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
+      const expected = isTutorial ? rawExpected : rawExpected.filter((p:any)=> !p?.isAi)
       // Normalize wallet identities to lowercase to match server acks
       latestRosterRef.current = expected.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
@@ -188,7 +191,9 @@ export default function WaitingQueue({
     const onArenaLock = (payload: any) => {
       console.log('[WaitingQueue] arena_lock_roster', payload)
       // Replace roster with locked list and keep provided names with guest rule
-      const finalR = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
+      const rawFinal = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
+      const isTutorial2 = String(lobby.matchType||'').toLowerCase()==='tutorial'
+      const finalR = isTutorial2 ? rawFinal : rawFinal.filter((p:any)=> !p?.isAi)
       latestRosterRef.current = finalR.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(finalR.map((p: any) => {
