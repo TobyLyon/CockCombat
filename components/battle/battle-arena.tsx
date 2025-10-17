@@ -168,15 +168,11 @@ export default function BattleArena() {
     const onLock = (payload: any) => {
       try {
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
-        // If server provided a start epoch, enter ~3s before to show synced countdown
         if (startAt > 0) {
+          // Enter battle ~3s before the server start epoch to show synced countdown
           const delay = Math.max(0, startAt - Date.now() - 3000)
           if (startTimer) clearTimeout(startTimer)
           startTimer = setTimeout(ensureStart, delay)
-        } else {
-          // If no epoch was provided (gated countdown model), immediately enter battle scene
-          if (startTimer) clearTimeout(startTimer)
-          startTimer = setTimeout(ensureStart, 0)
         }
       } catch {}
     }
