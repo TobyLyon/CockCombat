@@ -2397,30 +2397,20 @@ preparePromise.then(() => {
               try { io.to(lobbyAtDisconnect).emit('player_ready_status', { lobbyId: lobbyAtDisconnect, playerId: walletAtDisconnect, isReady: false }); } catch {}
             } catch {}
 
-            // Broadcast updated lobby roster immediately (and prune ghosts for tutorial)
+          // Broadcast updated lobby roster immediately and prune ghosts for all lobbies based on live presence
             try {
               const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
               const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
               const all = res ? await res.json().catch(() => []) : [];
               const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyAtDisconnect) : null;
               if (lobby) {
-                if (lobby.matchType === 'tutorial') {
+                // Prune any humans not present in live presence for this lobby (prevents ghost guests)
+                try {
                   const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyAtDisconnect)) || new Set();
-                  lobby.players = lobby.players.filter((p) => p.isAi || presence.has(String(p.playerId || '').toLowerCase()))
-                  // If presence indicates zero humans, run pruning again and log a prune-candidate
-                  try {
-                    const humans = Array.from(presence.values()).filter((w) => !(String(w).startsWith('ai-')))
-                    if (humans.length === 0) {
-                      console.log(`[tutorial][prune-candidate] presence=0 but roster=${Array.isArray(lobby.players)? lobby.players.filter(p=>!p.isAi).length:0}`)
-                      try { if (io) io.to(lobbyAtDisconnect).emit('debug_trace', { t: 'prune_candidate', lobbyId: lobbyAtDisconnect }) } catch {}
-                      // Hard prune tutorial ghosts when no humans present
-                      try {
-                        if (!Array.isArray(lobby.players)) lobby.players = []
-                        lobby.players = lobby.players.filter(p => p.isAi)
-                      } catch {}
-                    }
-                  } catch {}
-                }
+                  if (Array.isArray(lobby.players)) {
+                    lobby.players = lobby.players.filter((p) => presence.has(String(p.playerId || '').toLowerCase()));
+                  }
+                } catch {}
                 let lobbyPlayers = lobby.players.map(player => {
                   let isReady = false;
                   for (const [, c] of activeConnections.entries()) {
@@ -2430,8 +2420,7 @@ preparePromise.then(() => {
                     playerId: player.playerId,
                     username: player.username || player.playerId.slice(0, 8) + '...',
                     chickenName: player.chickenId || 'Default',
-                    // Apply tutorial-style caching to all lobbies: AI auto-ready in tutorial; otherwise preserve last known ready if present in presence map
-                    isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
+                    isReady: isReady,
                     isAi: player.isAi || false
                   };
                 });
@@ -2674,9 +2663,8 @@ preparePromise.then(() => {
         }
 
         // Check if we have minimum players and all are ready
-        const isTutorialLobby = (lobby && lobby.matchType === 'tutorial');
         const isRankedLobby = !!(lobby && (lobby.amount || 0) > 0);
-        const minPlayers = isTutorialLobby ? 1 : (isRankedLobby ? 4 : 2);
+        const minPlayers = isRankedLobby ? 4 : 2;
         // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
         const readyPlayers = eligiblePlayers.filter(p => {
           if ((lobby.amount || 0) > 0 && !p.isAi) {
@@ -2685,44 +2673,9 @@ preparePromise.then(() => {
           }
           return p.isReady;
         });
-        const hasHumanReady = (lobby && lobby.matchType === 'tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
+        const hasHumanReady = true;
         let allReady = false;
-        if (isTutorialLobby) {
-          // Tutorial: if only 1 human is present, allow immediate start when that human is ready.
-          // If 2+ humans are present, require ALL humans ready for the regular countdown;
-          // otherwise, fall back to majority grace (handled below).
-          const humansOnly = eligiblePlayers.filter(p => !p.isAi);
-          const readyHumansOnly = readyPlayers.filter(p => !p.isAi);
-          if (humansOnly.length <= 1) {
-            allReady = readyHumansOnly.length >= 1;
-          } else {
-            allReady = readyHumansOnly.length === humansOnly.length;
-          }
-          if (allReady) {
-            // Auto-backfill AI to capacity before pre-countdown so roster won't flap to 0/0
-            try {
-              const mem = lobbies.find((l) => l && l.id === lobbyId);
-              if (mem) {
-                const capacity = typeof mem.capacity === 'number' ? mem.capacity : 8;
-                const cur = Array.isArray(mem.players) ? mem.players.slice() : [];
-                const need = Math.max(0, capacity - cur.length);
-                if (need > 0) {
-                  const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
-                  for (let i = 0; i < need; i++) {
-                    const name = aiNames[Math.floor(Math.random() * aiNames.length)];
-                    cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
-                  }
-                  mem.players = cur;
-                  const versionPre = nextLobbyVersion(lobbyId);
-                  const snapPre = await buildLobbySnapshot(lobbyId).catch(() => null);
-                  if (snapPre) io.to(lobbyId).emit('lobby_updated', { ...snapPre, version: versionPre });
-                }
-              }
-            } catch {}
-          }
-        } else {
-          allReady = eligiblePlayers.length >= minPlayers && readyPlayers.length === eligiblePlayers.length && hasHumanReady;
-        }
+        allReady = eligiblePlayers.length >= minPlayers && readyPlayers.length === eligiblePlayers.length && hasHumanReady;
 
         // Ranked enforcement: require wagers; auto-assign escrow if missing (do not block countdown)
         if (!lobbyId.includes('tutorial')) {

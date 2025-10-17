@@ -599,7 +599,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    const player = lobby.players.find(p => p.playerId === playerId);
+    const player = lobby.players.find(p => String(p.playerId||'').toLowerCase() === String(playerId||'').toLowerCase());
     if (!player) {
       return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
     }
@@ -611,10 +611,19 @@ export async function PUT(req: NextRequest) {
       player.isReady = isReady;
     }
 
-    // Broadcast via Socket.IO if available
+    // Broadcast via Socket.IO if available and hard-prune any players not present in live presence
     try {
       const socketIo = await getSocketInstance();
       if (socketIo) {
+        try {
+          const presence = (global as any).lobbyPresence?.get(lobbyId) as Set<string> | undefined;
+          if (presence && Array.isArray(lobby.players)) {
+            const before = lobby.players.length
+            lobby.players = lobby.players.filter(p => presence.has(String(p.playerId||'').toLowerCase()))
+            const after = lobby.players.length
+            if (after !== before) console.log(`[PUT][prune] removed ${before-after} absent player(s) from ${lobbyId}`)
+          }
+        } catch {}
         socketIo.to(lobbyId).emit('player_ready_status', { playerId, isReady });
 
         const lobbyPlayers = lobby.players.map(p => ({
