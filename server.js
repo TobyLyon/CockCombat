@@ -3662,6 +3662,25 @@ preparePromise.then(() => {
           // Keep authoritative match state alive during the match for periodic resync and reconnect recovery
           // Immediately unlock lobby state for back-to-back starts
           try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
++          // Safety: force-unlock free lobbies (amount==0) 10s after start in case end signals are missed
++          try {
++            setTimeout(() => {
++              try {
++                const lob = lobbies.find(l => l && l.id === lobbyId);
++                if (!lob) return;
++                const isFree = lob.matchType !== 'tutorial' && (lob.amount || 0) === 0;
++                if (!isFree) return;
++                lob.status = 'open';
++                // Clear presence and any lingering queue locks
++                try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lobbyId) || new Set()).clear?.(); } catch {}
++                try { if (global.activeQueueForLobby && global.activeQueueForLobby.delete) global.activeQueueForLobby.delete(lobbyId); } catch {}
++                try { if (global.queueLocks && global.queueLocks.delete) global.queueLocks.delete(lobbyId); } catch {}
++                // Emit counts and snapshot
++                try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
++                try { const version = nextLobbyVersion(lobbyId); buildLobbySnapshot(lobbyId).then(snap => { try { if (snap) io.emit('lobby_updated', { ...snap, version }); } catch {} }).catch(() => {}); } catch {}
++              } catch {}
++            }, 10_000);
++          } catch {}
         }
       }, 1000);
     } catch (e) {

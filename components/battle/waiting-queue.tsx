@@ -197,34 +197,17 @@ export default function WaitingQueue({
       })) } catch {}
       // Apply locked roster to local UI for accuracy
       applyRosterToLobby(finalR)
-      // If tutorial and everyone is ready (AI count included), start immediately without majority grace
-      try {
-        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
-        if (isTutorial) {
-          const arr = (Array.isArray(finalR)?finalR:[]).map((p:any)=>({
-            id: String(p.wallet||''),
-            isAi: Boolean(p.isAi),
-            isReady: Boolean(p.isReady)
-          }))
-          const allReady = arr.length>0 && arr.every(p=> p.isAi || p.isReady)
-          if (allReady) {
-            if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
-            try { playSound('button') } catch {}
-            onStartBattle()
-            return
-          }
-        }
-      } catch {}
-      // Schedule a local start aligned to the server-provided epoch to avoid missing 'match_started' during screen transition
+      // Do not auto-start tutorial; rely on synchronized round countdown/epoch like other lobbies
+      // Schedule a local start aligned to the server-provided epoch to avoid missing 'round_start' during view transition
       try {
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         try { if (startAt > 0) (window as any).__last_round_start_at = startAt } catch {}
         if (startAt > 0) {
-          // Enter the battle scene ~3s before start using server time offset for consistency
+          // Enter the battle scene ~5s before start using server time offset for consistency
           const off = Number((window as any)?.__server_time_offset_ms || 0)
           const nowServer = Date.now() + off
-          const delay = Math.max(0, startAt - nowServer - 3000)
+          const delay = Math.max(0, startAt - nowServer - 5000)
           scheduledStartRef.current = Date.now() + delay
           startTimerRef.current = setTimeout(() => {
             try { playSound('button') } catch {}
