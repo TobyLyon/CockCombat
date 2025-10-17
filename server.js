@@ -2326,6 +2326,11 @@ preparePromise.then(() => {
       });
     });
 
+    // Lightweight server time sync for countdown skew correction
+    socket.on('get_server_time', () => {
+      try { socket.emit('server_time', { now: Date.now() }); } catch {}
+    });
+
     // Handle spectator chat messages
     socket.on('spectator_chat', ({ matchId, message, username }) => {
       try {

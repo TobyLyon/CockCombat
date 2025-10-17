@@ -256,6 +256,8 @@ function SceneContent({
   const freezeUntilRef = useRef<number>(0)
   const invulnerableUntilRef = useRef<number>(0)
   const hasArmedCountdownRef = useRef<boolean>(false)
+  // Server clock offset (serverNow - clientNow)
+  const serverOffsetRef = useRef<number>(0)
 
   // Do NOT locally arm countdown; rely on server-provided epoch broadcast
   useEffect(() => {
@@ -280,8 +282,9 @@ function SceneContent({
       try {
         const startAt = (window as any)?.__last_round_start_at
         if (typeof startAt === 'number' && startAt > Date.now()) {
-          roundStartAtMsRef.current = startAt
-          freezeUntilRef.current = startAt
+          const adj = startAt + serverOffsetRef.current
+          roundStartAtMsRef.current = adj
+          freezeUntilRef.current = adj
           invulnerableUntilRef.current = startAt + 1000
           setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
         }
@@ -689,8 +692,9 @@ function SceneContent({
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
           try { (window as any).__last_round_start_at = startAt } catch {}
-          roundStartAtMsRef.current = startAt
-          freezeUntilRef.current = startAt
+          const adj = startAt + serverOffsetRef.current
+          roundStartAtMsRef.current = adj
+          freezeUntilRef.current = adj
           invulnerableUntilRef.current = startAt + 1000
         }
       } catch {}
@@ -704,8 +708,9 @@ function SceneContent({
         }
         const startAt = Number((payload as any)?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
-          roundStartAtMsRef.current = startAt
-          freezeUntilRef.current = startAt
+          const adj = startAt + serverOffsetRef.current
+          roundStartAtMsRef.current = adj
+          freezeUntilRef.current = adj
           invulnerableUntilRef.current = startAt + 1000
         }
       } catch {}
@@ -721,8 +726,9 @@ function SceneContent({
         // If we never received a startAt epoch, estimate it from the countdown
         if (!roundStartAtMsRef.current || roundStartAtMsRef.current < Date.now()) {
           const estimate = Date.now() + Math.max(0, c) * 1000
-          roundStartAtMsRef.current = estimate
-          freezeUntilRef.current = estimate
+          const adj = estimate + serverOffsetRef.current
+          roundStartAtMsRef.current = adj
+          freezeUntilRef.current = adj
           invulnerableUntilRef.current = estimate + 1000
           try { (window as any).__last_round_start_at = estimate } catch {}
         }
@@ -796,6 +802,37 @@ function SceneContent({
       socket.off('match_state', onMatchState)
     }
   }, [socket, onPlayerDamage])
+
+  // Measure server clock offset periodically
+  useEffect(() => {
+    if (!socket) return
+    let mounted = true
+    let timer: any = null
+    const ping = () => {
+      try {
+        const sentAt = Date.now()
+        const onTime = (p: any) => {
+          try {
+            const recvAt = Date.now()
+            const rtt = Math.max(0, recvAt - sentAt)
+            const oneWay = rtt / 2
+            const serverNow = Number(p?.now) || 0
+            if (serverNow > 0) {
+              const offset = serverNow - (recvAt - oneWay)
+              if (mounted) serverOffsetRef.current = offset
+            }
+          } finally {
+            try { socket.off('server_time', onTime) } catch {}
+          }
+        }
+        socket.on('server_time', onTime)
+        socket.emit('get_server_time')
+      } catch {}
+    }
+    ping()
+    timer = setInterval(ping, 2000)
+    return () => { mounted = false; if (timer) clearInterval(timer); try { socket.off('server_time') } catch {} }
+  }, [socket])
 
   // Synced countdown updater
   useEffect(() => {
