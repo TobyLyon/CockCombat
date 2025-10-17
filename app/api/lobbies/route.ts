@@ -735,9 +735,15 @@ export async function PUT(req: NextRequest) {
       }
     } catch {}
 
-    // Ready-time AI policy
+    // Ready-time policy
     if (lobby.matchType === 'tutorial') {
-      // Temporarily disable AI backfill for tutorial; don't change status here
+      // If at least one human is ready, backfill AI to capacity so start logic can proceed
+      try {
+        const hasHumanReady = lobby.players.some(p => !p.isAi && p.isReady)
+        if (hasHumanReady && (lobby as any).aiBackfill) {
+          ensureTutorialAIFilledToCapacity(lobby)
+        }
+      } catch {}
     } else {
       // Start only when everyone ready and min players met by mode
       const isRanked = lobby.amount > 0;

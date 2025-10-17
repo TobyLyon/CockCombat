@@ -1,0 +1,3559 @@
+{
+  "version": 1,
+  "generatedAt": "2025-10-17T01:23:08.335Z",
+  "projectRoot": "C:/Users/16303/Desktop/CURSOR/Cock Combat",
+  "filesCount": 188,
+  "byExtension": {
+    ".ts": 49,
+    ".tsx": 129,
+    ".js": 7,
+    ".mjs": 3
+  },
+  "files": [
+    {
+      "path": "app/api/auth/nonce/route.ts",
+      "ext": ".ts",
+      "size": 1926,
+      "lines": 61,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/auth/session/route.ts",
+      "ext": ".ts",
+      "size": 2145,
+      "lines": 87,
+      "exports": {
+        "named": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/auth/verify/route.ts",
+      "ext": ".ts",
+      "size": 2812,
+      "lines": 92,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/auth/x/callback/route.ts",
+      "ext": ".ts",
+      "size": 2463,
+      "lines": 60,
+      "exports": {
+        "named": [
+          "GET"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/auth/x/login/route.ts",
+      "ext": ".ts",
+      "size": 1133,
+      "lines": 23,
+      "exports": {
+        "named": [
+          "GET"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/auth/x/session/route.ts",
+      "ext": ".ts",
+      "size": 614,
+      "lines": 18,
+      "exports": {
+        "named": [
+          "GET"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/lobbies/route.ts",
+      "ext": ".ts",
+      "size": 30073,
+      "lines": 753,
+      "exports": {
+        "named": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/matches/active/route.ts",
+      "ext": ".ts",
+      "size": 2417,
+      "lines": 66,
+      "exports": {
+        "named": [
+          "GET"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/payout/forward/route.ts",
+      "ext": ".ts",
+      "size": 1342,
+      "lines": 41,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/payout/route.ts",
+      "ext": ".ts",
+      "size": 13931,
+      "lines": 337,
+      "exports": {
+        "named": [
+          "POST",
+          "processPayoutServerOnly"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/create/route.ts",
+      "ext": ".ts",
+      "size": 4391,
+      "lines": 135,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/route.ts",
+      "ext": ".ts",
+      "size": 1323,
+      "lines": 50,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/usernames/route.ts",
+      "ext": ".ts",
+      "size": 2582,
+      "lines": 75,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/[walletAddress]/chickens/route.ts",
+      "ext": ".ts",
+      "size": 1828,
+      "lines": 73,
+      "exports": {
+        "named": [
+          "GET",
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/[walletAddress]/match/route.ts",
+      "ext": ".ts",
+      "size": 1823,
+      "lines": 73,
+      "exports": {
+        "named": [
+          "GET",
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/profile/[walletAddress]/route.ts",
+      "ext": ".ts",
+      "size": 3624,
+      "lines": 126,
+      "exports": {
+        "named": [
+          "GET",
+          "PATCH"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/token/claim-winnings/route.ts",
+      "ext": ".ts",
+      "size": 4520,
+      "lines": 145,
+      "exports": {
+        "named": [
+          "GET",
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/wager/confirm/route.ts",
+      "ext": ".ts",
+      "size": 14697,
+      "lines": 324,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/wager/prepare/route.ts",
+      "ext": ".ts",
+      "size": 1739,
+      "lines": 53,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/wager/refund/route.ts",
+      "ext": ".ts",
+      "size": 19865,
+      "lines": 402,
+      "exports": {
+        "named": [
+          "POST",
+          "processRefundServerOnly"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/api/wager/route.ts",
+      "ext": ".ts",
+      "size": 5589,
+      "lines": 129,
+      "exports": {
+        "named": [
+          "POST"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/arena/ArenaClientPage.tsx",
+      "ext": ".tsx",
+      "size": 231,
+      "lines": 11,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/arena/page.tsx",
+      "ext": ".tsx",
+      "size": 158,
+      "lines": 8,
+      "exports": {
+        "named": [
+          "dynamic"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/how-to-play/page.tsx",
+      "ext": ".tsx",
+      "size": 17918,
+      "lines": 373,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/layout.tsx",
+      "ext": ".tsx",
+      "size": 2190,
+      "lines": 81,
+      "exports": {
+        "named": [
+          "dynamic",
+          "metadata",
+          "prerender",
+          "revalidate",
+          "viewport"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/loading.tsx",
+      "ext": ".tsx",
+      "size": 332,
+      "lines": 12,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/lobbies/page.tsx",
+      "ext": ".tsx",
+      "size": 266,
+      "lines": 12,
+      "exports": {
+        "named": [
+          "dynamic",
+          "prerender"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/marketplace/page.tsx",
+      "ext": ".tsx",
+      "size": 182,
+      "lines": 9,
+      "exports": {
+        "named": [
+          "dynamic",
+          "prerender"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/page.tsx",
+      "ext": ".tsx",
+      "size": 123,
+      "lines": 6,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/profile/page.tsx",
+      "ext": ".tsx",
+      "size": 134,
+      "lines": 6,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/providers.tsx",
+      "ext": ".tsx",
+      "size": 2843,
+      "lines": 79,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/spectate/page.tsx",
+      "ext": ".tsx",
+      "size": 2502,
+      "lines": 53,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "app/spectate/[matchId]/page.tsx",
+      "ext": ".tsx",
+      "size": 4312,
+      "lines": 115,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/3d/arena-viewer.tsx",
+      "ext": ".tsx",
+      "size": 11035,
+      "lines": 343,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/3d/chicken-viewer.tsx",
+      "ext": ".tsx",
+      "size": 6915,
+      "lines": 197,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/3d/fried-chicken-model.tsx",
+      "ext": ".tsx",
+      "size": 1908,
+      "lines": 69,
+      "exports": {
+        "named": [
+          "FriedChickenModel"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/3d/pixel-chicken-viewer.tsx",
+      "ext": ".tsx",
+      "size": 22890,
+      "lines": 604,
+      "exports": {
+        "named": [
+          "PixelChicken"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/arena-background.tsx",
+      "ext": ".tsx",
+      "size": 13751,
+      "lines": 333,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/battle-arena.tsx",
+      "ext": ".tsx",
+      "size": 41566,
+      "lines": 882,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/battle-hud.tsx",
+      "ext": ".tsx",
+      "size": 6887,
+      "lines": 142,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/bet-dialog.tsx",
+      "ext": ".tsx",
+      "size": 12695,
+      "lines": 363,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/control-panel.tsx",
+      "ext": ".tsx",
+      "size": 2396,
+      "lines": 46,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/enhanced-arena-scene.tsx",
+      "ext": ".tsx",
+      "size": 88872,
+      "lines": 1994,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/enhanced-chicken-royale.tsx",
+      "ext": ".tsx",
+      "size": 11049,
+      "lines": 298,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/fried-chicken.tsx",
+      "ext": ".tsx",
+      "size": 3332,
+      "lines": 123,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/game-over.tsx",
+      "ext": ".tsx",
+      "size": 8992,
+      "lines": 220,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/game-ui.tsx",
+      "ext": ".tsx",
+      "size": 14741,
+      "lines": 349,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/lobby-room.tsx",
+      "ext": ".tsx",
+      "size": 46590,
+      "lines": 1047,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/orbiting-camera.tsx",
+      "ext": ".tsx",
+      "size": 1803,
+      "lines": 60,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/waiting-queue.tsx",
+      "ext": ".tsx",
+      "size": 37163,
+      "lines": 730,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/battle/winner-celebration.tsx",
+      "ext": ".tsx",
+      "size": 5504,
+      "lines": 167,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/effects/poof-effect.tsx",
+      "ext": ".tsx",
+      "size": 2214,
+      "lines": 80,
+      "exports": {
+        "named": [
+          "PoofEffect"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/game-landing-page.tsx",
+      "ext": ".tsx",
+      "size": 20795,
+      "lines": 422,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/game-navigation.tsx",
+      "ext": ".tsx",
+      "size": 2242,
+      "lines": 79,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/GameClientPage.tsx",
+      "ext": ".tsx",
+      "size": 166,
+      "lines": 6,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/landing-page.tsx",
+      "ext": ".tsx",
+      "size": 4795,
+      "lines": 118,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/marketplace/chicken-listing.tsx",
+      "ext": ".tsx",
+      "size": 4727,
+      "lines": 137,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/marketplace/marketplace.tsx",
+      "ext": ".tsx",
+      "size": 4495,
+      "lines": 153,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/multiplayer/battle-results-modal.tsx",
+      "ext": ".tsx",
+      "size": 9274,
+      "lines": 254,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/multiplayer/matchmaking-modal.tsx",
+      "ext": ".tsx",
+      "size": 4995,
+      "lines": 147,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/multiplayer/multiplayer-arena.tsx",
+      "ext": ".tsx",
+      "size": 22620,
+      "lines": 662,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/pixel-game-interface.tsx",
+      "ext": ".tsx",
+      "size": 52030,
+      "lines": 1155,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/profile/setup-modal.tsx",
+      "ext": ".tsx",
+      "size": 3746,
+      "lines": 123,
+      "exports": {
+        "named": [
+          "ProfileSetupModal"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/profile/user-profile-pro.tsx",
+      "ext": ".tsx",
+      "size": 14946,
+      "lines": 313,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/profile/user-profile.tsx",
+      "ext": ".tsx",
+      "size": 7716,
+      "lines": 219,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/live-matches-feed.tsx",
+      "ext": ".tsx",
+      "size": 7126,
+      "lines": 195,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/spectator-area.tsx",
+      "ext": ".tsx",
+      "size": 11594,
+      "lines": 282,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/spectator-betting.tsx",
+      "ext": ".tsx",
+      "size": 12515,
+      "lines": 360,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/spectator-chat.tsx",
+      "ext": ".tsx",
+      "size": 10171,
+      "lines": 260,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/spectator-panel.tsx",
+      "ext": ".tsx",
+      "size": 4187,
+      "lines": 118,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/spectator/spectator-view.tsx",
+      "ext": ".tsx",
+      "size": 2232,
+      "lines": 68,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/theme-provider.tsx",
+      "ext": ".tsx",
+      "size": 292,
+      "lines": 12,
+      "exports": {
+        "named": [
+          "ThemeProvider"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/accordion.tsx",
+      "ext": ".tsx",
+      "size": 1991,
+      "lines": 59,
+      "exports": {
+        "named": [
+          "Accordion",
+          "AccordionContent",
+          "AccordionItem",
+          "AccordionTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Accordion",
+              "AccordionItem",
+              "AccordionTrigger",
+              "AccordionContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/alert-dialog.tsx",
+      "ext": ".tsx",
+      "size": 4434,
+      "lines": 142,
+      "exports": {
+        "named": [
+          "AlertDialog",
+          "AlertDialogAction",
+          "AlertDialogCancel",
+          "AlertDialogContent",
+          "AlertDialogDescription",
+          "AlertDialogFooter",
+          "AlertDialogHeader",
+          "AlertDialogOverlay",
+          "AlertDialogPortal",
+          "AlertDialogTitle",
+          "AlertDialogTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "AlertDialog",
+              "AlertDialogPortal",
+              "AlertDialogOverlay",
+              "AlertDialogTrigger",
+              "AlertDialogContent",
+              "AlertDialogHeader",
+              "AlertDialogFooter",
+              "AlertDialogTitle",
+              "AlertDialogDescription",
+              "AlertDialogAction",
+              "AlertDialogCancel"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/alert.tsx",
+      "ext": ".tsx",
+      "size": 1584,
+      "lines": 60,
+      "exports": {
+        "named": [
+          "Alert",
+          "AlertDescription",
+          "AlertTitle"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Alert",
+              "AlertTitle",
+              "AlertDescription"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/aspect-ratio.tsx",
+      "ext": ".tsx",
+      "size": 154,
+      "lines": 8,
+      "exports": {
+        "named": [
+          "AspectRatio"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "AspectRatio"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/avatar.tsx",
+      "ext": ".tsx",
+      "size": 1419,
+      "lines": 51,
+      "exports": {
+        "named": [
+          "Avatar",
+          "AvatarFallback",
+          "AvatarImage"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Avatar",
+              "AvatarImage",
+              "AvatarFallback"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/badge.tsx",
+      "ext": ".tsx",
+      "size": 1128,
+      "lines": 37,
+      "exports": {
+        "named": [
+          "Badge",
+          "BadgeProps",
+          "badgeVariants"
+        ],
+        "types": [
+          "BadgeProps"
+        ],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Badge",
+              "badgeVariants"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/breadcrumb.tsx",
+      "ext": ".tsx",
+      "size": 2712,
+      "lines": 116,
+      "exports": {
+        "named": [
+          "Breadcrumb",
+          "BreadcrumbEllipsis",
+          "BreadcrumbItem",
+          "BreadcrumbLink",
+          "BreadcrumbList",
+          "BreadcrumbPage",
+          "BreadcrumbSeparator"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Breadcrumb",
+              "BreadcrumbList",
+              "BreadcrumbItem",
+              "BreadcrumbLink",
+              "BreadcrumbPage",
+              "BreadcrumbSeparator",
+              "BreadcrumbEllipsis"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/button.tsx",
+      "ext": ".tsx",
+      "size": 1901,
+      "lines": 57,
+      "exports": {
+        "named": [
+          "Button",
+          "ButtonProps",
+          "buttonVariants"
+        ],
+        "types": [
+          "ButtonProps"
+        ],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Button",
+              "buttonVariants"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/calendar.tsx",
+      "ext": ".tsx",
+      "size": 2587,
+      "lines": 67,
+      "exports": {
+        "named": [
+          "Calendar",
+          "CalendarProps"
+        ],
+        "types": [
+          "CalendarProps"
+        ],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Calendar"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/card.tsx",
+      "ext": ".tsx",
+      "size": 1858,
+      "lines": 80,
+      "exports": {
+        "named": [
+          "Card",
+          "CardContent",
+          "CardDescription",
+          "CardFooter",
+          "CardHeader",
+          "CardTitle"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Card",
+              "CardHeader",
+              "CardFooter",
+              "CardTitle",
+              "CardDescription",
+              "CardContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/carousel.tsx",
+      "ext": ".tsx",
+      "size": 6224,
+      "lines": 263,
+      "exports": {
+        "named": [
+          "Carousel",
+          "CarouselApi",
+          "CarouselContent",
+          "CarouselItem",
+          "CarouselNext",
+          "CarouselPrevious"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "CarouselApi",
+              "Carousel",
+              "CarouselContent",
+              "CarouselItem",
+              "CarouselPrevious",
+              "CarouselNext"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/chart.tsx",
+      "ext": ".tsx",
+      "size": 10480,
+      "lines": 366,
+      "exports": {
+        "named": [
+          "ChartConfig",
+          "ChartContainer",
+          "ChartLegend",
+          "ChartLegendContent",
+          "ChartStyle",
+          "ChartTooltip",
+          "ChartTooltipContent"
+        ],
+        "types": [
+          "ChartConfig"
+        ],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ChartContainer",
+              "ChartTooltip",
+              "ChartTooltipContent",
+              "ChartLegend",
+              "ChartLegendContent",
+              "ChartStyle"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/checkbox.tsx",
+      "ext": ".tsx",
+      "size": 1070,
+      "lines": 31,
+      "exports": {
+        "named": [
+          "Checkbox"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Checkbox"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/collapsible.tsx",
+      "ext": ".tsx",
+      "size": 329,
+      "lines": 12,
+      "exports": {
+        "named": [
+          "Collapsible",
+          "CollapsibleContent",
+          "CollapsibleTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Collapsible",
+              "CollapsibleTrigger",
+              "CollapsibleContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/command.tsx",
+      "ext": ".tsx",
+      "size": 4899,
+      "lines": 154,
+      "exports": {
+        "named": [
+          "Command",
+          "CommandDialog",
+          "CommandEmpty",
+          "CommandGroup",
+          "CommandInput",
+          "CommandItem",
+          "CommandList",
+          "CommandSeparator",
+          "CommandShortcut"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Command",
+              "CommandDialog",
+              "CommandInput",
+              "CommandList",
+              "CommandEmpty",
+              "CommandGroup",
+              "CommandItem",
+              "CommandShortcut",
+              "CommandSeparator"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/context-menu.tsx",
+      "ext": ".tsx",
+      "size": 7260,
+      "lines": 201,
+      "exports": {
+        "named": [
+          "ContextMenu",
+          "ContextMenuCheckboxItem",
+          "ContextMenuContent",
+          "ContextMenuGroup",
+          "ContextMenuItem",
+          "ContextMenuLabel",
+          "ContextMenuPortal",
+          "ContextMenuRadioGroup",
+          "ContextMenuRadioItem",
+          "ContextMenuSeparator",
+          "ContextMenuShortcut",
+          "ContextMenuSub",
+          "ContextMenuSubContent",
+          "ContextMenuSubTrigger",
+          "ContextMenuTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ContextMenu",
+              "ContextMenuTrigger",
+              "ContextMenuContent",
+              "ContextMenuItem",
+              "ContextMenuCheckboxItem",
+              "ContextMenuRadioItem",
+              "ContextMenuLabel",
+              "ContextMenuSeparator",
+              "ContextMenuShortcut",
+              "ContextMenuGroup",
+              "ContextMenuPortal",
+              "ContextMenuSub",
+              "ContextMenuSubContent",
+              "ContextMenuSubTrigger",
+              "ContextMenuRadioGroup"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/dialog.tsx",
+      "ext": ".tsx",
+      "size": 3849,
+      "lines": 123,
+      "exports": {
+        "named": [
+          "Dialog",
+          "DialogClose",
+          "DialogContent",
+          "DialogDescription",
+          "DialogFooter",
+          "DialogHeader",
+          "DialogOverlay",
+          "DialogPortal",
+          "DialogTitle",
+          "DialogTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Dialog",
+              "DialogPortal",
+              "DialogOverlay",
+              "DialogClose",
+              "DialogTrigger",
+              "DialogContent",
+              "DialogHeader",
+              "DialogFooter",
+              "DialogTitle",
+              "DialogDescription"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/drawer.tsx",
+      "ext": ".tsx",
+      "size": 3021,
+      "lines": 119,
+      "exports": {
+        "named": [
+          "Drawer",
+          "DrawerClose",
+          "DrawerContent",
+          "DrawerDescription",
+          "DrawerFooter",
+          "DrawerHeader",
+          "DrawerOverlay",
+          "DrawerPortal",
+          "DrawerTitle",
+          "DrawerTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Drawer",
+              "DrawerPortal",
+              "DrawerOverlay",
+              "DrawerTrigger",
+              "DrawerClose",
+              "DrawerContent",
+              "DrawerHeader",
+              "DrawerFooter",
+              "DrawerTitle",
+              "DrawerDescription"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/dropdown-menu.tsx",
+      "ext": ".tsx",
+      "size": 7433,
+      "lines": 201,
+      "exports": {
+        "named": [
+          "DropdownMenu",
+          "DropdownMenuCheckboxItem",
+          "DropdownMenuContent",
+          "DropdownMenuGroup",
+          "DropdownMenuItem",
+          "DropdownMenuLabel",
+          "DropdownMenuPortal",
+          "DropdownMenuRadioGroup",
+          "DropdownMenuRadioItem",
+          "DropdownMenuSeparator",
+          "DropdownMenuShortcut",
+          "DropdownMenuSub",
+          "DropdownMenuSubContent",
+          "DropdownMenuSubTrigger",
+          "DropdownMenuTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "DropdownMenu",
+              "DropdownMenuTrigger",
+              "DropdownMenuContent",
+              "DropdownMenuItem",
+              "DropdownMenuCheckboxItem",
+              "DropdownMenuRadioItem",
+              "DropdownMenuLabel",
+              "DropdownMenuSeparator",
+              "DropdownMenuShortcut",
+              "DropdownMenuGroup",
+              "DropdownMenuPortal",
+              "DropdownMenuSub",
+              "DropdownMenuSubContent",
+              "DropdownMenuSubTrigger",
+              "DropdownMenuRadioGroup"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/form.tsx",
+      "ext": ".tsx",
+      "size": 4099,
+      "lines": 179,
+      "exports": {
+        "named": [
+          "Form",
+          "FormControl",
+          "FormDescription",
+          "FormField",
+          "FormItem",
+          "FormLabel",
+          "FormMessage",
+          "useFormField"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "useFormField",
+              "Form",
+              "FormItem",
+              "FormLabel",
+              "FormControl",
+              "FormDescription",
+              "FormMessage",
+              "FormField"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/hover-card.tsx",
+      "ext": ".tsx",
+      "size": 1198,
+      "lines": 30,
+      "exports": {
+        "named": [
+          "HoverCard",
+          "HoverCardContent",
+          "HoverCardTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "HoverCard",
+              "HoverCardTrigger",
+              "HoverCardContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/input-otp.tsx",
+      "ext": ".tsx",
+      "size": 2168,
+      "lines": 72,
+      "exports": {
+        "named": [
+          "InputOTP",
+          "InputOTPGroup",
+          "InputOTPSeparator",
+          "InputOTPSlot"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "InputOTP",
+              "InputOTPGroup",
+              "InputOTPSlot",
+              "InputOTPSeparator"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/input.tsx",
+      "ext": ".tsx",
+      "size": 791,
+      "lines": 23,
+      "exports": {
+        "named": [
+          "Input"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Input"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/label.tsx",
+      "ext": ".tsx",
+      "size": 724,
+      "lines": 27,
+      "exports": {
+        "named": [
+          "Label"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Label"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/loading-chicken.tsx",
+      "ext": ".tsx",
+      "size": 2844,
+      "lines": 90,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/loading-pixel-chicken.tsx",
+      "ext": ".tsx",
+      "size": 7912,
+      "lines": 214,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/menubar.tsx",
+      "ext": ".tsx",
+      "size": 7988,
+      "lines": 237,
+      "exports": {
+        "named": [
+          "Menubar",
+          "MenubarCheckboxItem",
+          "MenubarContent",
+          "MenubarGroup",
+          "MenubarItem",
+          "MenubarLabel",
+          "MenubarMenu",
+          "MenubarPortal",
+          "MenubarRadioGroup",
+          "MenubarRadioItem",
+          "MenubarSeparator",
+          "MenubarShortcut",
+          "MenubarSub",
+          "MenubarSubContent",
+          "MenubarSubTrigger",
+          "MenubarTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Menubar",
+              "MenubarMenu",
+              "MenubarTrigger",
+              "MenubarContent",
+              "MenubarItem",
+              "MenubarSeparator",
+              "MenubarLabel",
+              "MenubarCheckboxItem",
+              "MenubarRadioGroup",
+              "MenubarRadioItem",
+              "MenubarPortal",
+              "MenubarSubContent",
+              "MenubarSubTrigger",
+              "MenubarGroup",
+              "MenubarSub",
+              "MenubarShortcut"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/nav-bar.tsx",
+      "ext": ".tsx",
+      "size": 10513,
+      "lines": 222,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/navigation-menu.tsx",
+      "ext": ".tsx",
+      "size": 5046,
+      "lines": 129,
+      "exports": {
+        "named": [
+          "NavigationMenu",
+          "NavigationMenuContent",
+          "NavigationMenuIndicator",
+          "NavigationMenuItem",
+          "NavigationMenuLink",
+          "NavigationMenuList",
+          "NavigationMenuTrigger",
+          "NavigationMenuViewport",
+          "navigationMenuTriggerStyle"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "navigationMenuTriggerStyle",
+              "NavigationMenu",
+              "NavigationMenuList",
+              "NavigationMenuItem",
+              "NavigationMenuContent",
+              "NavigationMenuTrigger",
+              "NavigationMenuLink",
+              "NavigationMenuIndicator",
+              "NavigationMenuViewport"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/pagination.tsx",
+      "ext": ".tsx",
+      "size": 2751,
+      "lines": 118,
+      "exports": {
+        "named": [
+          "Pagination",
+          "PaginationContent",
+          "PaginationEllipsis",
+          "PaginationItem",
+          "PaginationLink",
+          "PaginationNext",
+          "PaginationPrevious"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Pagination",
+              "PaginationContent",
+              "PaginationEllipsis",
+              "PaginationItem",
+              "PaginationLink",
+              "PaginationNext",
+              "PaginationPrevious"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/popover.tsx",
+      "ext": ".tsx",
+      "size": 1244,
+      "lines": 32,
+      "exports": {
+        "named": [
+          "Popover",
+          "PopoverContent",
+          "PopoverTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Popover",
+              "PopoverTrigger",
+              "PopoverContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/progress.tsx",
+      "ext": ".tsx",
+      "size": 791,
+      "lines": 29,
+      "exports": {
+        "named": [
+          "Progress"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Progress"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/radio-group.tsx",
+      "ext": ".tsx",
+      "size": 1481,
+      "lines": 45,
+      "exports": {
+        "named": [
+          "RadioGroup",
+          "RadioGroupItem"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "RadioGroup",
+              "RadioGroupItem"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/resizable.tsx",
+      "ext": ".tsx",
+      "size": 1723,
+      "lines": 46,
+      "exports": {
+        "named": [
+          "ResizableHandle",
+          "ResizablePanel",
+          "ResizablePanelGroup"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ResizablePanelGroup",
+              "ResizablePanel",
+              "ResizableHandle"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/scroll-area.tsx",
+      "ext": ".tsx",
+      "size": 1656,
+      "lines": 49,
+      "exports": {
+        "named": [
+          "ScrollArea",
+          "ScrollBar"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ScrollArea",
+              "ScrollBar"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/select.tsx",
+      "ext": ".tsx",
+      "size": 5629,
+      "lines": 161,
+      "exports": {
+        "named": [
+          "Select",
+          "SelectContent",
+          "SelectGroup",
+          "SelectItem",
+          "SelectLabel",
+          "SelectScrollDownButton",
+          "SelectScrollUpButton",
+          "SelectSeparator",
+          "SelectTrigger",
+          "SelectValue"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Select",
+              "SelectGroup",
+              "SelectValue",
+              "SelectTrigger",
+              "SelectContent",
+              "SelectLabel",
+              "SelectItem",
+              "SelectSeparator",
+              "SelectScrollUpButton",
+              "SelectScrollDownButton"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/separator.tsx",
+      "ext": ".tsx",
+      "size": 770,
+      "lines": 32,
+      "exports": {
+        "named": [
+          "Separator"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Separator"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/sheet.tsx",
+      "ext": ".tsx",
+      "size": 4281,
+      "lines": 141,
+      "exports": {
+        "named": [
+          "Sheet",
+          "SheetClose",
+          "SheetContent",
+          "SheetDescription",
+          "SheetFooter",
+          "SheetHeader",
+          "SheetOverlay",
+          "SheetPortal",
+          "SheetTitle",
+          "SheetTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Sheet",
+              "SheetPortal",
+              "SheetOverlay",
+              "SheetTrigger",
+              "SheetClose",
+              "SheetContent",
+              "SheetHeader",
+              "SheetFooter",
+              "SheetTitle",
+              "SheetDescription"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/sidebar.tsx",
+      "ext": ".tsx",
+      "size": 23381,
+      "lines": 764,
+      "exports": {
+        "named": [
+          "Sidebar",
+          "SidebarContent",
+          "SidebarFooter",
+          "SidebarGroup",
+          "SidebarGroupAction",
+          "SidebarGroupContent",
+          "SidebarGroupLabel",
+          "SidebarHeader",
+          "SidebarInput",
+          "SidebarInset",
+          "SidebarMenu",
+          "SidebarMenuAction",
+          "SidebarMenuBadge",
+          "SidebarMenuButton",
+          "SidebarMenuItem",
+          "SidebarMenuSkeleton",
+          "SidebarMenuSub",
+          "SidebarMenuSubButton",
+          "SidebarMenuSubItem",
+          "SidebarProvider",
+          "SidebarRail",
+          "SidebarSeparator",
+          "SidebarTrigger",
+          "useSidebar"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Sidebar",
+              "SidebarContent",
+              "SidebarFooter",
+              "SidebarGroup",
+              "SidebarGroupAction",
+              "SidebarGroupContent",
+              "SidebarGroupLabel",
+              "SidebarHeader",
+              "SidebarInput",
+              "SidebarInset",
+              "SidebarMenu",
+              "SidebarMenuAction",
+              "SidebarMenuBadge",
+              "SidebarMenuButton",
+              "SidebarMenuItem",
+              "SidebarMenuSkeleton",
+              "SidebarMenuSub",
+              "SidebarMenuSubButton",
+              "SidebarMenuSubItem",
+              "SidebarProvider",
+              "SidebarRail",
+              "SidebarSeparator",
+              "SidebarTrigger",
+              "useSidebar"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/skeleton.tsx",
+      "ext": ".tsx",
+      "size": 261,
+      "lines": 16,
+      "exports": {
+        "named": [
+          "Skeleton"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Skeleton"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/slider.tsx",
+      "ext": ".tsx",
+      "size": 1091,
+      "lines": 29,
+      "exports": {
+        "named": [
+          "Slider"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Slider"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/sonner.tsx",
+      "ext": ".tsx",
+      "size": 894,
+      "lines": 32,
+      "exports": {
+        "named": [
+          "Toaster"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Toaster"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/switch.tsx",
+      "ext": ".tsx",
+      "size": 1153,
+      "lines": 30,
+      "exports": {
+        "named": [
+          "Switch"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Switch"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/table.tsx",
+      "ext": ".tsx",
+      "size": 2765,
+      "lines": 118,
+      "exports": {
+        "named": [
+          "Table",
+          "TableBody",
+          "TableCaption",
+          "TableCell",
+          "TableFooter",
+          "TableHead",
+          "TableHeader",
+          "TableRow"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Table",
+              "TableHeader",
+              "TableBody",
+              "TableFooter",
+              "TableHead",
+              "TableRow",
+              "TableCell",
+              "TableCaption"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/tabs.tsx",
+      "ext": ".tsx",
+      "size": 1897,
+      "lines": 56,
+      "exports": {
+        "named": [
+          "Tabs",
+          "TabsContent",
+          "TabsList",
+          "TabsTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Tabs",
+              "TabsList",
+              "TabsTrigger",
+              "TabsContent"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/textarea.tsx",
+      "ext": ".tsx",
+      "size": 689,
+      "lines": 23,
+      "exports": {
+        "named": [
+          "Textarea"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Textarea"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/toast.tsx",
+      "ext": ".tsx",
+      "size": 4859,
+      "lines": 130,
+      "exports": {
+        "named": [
+          "Toast",
+          "ToastAction",
+          "ToastActionElement",
+          "ToastClose",
+          "ToastDescription",
+          "ToastProps",
+          "ToastProvider",
+          "ToastTitle",
+          "ToastViewport"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ToastProps",
+              "ToastActionElement",
+              "ToastProvider",
+              "ToastViewport",
+              "Toast",
+              "ToastTitle",
+              "ToastDescription",
+              "ToastClose",
+              "ToastAction"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/toaster.tsx",
+      "ext": ".tsx",
+      "size": 786,
+      "lines": 36,
+      "exports": {
+        "named": [
+          "Toaster"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/toggle-group.tsx",
+      "ext": ".tsx",
+      "size": 1753,
+      "lines": 62,
+      "exports": {
+        "named": [
+          "ToggleGroup",
+          "ToggleGroupItem"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "ToggleGroup",
+              "ToggleGroupItem"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/toggle.tsx",
+      "ext": ".tsx",
+      "size": 1541,
+      "lines": 46,
+      "exports": {
+        "named": [
+          "Toggle",
+          "toggleVariants"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Toggle",
+              "toggleVariants"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/tooltip.tsx",
+      "ext": ".tsx",
+      "size": 1159,
+      "lines": 31,
+      "exports": {
+        "named": [
+          "Tooltip",
+          "TooltipContent",
+          "TooltipProvider",
+          "TooltipTrigger"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "Tooltip",
+              "TooltipTrigger",
+              "TooltipContent",
+              "TooltipProvider"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/use-mobile.tsx",
+      "ext": ".tsx",
+      "size": 565,
+      "lines": 20,
+      "exports": {
+        "named": [
+          "useIsMobile"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/use-toast.ts",
+      "ext": ".ts",
+      "size": 3948,
+      "lines": 195,
+      "exports": {
+        "named": [
+          "reducer",
+          "toast",
+          "useToast"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "useToast",
+              "toast"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/ui/volume-control.tsx",
+      "ext": ".tsx",
+      "size": 1,
+      "lines": 1,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/wallet/balance-bar.tsx",
+      "ext": ".tsx",
+      "size": 5982,
+      "lines": 160,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/wallet/claim-winnings-dialog.tsx",
+      "ext": ".tsx",
+      "size": 11020,
+      "lines": 294,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/wallet/token-display.tsx",
+      "ext": ".tsx",
+      "size": 2680,
+      "lines": 91,
+      "exports": {
+        "named": [
+          "TokenDisplay"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "components/wallet/wallet-multi-button.tsx",
+      "ext": ".tsx",
+      "size": 2624,
+      "lines": 71,
+      "exports": {
+        "named": [
+          "WalletMultiButton",
+          "WalletMultiButtonProps"
+        ],
+        "types": [
+          "WalletMultiButtonProps"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/AudioContext.tsx",
+      "ext": ".tsx",
+      "size": 9706,
+      "lines": 305,
+      "exports": {
+        "named": [
+          "AudioProvider",
+          "useAudio"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/AuthContext.tsx",
+      "ext": ".tsx",
+      "size": 788,
+      "lines": 26,
+      "exports": {
+        "named": [
+          "AuthProvider",
+          "useAuth"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/GameStateContext.tsx",
+      "ext": ".tsx",
+      "size": 32946,
+      "lines": 886,
+      "exports": {
+        "named": [
+          "GameState",
+          "GameStateProvider",
+          "PlayerStatus",
+          "useGameState"
+        ],
+        "types": [
+          "GameState",
+          "PlayerStatus"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/ProfileContext.tsx",
+      "ext": ".tsx",
+      "size": 6261,
+      "lines": 198,
+      "exports": {
+        "named": [
+          "ProfileProvider",
+          "useProfile"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/WalletEnvContext.tsx",
+      "ext": ".tsx",
+      "size": 532,
+      "lines": 24,
+      "exports": {
+        "named": [
+          "WalletEnvProvider",
+          "useWalletEnv"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "contexts/WalletPromptContext.tsx",
+      "ext": ".tsx",
+      "size": 2190,
+      "lines": 80,
+      "exports": {
+        "named": [
+          "WalletPromptProvider",
+          "useWalletPrompt"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-ai-controller.tsx",
+      "ext": ".tsx",
+      "size": 1,
+      "lines": 1,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-battle-state.tsx",
+      "ext": ".tsx",
+      "size": 3324,
+      "lines": 109,
+      "exports": {
+        "named": [
+          "Player",
+          "useBattleState"
+        ],
+        "types": [
+          "Player"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-chickens.tsx",
+      "ext": ".tsx",
+      "size": 6149,
+      "lines": 173,
+      "exports": {
+        "named": [
+          "useChickens"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-game-state.tsx",
+      "ext": ".tsx",
+      "size": 3118,
+      "lines": 120,
+      "exports": {
+        "named": [
+          "useGameState"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-local-storage.ts",
+      "ext": ".ts",
+      "size": 2273,
+      "lines": 72,
+      "exports": {
+        "named": [
+          "useLocalStorage"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-local-storage.tsx",
+      "ext": ".tsx",
+      "size": 1854,
+      "lines": 57,
+      "exports": {
+        "named": [
+          "useLocalStorage"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-mobile.tsx",
+      "ext": ".tsx",
+      "size": 565,
+      "lines": 20,
+      "exports": {
+        "named": [
+          "useIsMobile"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-multiplayer.tsx",
+      "ext": ".tsx",
+      "size": 6756,
+      "lines": 252,
+      "exports": {
+        "named": [
+          "useMultiplayer"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-player-controls.tsx",
+      "ext": ".tsx",
+      "size": 8159,
+      "lines": 222,
+      "exports": {
+        "named": [
+          "usePlayerControls"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-socket.tsx",
+      "ext": ".tsx",
+      "size": 8995,
+      "lines": 211,
+      "exports": {
+        "named": [
+          "SocketProvider",
+          "useSocket"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-spectator.tsx",
+      "ext": ".tsx",
+      "size": 4823,
+      "lines": 135,
+      "exports": {
+        "named": [
+          "useSpectator"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-texture-preloader.ts",
+      "ext": ".ts",
+      "size": 2153,
+      "lines": 68,
+      "exports": {
+        "named": [
+          "useTexturePreloader"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-toast.ts",
+      "ext": ".ts",
+      "size": 3948,
+      "lines": 195,
+      "exports": {
+        "named": [
+          "reducer",
+          "toast",
+          "useToast"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [
+          {
+            "names": [
+              "useToast",
+              "toast"
+            ]
+          }
+        ],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-token.tsx",
+      "ext": ".tsx",
+      "size": 9453,
+      "lines": 295,
+      "exports": {
+        "named": [
+          "TokenHookResult",
+          "useToken"
+        ],
+        "types": [
+          "TokenHookResult"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-username.tsx",
+      "ext": ".tsx",
+      "size": 6408,
+      "lines": 213,
+      "exports": {
+        "named": [
+          "getDisplayName",
+          "primeUsernameCache",
+          "useUsername",
+          "useUsernames"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-viewport-height.tsx",
+      "ext": ".tsx",
+      "size": 1168,
+      "lines": 42,
+      "exports": {
+        "named": [
+          "useViewportHeight"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-wallet-auth.tsx",
+      "ext": ".tsx",
+      "size": 3491,
+      "lines": 105,
+      "exports": {
+        "named": [
+          "useWalletAuth"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "hooks/use-wallet.tsx",
+      "ext": ".tsx",
+      "size": 2575,
+      "lines": 53,
+      "exports": {
+        "named": [
+          "useWallet"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/audio-config.ts",
+      "ext": ".ts",
+      "size": 2555,
+      "lines": 95,
+      "exports": {
+        "named": [
+          "SoundCategory",
+          "SoundConfig",
+          "defaultCategoryMultipliers",
+          "getSoundVolumeMultiplier",
+          "soundConfigs"
+        ],
+        "types": [
+          "SoundCategory",
+          "SoundConfig"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/audit-logger.ts",
+      "ext": ".ts",
+      "size": 7114,
+      "lines": 277,
+      "exports": {
+        "named": [
+          "auditLogger"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/auth-service.ts",
+      "ext": ".ts",
+      "size": 8143,
+      "lines": 288,
+      "exports": {
+        "named": [
+          "authService"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/chain.ts",
+      "ext": ".ts",
+      "size": 699,
+      "lines": 31,
+      "exports": {
+        "named": [
+          "ChainType",
+          "getChain",
+          "getNativeDecimals",
+          "isBsc",
+          "isSolana",
+          "toNativeUnits"
+        ],
+        "types": [
+          "ChainType"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/env-validator.ts",
+      "ext": ".ts",
+      "size": 6605,
+      "lines": 187,
+      "exports": {
+        "named": [
+          "checkForSecurityIssues",
+          "printEnvironmentStatus",
+          "validateEnvironment"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/escrow-service.ts",
+      "ext": ".ts",
+      "size": 13767,
+      "lines": 452,
+      "exports": {
+        "named": [
+          "escrowService"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/evm-config.js",
+      "ext": ".js",
+      "size": 692,
+      "lines": 20,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/evm-config.ts",
+      "ext": ".ts",
+      "size": 1500,
+      "lines": 53,
+      "exports": {
+        "named": [
+          "EvmNetworkConfig",
+          "evmConfig",
+          "getEvmExplorerUrl",
+          "getEvmProvider"
+        ],
+        "types": [
+          "EvmNetworkConfig"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/evm-escrow-service.ts",
+      "ext": ".ts",
+      "size": 4106,
+      "lines": 118,
+      "exports": {
+        "named": [
+          "evmEscrowService"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/evm-payments.ts",
+      "ext": ".ts",
+      "size": 9157,
+      "lines": 234,
+      "exports": {
+        "named": [
+          "SendArgs",
+          "sendIdempotentPayment"
+        ],
+        "types": [
+          "SendArgs"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/lobbies.ts",
+      "ext": ".ts",
+      "size": 2254,
+      "lines": 42,
+      "exports": {
+        "named": [
+          "Lobby",
+          "lobbies",
+          "lobbyTimers"
+        ],
+        "types": [
+          "Lobby"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/logger.ts",
+      "ext": ".ts",
+      "size": 551,
+      "lines": 23,
+      "exports": {
+        "named": [
+          "debugError",
+          "debugLog",
+          "debugWarn"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/monitoring.ts",
+      "ext": ".ts",
+      "size": 6465,
+      "lines": 219,
+      "exports": {
+        "named": [
+          "monitoringService"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/payout-service.js",
+      "ext": ".js",
+      "size": 4585,
+      "lines": 126,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/profile-service.ts",
+      "ext": ".ts",
+      "size": 19880,
+      "lines": 685,
+      "exports": {
+        "named": [
+          "ProfileService"
+        ],
+        "types": [
+          "ProfileService"
+        ],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/rate-limiter.ts",
+      "ext": ".ts",
+      "size": 8267,
+      "lines": 277,
+      "exports": {
+        "named": [
+          "RATE_LIMITS",
+          "rateLimiter",
+          "withRateLimit"
+        ],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/socket-service.ts",
+      "ext": ".ts",
+      "size": 3758,
+      "lines": 117,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/supabase.ts",
+      "ext": ".ts",
+      "size": 4669,
+      "lines": 191,
+      "exports": {
+        "named": [
+          "Achievement",
+          "Chicken",
+          "FunStats",
+          "Match",
+          "Profile",
+          "Transaction",
+          "UserProfile",
+          "getProfile",
+          "getUserChickens",
+          "getWriteClient",
+          "supabase",
+          "supabaseAdmin",
+          "updateProfileStats"
+        ],
+        "types": [
+          "Achievement",
+          "Chicken",
+          "FunStats",
+          "Match",
+          "Profile",
+          "Transaction",
+          "UserProfile"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/texture-loader.ts",
+      "ext": ".ts",
+      "size": 9082,
+      "lines": 295,
+      "exports": {
+        "named": [
+          "TEXTURES",
+          "clearTextureCache",
+          "createColorTexture",
+          "createTextureAtlas",
+          "loadTexture",
+          "preloadTextures"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/three-utils.ts",
+      "ext": ".ts",
+      "size": 8886,
+      "lines": 301,
+      "exports": {
+        "named": [
+          "PerformanceMonitor",
+          "checkWebGLSupport",
+          "cleanupThreeResources",
+          "createInstancedMeshes",
+          "createLowPolyModel",
+          "disposeObject3D",
+          "optimizeShadows"
+        ],
+        "types": [
+          "PerformanceMonitor"
+        ],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/token-service.ts",
+      "ext": ".ts",
+      "size": 17352,
+      "lines": 579,
+      "exports": {
+        "named": [
+          "airdropTokens",
+          "createToken",
+          "getEscrowWalletAddress",
+          "getTokenBalance",
+          "getTokenMintAddress",
+          "initializeTokenService",
+          "placeBet",
+          "processWinnings",
+          "setEscrowWalletAddress",
+          "toDisplayAmount",
+          "toRawAmount",
+          "transferTokens"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "lib/utils.ts",
+      "ext": ".ts",
+      "size": 1864,
+      "lines": 66,
+      "exports": {
+        "named": [
+          "cn",
+          "getRandomChickenName",
+          "getRandomColor",
+          "truncateAddress"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "mocks/game-data.ts",
+      "ext": ".ts",
+      "size": 5652,
+      "lines": 213,
+      "exports": {
+        "named": [
+          "ARENA_CONFIG",
+          "chickenFeetOffsetY",
+          "mockPlayers",
+          "soundMap"
+        ],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "mocks/pino-pretty.js",
+      "ext": ".js",
+      "size": 161,
+      "lines": 7,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "next-env.d.ts",
+      "ext": ".ts",
+      "size": 216,
+      "lines": 6,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "next.config.mjs",
+      "ext": ".mjs",
+      "size": 3742,
+      "lines": 143,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "postcss.config.mjs",
+      "ext": ".mjs",
+      "size": 135,
+      "lines": 9,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "scripts/generate-env-from-keys.js",
+      "ext": ".js",
+      "size": 4367,
+      "lines": 127,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "scripts/index-codebase.js",
+      "ext": ".js",
+      "size": 7590,
+      "lines": 276,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "scripts/integration.test.js",
+      "ext": ".js",
+      "size": 2350,
+      "lines": 66,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "server.js",
+      "ext": ".js",
+      "size": 184416,
+      "lines": 3605,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "supabase/functions/get-nonce/index.ts",
+      "ext": ".ts",
+      "size": 1374,
+      "lines": 45,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": false,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "tailwind.config.ts",
+      "ext": ".ts",
+      "size": 2644,
+      "lines": 99,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    },
+    {
+      "path": "v0-user-next.config.mjs",
+      "ext": ".mjs",
+      "size": 503,
+      "lines": 18,
+      "exports": {
+        "named": [],
+        "types": [],
+        "hasDefault": true,
+        "reexports": [],
+        "exportStars": []
+      }
+    }
+  ]
+}

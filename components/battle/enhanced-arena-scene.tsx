@@ -85,62 +85,48 @@ enum GameState {
 
 // Arena configuration constants are now imported from mocks/game-data.ts
 
-// Replace the ArenaFloor component to use the optimized texture loading
+// Replace the ArenaFloor component to use Suspense-friendly useTexture for reliable loading
 function ArenaFloor({ lowPerf = false }: { lowPerf?: boolean }) {
-  const [floorTexture, setFloorTexture] = useState<THREE.Texture | null>(null)
-  const [dirtTexture, setDirtTexture] = useState<THREE.Texture | null>(null)
-  useEffect(() => {
-    let mounted = true
-    import("@/lib/texture-loader").then(mod => {
-      mod.loadTexture("/textures/grass/Grass005_1K-PNG_Color.png", { repeat: [12,12] })
-        .then(t => { if (mounted) setFloorTexture(t) })
-        .catch(() => {})
-      mod.loadTexture("/textures/ground/Ground085_1K-PNG_Color.png", { repeat: [10,10] })
-        .then(t => { if (mounted) setDirtTexture(t) })
-        .catch(() => {})
-    }).catch(() => {})
-    return () => { mounted = false }
-  }, [])
+  // Load textures via drei's useTexture (works with Suspense and Canvas invalidation)
+  const floorTexture = useTexture("/textures/grass/Grass005_1K-PNG_Color.png") as THREE.Texture
+  const dirtTexture = useTexture("/textures/ground/Ground085_1K-PNG_Color.png") as THREE.Texture
 
   // Apply texture settings directly to the loaded texture
   useEffect(() => {
-    if (floorTexture) {
-      // Ensure correct color space for PBR albedo
-      try { (floorTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
-      floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-      floorTexture.repeat.set(12, 12);
-      floorTexture.anisotropy = lowPerf ? 2 : 4;
-      floorTexture.generateMipmaps = true;
-      floorTexture.minFilter = THREE.LinearMipmapLinearFilter;
-      floorTexture.magFilter = THREE.LinearFilter;
-      floorTexture.needsUpdate = true;
-    }
-    if (dirtTexture) {
-      // Ensure correct color space for PBR albedo
-      try { (dirtTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
-      dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
-      dirtTexture.repeat.set(10, 10);
-      dirtTexture.anisotropy = lowPerf ? 2 : 4;
-      dirtTexture.generateMipmaps = true;
-      dirtTexture.minFilter = THREE.LinearMipmapLinearFilter;
-      dirtTexture.magFilter = THREE.LinearFilter;
-      dirtTexture.needsUpdate = true;
-    }
-  }, [floorTexture, dirtTexture, lowPerf]);
+    // Grass floor
+    try { (floorTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
+    floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping
+    floorTexture.repeat.set(12, 12)
+    floorTexture.anisotropy = lowPerf ? 2 : 4
+    floorTexture.generateMipmaps = true
+    floorTexture.minFilter = THREE.LinearMipmapLinearFilter
+    floorTexture.magFilter = THREE.LinearFilter
+    floorTexture.needsUpdate = true
+
+    // Dirt ring
+    try { (dirtTexture as any).colorSpace = THREE.SRGBColorSpace } catch {}
+    dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping
+    dirtTexture.repeat.set(10, 10)
+    dirtTexture.anisotropy = lowPerf ? 2 : 4
+    dirtTexture.generateMipmaps = true
+    dirtTexture.minFilter = THREE.LinearMipmapLinearFilter
+    dirtTexture.magFilter = THREE.LinearFilter
+    dirtTexture.needsUpdate = true
+  }, [floorTexture, dirtTexture, lowPerf])
 
   return (
     <group>
       {/* Grass annulus (reduced extent) */}
       <Plane args={[600, 600]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow castShadow>
-        <meshStandardMaterial map={floorTexture || undefined} roughness={0.95} metalness={0.05} />
+        <meshStandardMaterial map={floorTexture} roughness={0.95} metalness={0.05} />
       </Plane>
       {/* Dirt in-fighting ring (slightly smaller circle) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow castShadow>
         <circleGeometry args={[ARENA_CONFIG.ringRadius * 0.9, 64]} />
-        <meshStandardMaterial map={dirtTexture || undefined} roughness={0.98} metalness={0.02} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        <meshStandardMaterial map={dirtTexture} roughness={0.98} metalness={0.02} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
     </group>
-  );
+  )
 }
 
 // Simple, realistic barn component reused across scenes
@@ -670,7 +656,7 @@ function SceneContent({
         } catch {}
         // Do not mutate HP from the raw player_damage event; treat as visual-only.
         // Authoritative HP comes from 'state_update'.
-        onPlayerDamage(targetId, 0.5, byId)
+        onPlayerDamage(targetId, 0.5)
       } catch {}
     }
     socket.on('player_state', onPlayerState)
@@ -917,70 +903,13 @@ function SceneContent({
         selfPeckUntilRef.current = nowMs + swingMs
         selfPeckRecoverUntilRef.current = nowMs + swingMs + recoverMs
         if (!selfIsPecking) setSelfIsPecking(true)
-
-          // Improved hit detection: use horizontal (XZ) distance and slightly larger reach
-      if (playerRef.current) {
-        const playerPos = new THREE.Vector3();
-        playerRef.current.getWorldPosition(playerPos);
-        for (const opponent of opponents) {
-          if (!opponent.position || !opponent.isAlive) continue;
-          // Prefer actual world position from rendered group; fallback to net pos, then static
-          const net = remoteHumansRef.current[opponent.id]
-          let opponentPos = new THREE.Vector3()
-          const g = opponentGroupsRef.current[opponent.id]
-          if (g && typeof g.getWorldPosition === 'function') {
-            g.getWorldPosition(opponentPos)
-          } else if (net && net.pos) {
-            opponentPos = net.pos.clone()
-          } else if (opponent.position instanceof THREE.Vector3) {
-            opponentPos = opponent.position.clone()
-          } else {
-            opponentPos = new THREE.Vector3().fromArray(opponent.position as number[])
+        // Server-authoritative: emit a single peck attempt and let the server resolve hits
+        try {
+          if (socket) {
+            const msid = (window as any)?.__last_match_session_id
+            socket.emit('peck_attempt', { matchSessionId: msid })
           }
-
-          // Compute horizontal distance only to avoid Y glitches during jumps
-          const dx = playerPos.x - opponentPos.x;
-          const dz = playerPos.z - opponentPos.z;
-          const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-
-          // Require vertical alignment: hits only when target's body height overlaps player's peck plane
-          // Both chickens use feet at y≈0.85; constrain vertical delta to a small window
-          const dy = Math.abs(playerPos.y - opponentPos.y);
-          const verticalWindow = 0.45; // ~same height band; avoids hitting air under/over jumping chickens
-
-          // Slightly reduced reach to be stricter now that vertical alignment is enforced
-          const peckReach = 3.2;
-          if (horizontalDistance <= peckReach && dy <= verticalWindow) {
-            // Respect invulnerability window at round start for opponents
-            const isInvulnerable = Date.now() < invulnerableUntilRef.current
-            if (isInvulnerable) break
-            // Emit damage over network when the target is a human; otherwise apply locally.
-            // If the opponent isn't explicitly flagged, fall back to network emit (symmetric rules).
-            if ((opponent as any).isAi === false && socket) {
-              try {
-                const msid = (window as any)?.__last_match_session_id
-                // Send once and locally show hit flash immediately
-                // Emit once; also trigger a local visual-only flash for immediate feedback
-                socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
-                try { if (onPlayerDamage) onPlayerDamage(opponent.id, 0.5) } catch {}
-              } catch {}
-            } else if ((opponent as any).isAi === true && onPlayerDamage) {
-              onPlayerDamage(opponent.id, 1)
-            } else if (socket) {
-              // Unknown type: prefer networked damage to keep consistency
-              try {
-                const msid = (window as any)?.__last_match_session_id
-                socket.emit('player_damage', { matchSessionId: msid, targetId: opponent.id, amount: 1 })
-                try { if (onPlayerDamage) onPlayerDamage(opponent.id, 0.5) } catch {}
-              } catch {}
-            } else if (onPlayerDamage) {
-              // Fallback: apply locally
-              onPlayerDamage(opponent.id, 1)
-            }
-            break;
-          }
-        }
-      }
+        } catch {}
         lastPeckAtRef.current = nowMs
         peckRequestRef.current = false
       }
@@ -1338,9 +1267,9 @@ function SceneContent({
             } catch {}
             if (onPlayerDamage && playerChicken?.id) onPlayerDamage(playerChicken.id, 1)
           }}
-          onAiDamageTarget={(targetId, amount = 1, byId) => {
+          onAiDamageTarget={(targetId, amount = 1) => {
             try {
-              if (targetId && onPlayerDamage) onPlayerDamage(String(targetId), amount, byId)
+              if (targetId && onPlayerDamage) onPlayerDamage(String(targetId), amount)
               // Also set a guaranteed flash window for AI targets to surface hits visually
               if (targetId) (remoteHitUntilRef.current as any)[String(targetId)] = Date.now() + 600
             } catch {}
@@ -1530,7 +1459,7 @@ function ChickenInstances({
   }: {
     chickens: PlayerStatus[],
     playerChickenId: string,
-    playerRef?: React.RefObject<THREE.Group>,
+    playerRef?: React.RefObject<THREE.Group | null>,
     freezeUntilMs?: number,
     invulnerableUntilMs?: number,
     remoteHumans?: Record<string, { pos: THREE.Vector3; rotY: number; isPecking: boolean; ts: number }>,
