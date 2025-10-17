@@ -695,6 +695,22 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
     setLobbyPlayers([]);
     setPlayers(initialPlayers);
     setGameState('lobby');
+    // Proactively clear lobby ready + presence for current identity (guest/wallet)
+    try {
+      const sock: any = (typeof window !== 'undefined') ? (window as any).__socket__ : null
+      const lobbyId = (typeof window !== 'undefined') ? ((window as any).currentLobbyId || localStorage.getItem('currentLobbyId')) : undefined
+      const myId = (() => {
+        try { const evm = (typeof window !== 'undefined') ? (window as any).__cock_wallet__?.evmAddress : null; if (evm) return String(evm).toLowerCase() } catch {}
+        try { if (typeof window !== 'undefined') { const gid = localStorage.getItem('guest_id') || (window as any).__guestId; if (gid) return String(gid).toLowerCase() } } catch {}
+        return null
+      })()
+      if (sock && lobbyId && myId) {
+        try { sock.emit('player_ready', { lobbyId, playerId: myId, isReady: false }) } catch {}
+        try { sock.emit('leave_lobby_room', lobbyId) } catch {}
+        // Best-effort HTTP leave for robustness (idempotent)
+        try { fetch('/api/lobbies', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId: myId }) }).catch(()=>{}) } catch {}
+      }
+    } catch {}
     try { (window as any).__last_match_session_id = null } catch {}
     try { (window as any).__latest_roster_override = [] } catch {}
     try { (window as any).__spectate_target_id = null } catch {}

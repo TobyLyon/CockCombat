@@ -633,9 +633,16 @@ function SceneContent({
         } catch {}
         rec.pos.set(nextX, nextY, nextZ)
         rec.rotY = Number(payload.rotationY)||0
-        rec.isPecking = Boolean(payload.isPecking)
-        // Capture peck event instant
-        try { if (payload.isPecking) (rec as any).peckAt = Date.now() } catch {}
+        const nextPk = Boolean(payload.isPecking)
+        // Rising-edge detection for peck to avoid continuous re-triggers
+        try {
+          const prevPk = Boolean(((remoteHumansRef.current as any)?.[id] as any)?.isPecking)
+          rec.isPecking = nextPk
+          if (!prevPk && nextPk) { (rec as any).peckAt = Date.now() }
+        } catch {
+          rec.isPecking = nextPk
+          if (nextPk) { try { (rec as any).peckAt = Date.now() } catch {} }
+        }
         ;(rec as any).isJumping = Boolean(payload.isJumping)
         if ((rec as any).isJumping) {
           remoteJumpUntilRef.current[id] = Date.now() + 500 // keep jumping true a bit longer to avoid flicker
@@ -1243,8 +1250,9 @@ function SceneContent({
         const rotDelta = Math.abs(selfRotation.y - sent.ry)
         // Only send peck when it flips from false->true to avoid multi-peck
         // More responsive peck: allow sending peck state as long as active, but still edge-preferential
-        const peckEdge = (!sent.pk && selfIsPecking)
-        const stateChanged = peckEdge || (selfIsJumping !== sent.jp) || (selfIsPecking && !sent.pk)
+        const peckEdgeOn = (!sent.pk && selfIsPecking)
+        const peckEdgeOff = (sent.pk && !selfIsPecking)
+        const stateChanged = peckEdgeOn || peckEdgeOff || (selfIsJumping !== sent.jp)
         if (posDelta > 0.02 || yDelta > 0.015 || rotDelta > 0.02 || stateChanged) {
           lastEmitAtRef.current = nowMs
           // Quantize to 2 decimals for position, 3 for rotation to reduce jitter
@@ -1676,14 +1684,10 @@ function ChickenInstances({
             const dz = g.position.z - prevZ2
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try {
-              const peckEventAt = (net as any)?.peckAt
-              if (peckEventAt && Date.now() - peckEventAt < 200) {
-                lastPeckRef.current[chicken.id] = Date.now()
-              }
-              // Avoid continuous visual spam; rely on peckAt edge or a short active flag
-              if (net.isPecking && (!lastPeckRef.current[chicken.id] || (Date.now() - lastPeckRef.current[chicken.id]) > 200)) {
-                lastPeckRef.current[chicken.id] = Date.now()
-              }
+            const peckEventAt = (net as any)?.peckAt
+            if (peckEventAt && Date.now() - peckEventAt < 220) {
+              lastPeckRef.current[chicken.id] = Date.now()
+            }
             } catch {}
           } else {
             try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}

@@ -809,6 +809,12 @@ preparePromise.then(() => {
           }
         }
 
+        // Emit an explicit ready=false for this identity to clear any sticky UI badges
+        try {
+          const idLower = String((activeConnections.get(socket.id)?.walletAddress || '')).toLowerCase();
+          if (idLower) io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: idLower, isReady: false });
+        } catch {}
+
         // Immediately broadcast updated lobby counts to avoid stale cards (esp. tutorial)
         try {
           const c = getLobbyCounts(lobbyId);
@@ -2455,6 +2461,8 @@ preparePromise.then(() => {
                 playerId: walletAtDisconnect,
                 timestamp: Date.now(),
               });
+              // Also broadcast ready=false to ensure UI clears sticky readiness for this identity
+              try { io.to(lobbyAtDisconnect).emit('player_ready_status', { lobbyId: lobbyAtDisconnect, playerId: walletAtDisconnect, isReady: false }); } catch {}
             } catch {}
 
             // Broadcast updated lobby roster immediately (and prune ghosts for tutorial)
