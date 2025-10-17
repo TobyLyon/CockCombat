@@ -3813,7 +3813,7 @@ preparePromise.then(() => {
       console.log(`🔌 Socket.io ready on path: /api/socketio`);
       // Safety: periodically reopen any lobby stuck in starting/in-progress with no live humans
       try {
-        setInterval(() => {
+        setInterval(async () => {
           try {
             const presence = global.lobbyPresence || new Map();
             for (const lob of lobbies) {
