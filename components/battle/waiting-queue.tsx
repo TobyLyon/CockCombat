@@ -38,6 +38,9 @@ export default function WaitingQueue({
   // Resolve a stable identifier for guests so sockets/pings work without a wallet
   const resolvePlayerId = () => {
     try {
+      // Prefer the exact identity used at lobby join (wallet lower/guest id) to avoid presence mismatches
+      const cachedJoin = (typeof window !== 'undefined') ? (window as any).__join_identity : null
+      if (cachedJoin && typeof cachedJoin === 'string') return cachedJoin
       const w = (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.()
       if (w && typeof w === 'string') return w
       if (typeof window !== 'undefined') {
@@ -280,8 +283,10 @@ export default function WaitingQueue({
     const onCancelled = (_payload: any) => {
       try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
       try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
+      // Stay on the queue screen and show status; do not auto-kick back to lobby
       try { playSound('click') } catch {}
-      try { onLeaveQueue() } catch {}
+      // Request fresh lobby state so UI reflects cancellation without losing context
+      try { socket.emit('get_lobby_state', lobby.id) } catch {}
     }
     socket.on('match_cancelled', onCancelled)
     // Align roster handling with Match Room: consume roster_full/diff

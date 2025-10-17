@@ -437,13 +437,16 @@ export default function BattleArena() {
           try { if (typeof window !== 'undefined') { localStorage.setItem('guest_id', guestIdGenerated); (window as any).__guestId = guestIdGenerated; } } catch {}
         }
       }
+      // Persist the identity we will use to join for reliable queue presence later
+      const joinPlayerIdLower = joiningAsGuest ? (guestIdGenerated as string) : publicKey!.toBase58().toLowerCase();
+
       const joinResponse = await fetch('/api/lobbies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
           // Always use lowercase wallet id to match server normalization and avoid 400s
-          playerId: joiningAsGuest ? guestIdGenerated! : publicKey!.toBase58().toLowerCase(),
+          playerId: joinPlayerIdLower,
           chickenId: randomChicken,
         }),
       });
@@ -464,6 +467,9 @@ export default function BattleArena() {
 
       const joinResult = await joinResponse.json();
       console.log('✅ Successfully joined lobby:', joinResult);
+
+      // Store the exact identity used to join so queue presence matches server expectation
+      try { if (typeof window !== 'undefined') (window as any).__join_identity = joinPlayerIdLower } catch {}
 
       // Stop persisting guest IDs globally to avoid sticky ghost identities
       setGuestId(joiningAsGuest ? guestIdGenerated : null);

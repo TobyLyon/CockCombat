@@ -125,6 +125,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       
       // Register the player identifier (wallet or guest id) with the socket
       socket.emit('register_identity', String(id).toLowerCase());
+      // Persist join identity for the secondary queue step so presence matches server expectations
+      try { (window as any).__join_identity = String(id).toLowerCase() } catch {}
       try { (window as any).currentLobbyId = lobby.id } catch {}
       
       // Wait for identity_registered/wallet_registered ACK before joining room (prevents race)
