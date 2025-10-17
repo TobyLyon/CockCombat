@@ -13,10 +13,9 @@ export interface Lobby {
   capacity: number;
   highRoller: boolean;
   status: 'open' | 'starting' | 'in-progress';
-  matchType: 'ranked' | 'tutorial';
+  matchType: 'ranked';
   isComingSoon?: boolean;
   escrowWalletId?: 'A' | 'B' | 'C'; // Which escrow wallet this match uses
-  aiBackfill?: boolean; // Whether to auto-populate with AI when humans are missing
 }
 
 // In-memory lobbies store
@@ -35,6 +34,6 @@ export const lobbies: Lobby[] = [
   { id: 'lobby-0p005-2', amount: 0.1, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: true },
 ];
 
-// Lobby timers for AI backfill
+// Lobby timers (reserved; AI backfill removed)
 export const lobbyTimers = new Map<string, NodeJS.Timeout>();
 

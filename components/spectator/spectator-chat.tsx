@@ -53,7 +53,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         const { data, error } = await supabase
           .from('chat_messages')
           .select('*')
-          .eq('match_id', matchId)
+          .eq('match_session_id', matchId)
           .order('created_at', { ascending: true })
         if (!error && Array.isArray(data)) {
           const initial = data.map((row: any) => ({
@@ -75,8 +75,9 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   useEffect(() => {
     if (!socket || !isConnected) return;
     
-    // Join match as spectator
-    socket.emit('spectate_match', { matchId });
+    const room = matchId || 'chat-global'
+    // Join chat/match room (global when no match)
+    socket.emit('spectate_match', { matchId: room });
     
     // Listen for chat messages
     const handleChatMessage = (msg: any) => {
@@ -135,7 +136,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       socket.off('chat_message', handleChatMessage);
       socket.off('lobby_counts', handleLobbyCounts)
       socket.off('lobby_counts_snapshot', handleSnapshot)
-      socket.emit('leave_spectate', { matchId });
+      socket.emit('leave_spectate', { matchId: room });
     };
   }, [socket, isConnected, matchId, onNewMessage]);
   
@@ -153,7 +154,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!messageText.trim() || !socket || !matchId || !canSend) return
+    if (!messageText.trim() || !socket || !canSend) return
     
     // Get username from wallet or use fallback
     const username = (displayName && displayName.trim())
@@ -161,16 +162,17 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       : (walletAddr ? `${walletAddr.slice(0, 4)}...${walletAddr.slice(-4)}` : 'Anonymous');
     
     // Send via Socket.IO
+    const room = matchId || 'chat-global'
     socket.emit('spectator_chat', {
-      matchId,
+      matchId: room,
       message: messageText,
       username,
     });
     // Persist to Supabase for history
     try {
-      if (supabase) {
+      if (supabase && matchId) {
         await supabase.from('chat_messages').insert({
-          match_id: matchId,
+          match_session_id: matchId,
           message: messageText,
           username,
           wallet: walletAddr || null,

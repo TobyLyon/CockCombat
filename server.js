@@ -2263,8 +2263,9 @@ preparePromise.then(() => {
         const adapterHasRoom = (() => { try { return !!io.sockets.adapter.rooms.get(id); } catch { return false; } })();
         const hasMeta = (() => { try { return !!(global.recentMatchMetaBySession && global.recentMatchMetaBySession.get(id)); } catch { return false; } })();
         const looksLikeSession = /^ms-/i.test(id);
+        const isChatRoom = (id === 'chat-global') || id.startsWith('chat-');
 
-        if (legacyRoom || adapterHasRoom || hasMeta || looksLikeSession) {
+        if (legacyRoom || adapterHasRoom || hasMeta || looksLikeSession || isChatRoom) {
           try { socket.join(id); } catch {}
           // Mark as spectator
           try {
