@@ -47,8 +47,8 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
   const { lobbyId, playerPublicKey, reason } = args
   const lobby = lobbies.find(l => l.id === lobbyId)
   if (!lobby) throw new Error('Lobby not found')
-  if (lobby.matchType === 'tutorial' || lobby.amount <= 0) {
-    return { ok: true, message: 'No refund for free/tutorial matches' }
+  if (lobby.amount <= 0) {
+    return { ok: true, message: 'No refund for free matches' }
   }
   // Normalize player lookup to lowercase
   const playerPublicKeyLower = String(playerPublicKey||'').toLowerCase()

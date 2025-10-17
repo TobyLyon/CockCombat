@@ -34,10 +34,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Lobby not found" }, { status: 404 });
     }
 
-    // Tutorial matches are free
-    if (lobby.matchType === 'tutorial' || lobby.amount === 0) {
+    // Free matches have no wager
+    if (lobby.amount === 0) {
       return NextResponse.json({ 
-        message: "No wager required for tutorial matches",
+        message: "No wager required for free matches",
         isFree: true,
       });
     }

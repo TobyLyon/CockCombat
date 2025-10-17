@@ -142,8 +142,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         setTimeout(() => { tryJoin(); socket.off?.('wallet_registered', ackListener as any); socket.off?.('identity_registered', ackListener as any) }, 500)
       }
       
-      // Tutorial-only: request ghost pruning on join to clear stale guest entries
-      try { if (lobby.matchType === 'tutorial') socket.emit('prune_ghosts', lobby.id) } catch {}
+      // Tutorial ghost pruning removed (tutorial lobbies deleted)
 
       // No client snapshots; rely on server-driven roster_full/roster_diff events
 
@@ -271,17 +270,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const handleMatchStarting = (data: { countdown: number }) => {
       console.log('🚀 Match starting in:', data.countdown);
       setCountdown(data.countdown);
-      // Tutorial: if server emitted starting and all (incl. AI) are ready, immediately transition
-      try {
-        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
-        if (isTutorial) {
-          const everyoneReady = (playersRef.current||[]).every(p=> p.isAi || p.isReady)
-          if (everyoneReady) {
-            transitionedToQueueRef.current = true;
-            onStartMatch();
-          }
-        }
-      } catch {}
+      // Tutorial-specific auto-transition removed
     };
 
     const handleMatchStarted = () => {
@@ -687,7 +676,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   }
 
   // Tutorial: 1; Free: 2; Ranked: 4 humans
-  const minRequired = lobby.matchType === 'tutorial' ? 1 : (lobby.amount === 0 ? 2 : 4)
+  const minRequired = lobby.amount === 0 ? 2 : 4
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const humanPlayersJoined = players.filter(p => !p.isAi).length
   const allPlayersReady = (humanPlayersJoined >= minRequired) && players.every(p => p.isReady || p.isAi)
@@ -895,11 +884,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
       {/* Bottom Actions - Fixed to bottom to remain visible */}
       <div ref={bottomActionsRef} className="flex-shrink-0 sticky bottom-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
-        {lobby.matchType !== 'tutorial' && (
+        {
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 2 players for ranked</p>
           </div>
-        )}
+        }
 
         {/* Ready Button Section */}
         <div ref={barRef} className="w-full">
@@ -927,7 +916,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
             </>
           ) : (
             <>
-              {lobby.amount > 0 && lobby.matchType !== 'tutorial' && !hasWagered ? (
+              {lobby.amount > 0 && !hasWagered ? (
                 <>
                   <Check className="mr-1.5 h-4 w-4" />
                   WAGER & READY
@@ -943,7 +932,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         </Button>
         
          {/* Wager Status - Ultra Compact */}
-        {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
+        {lobby.amount > 0 && (
           <div className="mt-1 text-center">
             {hasWagered ? (
               <div className="flex items-center justify-center gap-0.5 text-green-400">
@@ -1003,7 +992,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
                    ) : (
                      <span className="text-red-400 font-semibold">Not Ready</span>
                    )}
-                   {lobby.amount > 0 && lobby.matchType !== 'tutorial' && (
+                   {lobby.amount > 0 && (
                      <span className="ml-1 text-[9px] text-white/60">{hasWagered ? '(Wagered)' : '(No Wager)'}</span>
                    )}
                  </>

@@ -53,9 +53,9 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
   const aiCount = Math.max(0, totalPlayers - humanCount);
   const entryPerPlayer = matchMeta?.amount || 0;
   const currency = 'SOL';
-  const isTutorial = (matchMeta?.matchType || 'tutorial') === 'tutorial' || entryPerPlayer === 0;
-  const grossPool = isTutorial ? 0 : entryPerPlayer * Math.max(1, humanCount);
-  const netWinner = isTutorial ? 0 : (grossPool * 0.96);
+  const isFree = entryPerPlayer === 0;
+  const grossPool = isFree ? 0 : entryPerPlayer * Math.max(1, humanCount);
+  const netWinner = isFree ? 0 : (grossPool * 0.96);
   const durationSec = battleStartAt && battleEndAt ? Math.max(0, Math.round((battleEndAt - battleStartAt) / 1000)) : null;
 
   // Play sound on component mount; payout is orchestrated by the server
@@ -167,7 +167,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
         <div className="grid grid-cols-2 gap-3 mb-4 bg-black/30 p-3 rounded-lg text-white/90 text-sm">
           <div>
             <p className="text-white/60 text-[11px]">Match Type</p>
-            <p className="font-semibold">{isTutorial ? 'Tutorial' : 'Ranked'}</p>
+            <p className="font-semibold">{isFree ? 'Free' : 'Ranked'}</p>
           </div>
           <div>
             <p className="text-white/60 text-[11px]">Entry (per player)</p>

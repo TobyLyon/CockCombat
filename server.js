@@ -439,7 +439,7 @@ preparePromise.then(() => {
         }
       } catch {}
 
-      const isTutorial = lobby.matchType === 'tutorial';
+      const isTutorial = false;
       const result = [];
       for (const p of (lobby.players || [])) {
         const pid = String(p.playerId || '');
@@ -461,15 +461,8 @@ preparePromise.then(() => {
         let isReady = false;
         if (p.isAi) {
           isReady = true;
-        } else if (!isTutorial) {
+        } else if (true) {
           isReady = Boolean(p.hasWagered);
-        } else {
-          // tutorial: rely on connection readiness when available
-          try {
-            for (const [, c] of activeConnections.entries()) {
-              if (c && c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === pidNorm) { isReady = !!c.isReady; break }
-            }
-          } catch {}
         }
 
         result.push({
@@ -497,7 +490,7 @@ preparePromise.then(() => {
               }
             } catch {}
           } else {
-            // Non-tutorial: include present humans as not-ready until API marks wagered
+            // Include present humans as not-ready until API marks wagered
             ready = false;
           }
           result.push({
@@ -539,7 +532,7 @@ preparePromise.then(() => {
     // Rank readiness policy: if ranked and human, prefer hasWagered
     try {
       const lobby = lobbies.find(l => l && l.id === lobbyId);
-      if (lobby && lobby.matchType !== 'tutorial' && !entry.isAi) {
+      if (lobby && !entry.isAi) {
         entry.isReady = Boolean(entry.hasWagered);
       }
     } catch {}
@@ -675,10 +668,7 @@ preparePromise.then(() => {
         socket.join(lobbyId);
         // If a new client joins before countdown starts, cancel any pre-countdown delay
         try {
-          // Only cancel pre-countdown for non-tutorial lobbies; tutorial should proceed even with late joiners
-          const lobMeta = lobbies.find((l) => l && l.id === lobbyId);
-          const isTutorial = Boolean(lobMeta && lobMeta.matchType === 'tutorial');
-          if (!isTutorial && global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+          if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
             clearTimeout(global.preCountdownTimers[lobbyId]);
             delete global.preCountdownTimers[lobbyId];
             console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} due to new join`);
@@ -769,8 +759,8 @@ preparePromise.then(() => {
                   chickenName: p.chickenId || 'Default',
                   isAi: !!p.isAi,
                   hasWagered: Boolean(p.hasWagered),
-                  // Ranked humans: readiness mirrors hasWagered; AI always ready; tutorial uses per-connection readiness elsewhere
-                  isReady: (liveLobby.matchType !== 'tutorial' && !p.isAi) ? Boolean(p.hasWagered) : (p.isAi ? true : false),
+                  // Ranked humans: readiness mirrors hasWagered; AI entries (if any) are always ready
+                  isReady: (!p.isAi) ? Boolean(p.hasWagered) : true,
                 };
                 await upsertRoster(lobbyId, pid, patch);
               }
@@ -830,7 +820,7 @@ preparePromise.then(() => {
             const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-            const isPaidRanked = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
+            const isPaidRanked = !!(lobby && (lobby.amount || 0) > 0);
             const isCountdownActive = !!(global.countdownActive && global.countdownActive[lobbyId]);
             const hasQueueSession = !!(global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId));
             // Attempt refund best-effort only if ranked, clearly before any countdown/queue has begun,
@@ -968,7 +958,7 @@ preparePromise.then(() => {
                 playerId: player.playerId,
                 username: displayName,
                 chickenName: player.chickenId || 'Default',
-                isReady: (lobby.matchType === 'tutorial' && player.isAi) ? true : isReady,
+                isReady: isReady,
                 isAi: player.isAi || false
               });
             }
@@ -1117,7 +1107,7 @@ preparePromise.then(() => {
               const pid = String(p.playerId || '');
               const pidLower = pid.toLowerCase();
               let ready = false;
-              if (lobbySnap.matchType !== 'tutorial' && !p.isAi) {
+              if (!p.isAi) {
                 // Ranked: treat wagered as ready (authoritative), fallback to roster map
                 ready = Boolean(p.hasWagered);
                 if (!ready) {
@@ -1125,13 +1115,6 @@ preparePromise.then(() => {
                 }
               } else if (p.isAi) {
                 ready = true;
-              } else {
-                // Tutorial/free: use connection state when present
-                if (presence && presence.has(pidLower)) {
-                  for (const [, c] of activeConnections.entries()) {
-                    if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === pidLower) { ready = !!c.isReady; break; }
-                  }
-                }
               }
               return {
                 playerId: pid,
@@ -1155,25 +1138,7 @@ preparePromise.then(() => {
           }).catch(() => {});
         } catch {}
 
-        // Re-evaluate ready status and then ask clients to refresh state after persistence
-        // Before checking ready, ensure tutorial doesn't overfill with AI when humans present
-        try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-          const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
-          const all = res ? await res.json().catch(() => []) : [];
-          const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-          if (liveLobby && liveLobby.matchType === 'tutorial') {
-            const humans = (liveLobby.players || []).filter(p => !p.isAi);
-            if (humans.length > 0 && (liveLobby.players || []).length > liveLobby.capacity) {
-              // Trim extra AI by asking API to re-join this human (API will remove AI beyond capacity)
-              await fetch(`${baseUrl}/api/lobbies`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lobbyId, playerId, chickenId: 'default-chicken' })
-              }).catch(() => {});
-            }
-          }
-        } catch {}
+        // Re-evaluate ready status and then ask clients to refresh state after persistence (tutorial logic removed)
 
         await checkLobbyReadyStatus(lobbyId, io);
         setTimeout(() => {
@@ -1382,40 +1347,7 @@ preparePromise.then(() => {
       try { socket.emit('active_players', { humans: getGlobalActiveHumans(), ts: Date.now() }); } catch {}
     });
 
-    // Prune tutorial lobby ghosts: remove humans not present in live socket presence
-    socket.on('prune_ghosts', async (lobbyId) => {
-      if (!checkRateLimit('prune_ghosts', 5)) return;
-      try {
-        if (!lobbyId) return;
-        const lob = lobbies.find(l => l && l.id === lobbyId);
-        if (!lob || lob.matchType !== 'tutorial') return;
-        const presence = (global.lobbyPresence && global.lobbyPresence.get(lobbyId)) || new Set();
-        const beforeCount = Array.isArray(lob.players) ? lob.players.length : 0;
-        if (!Array.isArray(lob.players)) lob.players = [];
-        lob.players = lob.players.filter(p => p.isAi || presence.has(String(p.playerId || '').toLowerCase()));
-        const afterCount = lob.players.length;
-        if (afterCount !== beforeCount) {
-          // Broadcast pruned roster
-          const lobbyPlayers = lob.players.map(p => ({
-            playerId: p.playerId,
-            username: p.username || (p.playerId ? String(p.playerId).slice(0,8)+'...' : 'Player'),
-            chickenName: p.chickenId || 'Default',
-            isReady: p.isAi ? true : Boolean(p.isReady),
-            isAi: !!p.isAi,
-          }));
-          const version = nextLobbyVersion(lobbyId);
-          io.to(lobbyId).emit('lobby_updated', {
-            id: lobbyId,
-            players: lobbyPlayers,
-            capacity: lob.capacity,
-            amount: lob.amount,
-            currency: lob.currency,
-            matchType: lob.matchType,
-            version,
-          });
-        }
-      } catch {}
-    });
+    // Removed legacy tutorial ghost pruning handler
 
     // Broadcast active players to all clients on connect/disconnect churn (throttled)
     try {
@@ -2662,12 +2594,12 @@ preparePromise.then(() => {
           // - Free (amount==0, non-tutorial): accept socket OR API isReady to tolerate HTTP fallback
           // - Tutorial handled below for AI auto-ready
           let isReady = connectionReady;
-          if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
+          if ((lobby.amount || 0) > 0 && !player.isAi) {
             isReady = Boolean(player.hasWagered) || connectionReady;
-          } else if (lobby.matchType !== 'tutorial' && (!player.isAi)) {
+          } else if (!player.isAi) {
             // Accept either socket flag or API isReady (tolerate undefined without TS syntax)
             const apiReady = !!(player && player.isReady);
-            isReady = connectionReady || apiReady;
+            isReady = Boolean(isReady || apiReady);
           }
           
             return {
@@ -2743,15 +2675,15 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready
         const isTutorialLobby = (lobby && lobby.matchType === 'tutorial');
-        const isRankedLobby = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
+        const isRankedLobby = !!(lobby && (lobby.amount || 0) > 0);
         const minPlayers = isTutorialLobby ? 1 : (isRankedLobby ? 4 : 2);
         // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
         const readyPlayers = eligiblePlayers.filter(p => {
-          if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
+          if ((lobby.amount || 0) > 0 && !p.isAi) {
             const hasWageredFlag = !!(p && p.hasWagered);
             return Boolean(p.isReady) || hasWageredFlag;
           }
-          return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
+          return p.isReady;
         });
         const hasHumanReady = (lobby && lobby.matchType === 'tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
         let allReady = false;

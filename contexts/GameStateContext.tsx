@@ -617,12 +617,11 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
 
   // Replace lobbyPlayers from authoritative socket/HTTP list during the secondary check
   const syncLobbyPlayers: GameStateContextType['syncLobbyPlayers'] = useCallback((list) => {
-    // Replace roster while preserving existing per-chicken colors; include AI for tutorial only
+    // Replace roster while preserving existing per-chicken colors; exclude AI entries
     setLobbyPlayers(prev => {
       const byId = new Map(prev.map(p => [p.id, p]));
       const source = Array.isArray(list) ? list : []
-      const includeAi = Boolean((matchMeta?.matchType || '').toLowerCase() === 'tutorial')
-      const filtered = includeAi ? source : source.filter(p => !(p as any).isAi)
+      const filtered = source.filter(p => !(p as any).isAi)
       const next: PlayerStatus[] = filtered.map((p: any) => {
         const id = String(p.playerId);
         const prevEntry = byId.get(id);
@@ -633,7 +632,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
           id,
           name: displayName,
           isPlayer: false,
-          isAi: Boolean(p.isAi),
+          isAi: false,
           position: new THREE.Vector3(0, chickenFeetOffsetY, 0),
           rotation: new THREE.Euler(0, 0, 0),
           colors,
@@ -645,7 +644,7 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       });
       return next;
     });
-  }, [publicKey, matchMeta?.matchType]);
+  }, [publicKey]);
 
   // Hydrate usernames when battle starts (inside match) to replace wallets on any stale entries
   useEffect(() => {

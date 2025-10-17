@@ -72,11 +72,7 @@ export default function WaitingQueue({
   // Expected participants captured at entry (humans + any AIs present at start)
   // For tutorial: expect full capacity (AI will backfill).
   // For ranked: expect at least min humans or the current lobby size at entry.
-  const expectedCountRef = useRef<number>(
-    lobby.matchType === 'tutorial'
-      ? 2
-      : Math.max(2, Array.isArray(lobby.players) ? lobby.players.length : 0)
-  )
+  const expectedCountRef = useRef<number>(Math.max(2, Array.isArray(lobby.players) ? lobby.players.length : 0))
 
   // Apply roster payloads to the local lobby UI and sync game-state roster
   const applyRosterToLobby = (roster: any[]) => {
@@ -115,10 +111,8 @@ export default function WaitingQueue({
     // Use helper above for roster application
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
-      // Always include AI entries for tutorial; server may already include them, but ensure consistency
       const rawExpected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
-      const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
-      const expected = isTutorial ? rawExpected : rawExpected.filter((p:any)=> !p?.isAi)
+      const expected = rawExpected.filter((p:any)=> !p?.isAi)
       // Normalize wallet identities to lowercase to match server acks
       latestRosterRef.current = expected.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
@@ -192,8 +186,7 @@ export default function WaitingQueue({
       console.log('[WaitingQueue] arena_lock_roster', payload)
       // Replace roster with locked list and keep provided names with guest rule
       const rawFinal = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
-      const isTutorial2 = String(lobby.matchType||'').toLowerCase()==='tutorial'
-      const finalR = isTutorial2 ? rawFinal : rawFinal.filter((p:any)=> !p?.isAi)
+      const finalR = rawFinal.filter((p:any)=> !p?.isAi)
       latestRosterRef.current = finalR.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
       try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
       try { syncLobbyPlayers(finalR.map((p: any) => {
@@ -204,7 +197,6 @@ export default function WaitingQueue({
       })) } catch {}
       // Apply locked roster to local UI for accuracy
       applyRosterToLobby(finalR)
-      // Do not auto-start tutorial; rely on synchronized round countdown/epoch like other lobbies
       // Schedule a local start aligned to the server-provided epoch to avoid missing 'round_start' during view transition
       try {
         if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
@@ -261,18 +253,6 @@ export default function WaitingQueue({
           onStartBattle()
         }
       }
-      // Tutorial: immediate start path
-      try {
-        const isTutorial = String(lobby.matchType||'').toLowerCase()==='tutorial'
-        if (isTutorial) {
-          const cached = Array.isArray(latestRosterRef.current) ? latestRosterRef.current : []
-          const override = (cached.length > 0
-            ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
-            : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) : []))
-          onStartBattle(override)
-          return
-        }
-      } catch {}
       startWithOverride()
     }
     socket.on('queue_begin', onQueueBegin)
@@ -526,7 +506,7 @@ export default function WaitingQueue({
   // The backend now provides the full player list, so we can use it directly.
   const players = currentLobby.players;
   // Tutorial: 1; Free: 2; Ranked: 4 humans (secondary confirmation screen)
-  const minRequired = lobby.matchType === 'tutorial' ? 1 : (lobby.amount === 0 ? 2 : 4)
+  const minRequired = lobby.amount === 0 ? 2 : 4
   const humanPlayersJoined = (players || []).filter((p: any) => !p.isAi).length
   // Keep local allPlayersReady aligned with min humans rule to control UI banners
   try { if (!allPlayersReady && humanPlayersJoined >= minRequired && (players || []).every((p: any) => p.isReady || p.isAi)) setAllPlayersReady(true) } catch {}
@@ -707,7 +687,7 @@ export default function WaitingQueue({
               </div>
             </div>
 
-            {lobby.matchType !== 'tutorial' && (
+            {
               <div className="bg-[#222222] p-3 rounded-lg mb-4">
                  <h4 className="text-sm lg:text-lg font-bold text-white pixel-font mb-2">Requirements</h4>
                 <div className="flex items-center text-xs lg:text-sm text-gray-300">
@@ -715,7 +695,7 @@ export default function WaitingQueue({
                  <span>{lobby.amount === 0 ? '2' : '4'} human players minimum to start.</span>
                </div>
               </div>
-            )}
+            }
           </div>
           
           <div className="mt-4">

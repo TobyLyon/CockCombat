@@ -23,9 +23,6 @@ export interface Lobby {
 // TODO: Move this to Supabase database for persistence
 const CURRENCY = 'SOL';
 export const lobbies: Lobby[] = [
-  // Tutorial (free, solo-friendly with AI)
-  { id: 'tutorial', name: 'Tutorial', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial', aiBackfill: true },
-  { id: 'tutorial-1', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'tutorial', aiBackfill: true },
   // Free lobbies (no AI, require 2 humans)
   { id: 'free-1', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   { id: 'free-2', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },

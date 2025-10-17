@@ -104,9 +104,8 @@ export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onM
         </DialogHeader>
         <div className="p-6">
           <Tabs defaultValue="wager">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-1">
               <TabsTrigger value="wager">Wager Match</TabsTrigger>
-              <TabsTrigger value="tutorial">Tutorial</TabsTrigger>
             </TabsList>
             <TabsContent value="wager">
               <div className="flex flex-col space-y-4">
@@ -128,16 +127,7 @@ export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onM
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="tutorial">
-              <div className="flex flex-col space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  A free-for-all match. If not enough players join, AI will fill the empty spots. No wagers, just fun.
-                </p>
-                <Button onClick={() => handleJoinLobby('tutorial-match')} variant="secondary">
-                  <Gamepad2 className="mr-2 h-4 w-4" /> Find Tutorial Match
-              </Button>
-              </div>
-            </TabsContent>
+            {/* Tutorial tab removed */}
           </Tabs>
         </div>
       </DialogContent>

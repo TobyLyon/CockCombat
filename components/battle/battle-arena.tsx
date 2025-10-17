@@ -36,7 +36,7 @@ export default function BattleArena() {
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [joinedLobby, setJoinedLobby] = useState<Lobby | null>(null);
   const [inLobbyRoom, setInLobbyRoom] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'tutorial'>('all');
+  const [filter, setFilter] = useState<'all'>('all');
   const [hasLoadedLobbies, setHasLoadedLobbies] = useState(false);
   const fetchControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
@@ -390,10 +390,7 @@ export default function BattleArena() {
   // Filter and sort lobbies for display
   const displayedLobbies = useMemo(() => {
     let list = Array.isArray(lobbies) ? [...lobbies] : [];
-    if (filter === 'tutorial') {
-      list = list.filter(l => l.matchType === 'tutorial' || l.amount === 0);
-    }
-    // Sort: tutorial/free first, then by amount ascending; VIP/highRoller last to stand out
+    // Sort: free first, then by amount ascending; VIP/highRoller last to stand out
     return list.sort((a, b) => {
       const aIsFree = a.amount === 0;
       const bIsFree = b.amount === 0;
@@ -401,7 +398,7 @@ export default function BattleArena() {
       if (!aIsFree && bIsFree) return 1;
       return (a.amount || 0) - (b.amount || 0);
     });
-  }, [lobbies, filter]);
+  }, [lobbies]);
 
   const handleJoinLobby = async (lobby: Lobby) => {
     // For any FREE matches (amount === 0), allow guest join when no wallet
@@ -547,10 +544,7 @@ export default function BattleArena() {
                             onClick={() => setFilter('all')}
                           className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'all' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
                           >All</button>
-                          <button
-                            onClick={() => setFilter('tutorial')}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === 'tutorial' ? 'bg-white/80 text-gray-900 border-white/70 shadow' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
-                          >Tutorial</button>
+                          {/* Tutorial filter removed */}
                         </div>
                       </div>
                     </div>
@@ -560,9 +554,9 @@ export default function BattleArena() {
                       const live = liveCounts[lobby.id]
                       const playerCount = live ? Math.max(0, Number(live.liveHumans) || 0) : 0
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
-                      const isPaid = (lobby.amount || 0) > 0 && lobby.matchType !== 'tutorial'
+                      const isPaid = (lobby.amount || 0) > 0
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
-                      const isTutorialLobby = (lobby as any).name === 'Tutorial' || lobby.id.startsWith('tutorial')
+                      const isTutorialLobby = false
                       return (
                       <motion.div
                         key={lobby.id}
@@ -595,10 +589,10 @@ export default function BattleArena() {
                           {/* Entry Amount */}
                           <div className="mb-3 lg:mb-3">
                             <div className={`text-xl lg:text-2xl font-bold pixel-font ${lobby.highRoller ? 'text-red-300' : 'text-white'}`}>
-                              {isTutorialLobby ? 'Tutorial' : (lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`)}
+                              {lobby.amount === 0 ? 'FREE' : `${lobby.amount} ${lobby.currency}`}
                             </div>
                             <div className="text-[10px] lg:text-[12px] text-white/70 uppercase tracking-wide">
-                              {isTutorialLobby ? 'AI Populated' : (lobby.amount === 0 ? 'Free Match' : 'Entry Fee')}
+                              {lobby.amount === 0 ? 'Free Match' : 'Entry Fee'}
                             </div>
                           </div>
                           
@@ -710,7 +704,7 @@ export default function BattleArena() {
                       // Capture match meta for post-game display
                       try {
                         const humans = (joinedLobby.players || []).filter(p => !p.isAi).length || 0;
-                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || 'SOL', matchType: joinedLobby.matchType || 'tutorial', humanCount: humans });
+                        setMatchMeta({ amount: joinedLobby.amount || 0, currency: joinedLobby.currency || 'SOL', matchType: joinedLobby.matchType || 'ranked', humanCount: humans });
                       } catch {}
                     }}
                   />

@@ -961,50 +961,6 @@ function SceneContent({
           if (socket) {
             const msid = (window as any)?.__last_match_session_id
             socket.emit('peck_attempt', { matchSessionId: msid })
-            // Tutorial robustness: also compute a local hit candidate and emit client-side damage
-            // The server will only honor 'player_damage' for tutorial matches; it is a no-op elsewhere.
-            try {
-              // Resolve self world position
-              const selfPos = (() => {
-                try {
-                  const v = new THREE.Vector3()
-                  if (playerRef?.current && typeof playerRef.current.getWorldPosition === 'function') {
-                    playerRef.current.getWorldPosition(v)
-                    return v
-                  }
-                } catch {}
-                return selfPosition.clone()
-              })()
-              // Find nearest opponent (AI or human) within identical server reach/windows
-              const reach = 3.2
-              const verticalWindow = 0.45
-              let bestId: string | null = null
-              let bestDist = Infinity
-              try {
-                const map = opponentGroupsRef.current || {}
-                for (const k of Object.keys(map)) {
-                  const g = map[k]
-                  if (!g) continue
-                  // Skip dead opponents by checking current players list (if available)
-                  const p = (players as any[] || []).find(e => e && e.id === k)
-                  if (p && p.isAlive === false) continue
-                  const gx = g.position.x
-                  const gy = g.position.y
-                  const gz = g.position.z
-                  const dx = (selfPos.x || 0) - gx
-                  const dz = (selfPos.z || 0) - gz
-                  const dy = Math.abs((selfPos.y || 0.85) - (gy || 0.85))
-                  const d = Math.hypot(dx, dz)
-                  if (d <= reach && dy <= verticalWindow && d < bestDist) {
-                    bestDist = d
-                    bestId = k
-                  }
-                }
-              } catch {}
-              if (bestId) {
-                socket.emit('player_damage', { targetId: bestId, amount: 1, matchSessionId: msid })
-              }
-            } catch {}
           }
         } catch {}
         lastPeckAtRef.current = nowMs
@@ -1602,7 +1558,7 @@ function ChickenInstances({
     return h >>> 0
   }
 
-  useFrame((_, delta) => {
+    useFrame((_, delta) => {
       // Per-frame book-keeping so multiple AIs don't all pick the same target
       const assignedTargets = new Set<string>()
 
@@ -1621,11 +1577,11 @@ function ChickenInstances({
             playerRef.current.getWorldPosition(v)
             return v
           }
-        } catch {}
+          } catch {}
         try {
           const g = groupsRef.current[id]
           if (g) return g.position.clone()
-        } catch {}
+      } catch {}
         return null
       }
 
@@ -1684,10 +1640,10 @@ function ChickenInstances({
             const dz = g.position.z - prevZ2
             try { g.userData.vx = dx / Math.max(0.016, delta); g.userData.vz = dz / Math.max(0.016, delta) } catch {}
             try {
-            const peckEventAt = (net as any)?.peckAt
+              const peckEventAt = (net as any)?.peckAt
             if (peckEventAt && Date.now() - peckEventAt < 220) {
-              lastPeckRef.current[chicken.id] = Date.now()
-            }
+                lastPeckRef.current[chicken.id] = Date.now()
+              }
             } catch {}
           } else {
             try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
@@ -1699,7 +1655,7 @@ function ChickenInstances({
         // Build candidate set: all other alive chickens plus the local player id
         const candidateIds: string[] = []
         try {
-          for (const other of chickens) {
+              for (const other of chickens) {
             if (!other || !other.isAlive) continue
             const oid = String(other.id || '').toLowerCase()
             if (!oid || oid === String(chicken.id || '').toLowerCase()) continue
@@ -1709,8 +1665,8 @@ function ChickenInstances({
           if (playerChickenId) {
             const me = String(playerChickenId).toLowerCase()
             if (!candidateIds.includes(me)) candidateIds.push(me)
-          }
-        } catch {}
+              }
+            } catch {}
 
         // Map candidates to positions and distances
         const candidates = candidateIds.map((cid) => {
@@ -1757,9 +1713,9 @@ function ChickenInstances({
           moveVec.set(0, 0, 0)
         } else if (dist > 2.6) {
           // Direct chase toward target
-          const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
-          moveVec.set((toTarget.x / len) * speed, 0, (toTarget.z / len) * speed)
-        } else {
+            const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
+            moveVec.set((toTarget.x / len) * speed, 0, (toTarget.z / len) * speed)
+          } else {
           // In range: peck using a deterministic schedule synced to server start epoch
           const cdMs = 1200
           const base = String(arenaSeed || 'seed') + '|' + String(chicken.id || '')
@@ -1767,9 +1723,9 @@ function ChickenInstances({
           const startedAt = typeof roundStartAtMs === 'number' ? roundStartAtMs : 0
           const attackIndex = Math.floor(Math.max(0, (now - startedAt + phase)) / cdMs)
           const lastIdx = lastAttackIndexRef.current[chicken.id] || -1
-          // Require vertical alignment similar to player hits
+            // Require vertical alignment similar to player hits
           const dy = Math.abs(pos.y - targetPos.y)
-          const verticalWindow = 0.45
+            const verticalWindow = 0.45
           if (isEngaged && !isFrozen && !isInvulnerable && attackIndex > lastIdx && dy <= verticalWindow) {
             lastAttackIndexRef.current[chicken.id] = attackIndex
             try {
