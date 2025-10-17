@@ -2837,6 +2837,28 @@ preparePromise.then(() => {
         }
 
         if (allReady) {
+          // Tutorial: prefill AI to capacity so clients see full roster before countdown
+          try {
+            if (lobby && lobby.matchType === 'tutorial') {
+              const mem = lobbies.find((l) => l && l.id === lobbyId);
+              if (mem) {
+                const capacity = typeof mem.capacity === 'number' ? mem.capacity : 8;
+                const cur = Array.isArray(mem.players) ? mem.players.slice() : [];
+                const need = Math.max(0, capacity - cur.length);
+                if (need > 0) {
+                  const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                  for (let i = 0; i < need; i++) {
+                    const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+                    cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
+                  }
+                  mem.players = cur;
+                  const versionPre = nextLobbyVersion(lobbyId);
+                  const snapPre = await buildLobbySnapshot(lobbyId).catch(() => null);
+                  if (snapPre) io.to(lobbyId).emit('lobby_updated', { ...snapPre, version: versionPre });
+                }
+              }
+            }
+          } catch {}
           // Memoize the all-ready moment for soft tolerance in free lobby flaps
           try { if (!global.__lastAllReadyAt) global.__lastAllReadyAt = Object.create(null); global.__lastAllReadyAt[lobbyId] = Date.now(); } catch {}
           // If countdown already running or scheduled, do nothing
