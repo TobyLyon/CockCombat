@@ -3204,6 +3204,9 @@ preparePromise.then(() => {
       } catch {}
 
       // Notify clients to begin queue confirmation
+      // Determine free vs ranked for handshake payload
+      const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+
       const qbPayload = {
         matchSessionId,
         expectedRoster,
