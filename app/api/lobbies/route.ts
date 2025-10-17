@@ -447,9 +447,7 @@ export async function POST(req: NextRequest) {
     console.error('❌ Failed to broadcast player join:', error);
   }
 
-  if (lobby.players.length === lobby.capacity) {
-    lobby.status = 'starting';
-  }
+  // Status transitions are server-authoritative; do not set 'starting' here
 
     return NextResponse.json(lobby);
   });
@@ -646,13 +644,7 @@ export async function PUT(req: NextRequest) {
       }
     } catch {}
 
-    // Ready-time policy: Start only when everyone ready and min players met by mode
-    const isRanked = lobby.amount > 0;
-    const minPlayers = isRanked ? 4 : 2;
-    const allReady = lobby.players.length >= minPlayers && lobby.players.every(p => Boolean(p.isReady));
-    if (allReady) {
-      lobby.status = 'starting';
-    }
+    // Ready-time policy is server-authoritative; avoid setting lobby.status here
 
     return NextResponse.json(lobby);
   });

@@ -3431,6 +3431,7 @@ preparePromise.then(() => {
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
+      // Mark lobby as starting only once queue has actually begun (server-authoritative)
       try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'starting'; } catch {}
       io.to(lobbyId).emit('queue_begin', qbPayload);
       try {
