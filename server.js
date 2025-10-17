@@ -3825,6 +3825,28 @@ preparePromise.then(() => {
               for (const addr of set.values()) {
                 if (typeof addr === 'string' && !addr.startsWith('ai-')) humans += 1;
               }
+              // Prune stale human entries from FREE lobbies based on live presence (prevents ghost guests)
+              try {
+                const isFree = (lob.matchType !== 'tutorial') && ((lob.amount || 0) === 0);
+                if (isFree && Array.isArray(lob.players)) {
+                  const allowed = new Set();
+                  try { for (const a of set.values()) { allowed.add(String(a || '').toLowerCase()); } } catch {}
+                  const before = lob.players.length;
+                  lob.players = lob.players.filter(p => allowed.has(String(p?.playerId || '').toLowerCase()));
+                  const after = lob.players.length;
+                  if (after !== before) {
+                    try {
+                      const version = nextLobbyVersion(lob.id);
+                      const snap = await buildLobbySnapshot(lob.id).catch(() => null);
+                      if (snap) io.to(lob.id).emit('lobby_updated', { ...snap, version });
+                      // Also broadcast counts derived from presence so cards update
+                      const liveHumans = Array.from(set.values()).filter((w) => !(String(w).startsWith('ai-'))).length;
+                      io.emit('lobby_counts', { id: lob.id, liveHumans, liveTotal: set.size });
+                      console.log(`🧹 Pruned ${before - after} ghost player(s) from ${lob.id}`);
+                    } catch {}
+                  }
+                }
+              } catch {}
               // Also check active match sessions referencing this lobby
               const hasActiveQueue = Boolean(global.activeQueueForLobby && global.activeQueueForLobby.get && global.activeQueueForLobby.get(lob.id));
               const recentMetaActive = (() => {

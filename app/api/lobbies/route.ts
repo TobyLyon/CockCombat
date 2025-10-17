@@ -95,6 +95,19 @@ function removeOneAiPlayer(lobby: any) {
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.READ, async () => {
+    try {
+      // Prune ghost humans from FREE lobbies based on live presence before returning
+      for (const lob of lobbies) {
+        try {
+          const isFree = (lob && lob.matchType !== 'tutorial') && ((lob.amount || 0) === 0);
+          if (!isFree || !Array.isArray(lob.players)) continue;
+          const presence: Set<string> = ((global as any).lobbyPresence && (global as any).lobbyPresence.get && (global as any).lobbyPresence.get(lob.id)) || new Set();
+          const allowed = new Set<string>();
+          try { for (const a of presence.values()) { allowed.add(String(a || '').toLowerCase()); } } catch {}
+          lob.players = lob.players.filter((p: any) => allowed.has(String(p?.playerId || '').toLowerCase()));
+        } catch {}
+      }
+    } catch {}
     return NextResponse.json(lobbies);
   });
 }
