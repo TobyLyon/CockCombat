@@ -3214,6 +3214,15 @@ preparePromise.then(() => {
             }
           }
         }
+        // Free (non-tutorial) robustness: if roster is empty, fall back to socket presence
+        const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+        if (isFreeNonTutorial && (!expectedRoster || expectedRoster.length === 0)) {
+          try {
+            const presenceSet = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
+            const fromPresence = Array.from(presenceSet.values()).map((w) => String(w || '').toLowerCase()).filter(Boolean);
+            expectedRoster = fromPresence.map((w) => ({ wallet: w, isAi: false, username: w.slice(0,8)+'...', chickenName: 'Default' }));
+          } catch {}
+        }
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
         // Hydrate missing usernames for humans to avoid wallet fallback for remote clients
         try {
@@ -3326,7 +3335,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-          minHumans: isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4),
+        minHumans: isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4),
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
