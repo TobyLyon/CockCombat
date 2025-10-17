@@ -711,16 +711,21 @@ function SceneContent({
       } catch {}
     }
     socket.on('round_countdown', onRoundCountdown)
-    // Fallback: if server only emits 'match_started' without epoch, unfreeze immediately
+    // Fallback: if server only emits 'match_started' without epoch, enforce a 3s synchronized freeze
     const onMatchStarted = (payload?: any) => {
       // Ensure we are in the match room and arm freeze if needed
       try {
         const msid = payload?.matchSessionId || (window as any)?.__last_match_session_id
         if (msid) socket.emit('join_match_room', { matchSessionId: msid })
       } catch {}
-      if (!roundStartAtMsRef.current) {
-        freezeUntilRef.current = Date.now()
-        invulnerableUntilRef.current = Date.now() + 1000
+      const now = Date.now()
+      // If we never received arena_lock_roster/round_start epoch, set startAt = now + 3000ms
+      if (!roundStartAtMsRef.current || roundStartAtMsRef.current < now) {
+        const startAt = now + 3000
+        roundStartAtMsRef.current = startAt
+        freezeUntilRef.current = startAt
+        invulnerableUntilRef.current = startAt + 1000
+        try { (window as any).__last_round_start_at = startAt } catch {}
       }
     }
     socket.on('match_started', onMatchStarted)
@@ -811,7 +816,13 @@ function SceneContent({
       } catch {}
     }
     sendRequest()
-    const onVis = () => { if (!document.hidden) sendRequest() }
+    const onVis = () => {
+      if (!document.hidden) {
+        // On return, immediately request authoritative snapshot and reset local emit throttle
+        sendRequest()
+        try { lastEmitAtRef.current = 0 } catch {}
+      }
+    }
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('focus', sendRequest)
     return () => {
@@ -844,7 +855,9 @@ function SceneContent({
   useFrame((state, delta) => {
     // Calculate delta time for frame-rate independent movement
     const now = Date.now();
-    const deltaTime = Math.min((now - lastUpdateTime.current) / 1000, 0.1); // Cap at 0.1 to prevent large jumps
+    let deltaTime = Math.min((now - lastUpdateTime.current) / 1000, 0.1);
+    // If we were in the background and delta is huge, clamp stronger to avoid physics bursts
+    if (!Number.isFinite(deltaTime) || deltaTime > 0.2) deltaTime = 0.016;
     lastUpdateTime.current = now;
 
     // Skip if game is not in battle state
@@ -931,6 +944,10 @@ function SceneContent({
     let moveVector = new THREE.Vector3(0, 0, 0);
     if (forward) moveVector.z -= 1;
     if (backward) moveVector.z += 1;
+    // Hard-freeze movement until synchronized round start
+    if (Date.now() < freezeUntilRef.current) {
+      moveVector.set(0, 0, 0);
+    }
     // Removed direct L/R move for rotation-based movement
     // if (left) moveVector.x -= 1;
     // if (right) moveVector.x += 1;

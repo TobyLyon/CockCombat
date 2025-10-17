@@ -1917,6 +1917,7 @@ preparePromise.then(() => {
 
     // Server-authoritative peck attempt: compute hit against authoritative positions
     if (!global.__lastPeckAttemptTs) global.__lastPeckAttemptTs = Object.create(null);
+    if (!global.__peckSwing) global.__peckSwing = Object.create(null); // wallet -> { until: number, resolved: boolean }
     socket.on('peck_attempt', (payload) => {
       try {
         if (!checkRateLimit('peck_attempt', 240)) return;
@@ -1934,6 +1935,18 @@ preparePromise.then(() => {
           const last = global.__lastPeckAttemptTs[wallet] || 0;
           if (now - last < 1000) return; // 1 peck per second
           global.__lastPeckAttemptTs[wallet] = now;
+        } catch {}
+
+        // Ensure only ONE damage resolve per swing window (~1s) regardless of duplicates
+        try {
+          const swing = global.__peckSwing[wallet] || { until: 0, resolved: false };
+          if (!swing.until || now > swing.until) {
+            swing.until = now + 1000; // swing window
+            swing.resolved = false;
+          } else if (swing.resolved) {
+            return; // already resolved a hit for this swing
+          }
+          global.__peckSwing[wallet] = swing;
         } catch {}
 
         // Fetch authoritative match state
@@ -1999,6 +2012,9 @@ preparePromise.then(() => {
         } catch {}
 
         try { io.to(targetRoom).emit('player_damage', { targetId: chosen, amount, by: wallet, ts: Date.now() }); } catch {}
+
+        // Mark swing as resolved so duplicates cannot apply more damage in the same window
+        try { const s = global.__peckSwing && global.__peckSwing[wallet]; if (s) s.resolved = true; } catch {}
       } catch {}
     });
 
@@ -2006,7 +2022,7 @@ preparePromise.then(() => {
     // Simple de-dupe window per attacker->target and global per-attacker throttle (max 2 hits/sec)
     if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
     if (!global.__lastAttackerHitTs) global.__lastAttackerHitTs = Object.create(null);
-    socket.on('player_damage', (payload) => {
+    socket.on('player_damage', async (payload) => {
       try {
         // Guard bursts and large payloads
         if (!checkRateLimit('player_damage', 240)) {
@@ -2022,6 +2038,25 @@ preparePromise.then(() => {
         const targetId = String(payload?.targetId || '');
         if (!targetId) return;
         const amount = Math.max(0, Math.min(3, Number(payload?.amount) || 1));
+
+        // Restrict legacy client-side damage to tutorial matches ONLY
+        try {
+          let isTutorial = false;
+          if (matchId && global.matchStateBySession && typeof global.matchStateBySession.get === 'function') {
+            const st = global.matchStateBySession.get(matchId);
+            const lid = st && st.lobbyId;
+            if (lid) {
+              try {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+                const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
+                const all = res ? await res.json().catch(() => []) : [];
+                const meta = Array.isArray(all) ? all.find(l => l && l.id === lid) : null;
+                isTutorial = Boolean(meta && meta.matchType === 'tutorial');
+              } catch {}
+            }
+          }
+          if (!isTutorial) return; // ignore in free/ranked
+        } catch {}
         // Global per-attacker throttle: <= 2 hits per second across all targets
         const now = Date.now();
         try {
@@ -3450,7 +3485,7 @@ preparePromise.then(() => {
         // Initialize authoritative state store for resync
         try {
           if (!global.matchStateBySession) global.matchStateBySession = new Map();
-          const state = { lobbyId, hp: Object.create(null), pos: Object.create(null), startedAt: roundStartAtEpochMs, createdAt: Date.now() };
+      const state = { lobbyId, hp: Object.create(null), pos: Object.create(null), startedAt: roundStartAtEpochMs, createdAt: Date.now() };
           for (const r of (finalRoster || [])) {
             const k = String(r.wallet || '').toLowerCase();
             if (k) state.hp[k] = 3;
@@ -3469,7 +3504,7 @@ preparePromise.then(() => {
           const escrow = lobby && lobby.escrowWalletId ? lobby.escrowWalletId : null;
           if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
           if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
-          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs };
+          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs, roundStartedAt: Date.now() };
           try { global.recentMatchMetaBySession.set(matchSessionId, meta); } catch {}
           try { humans.forEach(w => { global.recentMatchMetaByWallet.set(w, meta); }); } catch {}
         } catch {}
@@ -3736,9 +3771,16 @@ preparePromise.then(() => {
                 return false;
               })();
               if (humans === 0 && !hasActiveQueue && !recentMetaActive) {
+                const was = lob.status;
                 lob.status = 'open';
+                // Clear presence and any countdown/precountdown flags for a clean slate
+                try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lob.id) || new Set()).clear?.(); } catch {}
+                try { if (global.countdownActive && global.countdownActive[lob.id]) delete global.countdownActive[lob.id]; } catch {}
+                try { if (global.countdownIntervals && global.countdownIntervals[lob.id]) { clearInterval(global.countdownIntervals[lob.id]); delete global.countdownIntervals[lob.id]; } } catch {}
+                try { if (global.preCountdownTimers && global.preCountdownTimers[lob.id]) { clearTimeout(global.preCountdownTimers[lob.id]); delete global.preCountdownTimers[lob.id]; } } catch {}
+                // Emit fresh snapshot
                 try { io.emit('lobby_updated', { id: lob.id, players: [], capacity: lob.capacity, amount: lob.amount, currency: lob.currency, matchType: lob.matchType, version: nextLobbyVersion(lob.id) }); } catch {}
-                console.log(`♻️ Reopened empty lobby '${lob.id}' that was stuck as '${lob.status}'.`);
+                console.log(`♻️ Reopened empty lobby '${lob.id}' (was '${was}')`);
               }
             }
           } catch {}
