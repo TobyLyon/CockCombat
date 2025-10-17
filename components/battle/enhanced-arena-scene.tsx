@@ -951,6 +951,50 @@ function SceneContent({
           if (socket) {
             const msid = (window as any)?.__last_match_session_id
             socket.emit('peck_attempt', { matchSessionId: msid })
+            // Tutorial robustness: also compute a local hit candidate and emit client-side damage
+            // The server will only honor 'player_damage' for tutorial matches; it is a no-op elsewhere.
+            try {
+              // Resolve self world position
+              const selfPos = (() => {
+                try {
+                  const v = new THREE.Vector3()
+                  if (playerRef?.current && typeof playerRef.current.getWorldPosition === 'function') {
+                    playerRef.current.getWorldPosition(v)
+                    return v
+                  }
+                } catch {}
+                return selfPosition.clone()
+              })()
+              // Find nearest opponent (AI or human) within identical server reach/windows
+              const reach = 3.2
+              const verticalWindow = 0.45
+              let bestId: string | null = null
+              let bestDist = Infinity
+              try {
+                const map = opponentGroupsRef.current || {}
+                for (const k of Object.keys(map)) {
+                  const g = map[k]
+                  if (!g) continue
+                  // Skip dead opponents by checking current players list (if available)
+                  const p = (players as any[] || []).find(e => e && e.id === k)
+                  if (p && p.isAlive === false) continue
+                  const gx = g.position.x
+                  const gy = g.position.y
+                  const gz = g.position.z
+                  const dx = (selfPos.x || 0) - gx
+                  const dz = (selfPos.z || 0) - gz
+                  const dy = Math.abs((selfPos.y || 0.85) - (gy || 0.85))
+                  const d = Math.hypot(dx, dz)
+                  if (d <= reach && dy <= verticalWindow && d < bestDist) {
+                    bestDist = d
+                    bestId = k
+                  }
+                }
+              } catch {}
+              if (bestId) {
+                socket.emit('player_damage', { targetId: bestId, amount: 1, matchSessionId: msid })
+              }
+            } catch {}
           }
         } catch {}
         lastPeckAtRef.current = nowMs
