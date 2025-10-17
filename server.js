@@ -654,7 +654,10 @@ preparePromise.then(() => {
         socket.join(lobbyId);
         // If a new client joins before countdown starts, cancel any pre-countdown delay
         try {
-          if (global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
+          // Only cancel pre-countdown for non-tutorial lobbies; tutorial should proceed even with late joiners
+          const lobMeta = lobbies.find((l) => l && l.id === lobbyId);
+          const isTutorial = Boolean(lobMeta && lobMeta.matchType === 'tutorial');
+          if (!isTutorial && global.preCountdownTimers && global.preCountdownTimers[lobbyId]) {
             clearTimeout(global.preCountdownTimers[lobbyId]);
             delete global.preCountdownTimers[lobbyId];
             console.log(`⏹️ Pre-countdown cancelled for lobby ${lobbyId} due to new join`);
@@ -2689,6 +2692,28 @@ preparePromise.then(() => {
         if (isTutorialLobby) {
           // Tutorial: one ready human is enough regardless of AI/presence flaps
           allReady = readyPlayers.some(p => !p.isAi);
+          if (allReady) {
+            // Auto-backfill AI to capacity before pre-countdown so roster won't flap to 0/0
+            try {
+              const mem = lobbies.find((l) => l && l.id === lobbyId);
+              if (mem) {
+                const capacity = typeof mem.capacity === 'number' ? mem.capacity : 8;
+                const cur = Array.isArray(mem.players) ? mem.players.slice() : [];
+                const need = Math.max(0, capacity - cur.length);
+                if (need > 0) {
+                  const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                  for (let i = 0; i < need; i++) {
+                    const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+                    cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
+                  }
+                  mem.players = cur;
+                  const versionPre = nextLobbyVersion(lobbyId);
+                  const snapPre = await buildLobbySnapshot(lobbyId).catch(() => null);
+                  if (snapPre) io.to(lobbyId).emit('lobby_updated', { ...snapPre, version: versionPre });
+                }
+              }
+            } catch {}
+          }
         } else {
           allReady = eligiblePlayers.length >= minPlayers && readyPlayers.length === eligiblePlayers.length && hasHumanReady;
         }
@@ -3098,11 +3123,22 @@ preparePromise.then(() => {
                 try { if (global.countdownIntervals && global.countdownIntervals[lobbyId]) delete global.countdownIntervals[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
                 try {
-                  // For tutorial, pass a presence-derived override roster to avoid API dependency
+                  // Build an override roster to avoid API dependency races
                   let override = null;
-                  if (lobby.matchType === 'tutorial') {
+                  const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
+                  const isFreeNonTutorialNow = !isTutorialNow && (liveLobbyNow.amount || 0) === 0;
+                  if (isTutorialNow) {
                     override = lobbyPlayers.filter(p => !p.isAi).map(p => ({
-                      wallet: p.playerId,
+                      wallet: String(p.playerId || '').toLowerCase(),
+                      isAi: false,
+                      username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
+                      chickenName: p.chickenName || 'Default',
+                    }));
+                  } else if (isFreeNonTutorialNow) {
+                    // Use eligible humans present at countdown time
+                    const humansNow = (eligibleNow || []).filter((p) => !p.isAi);
+                    override = humansNow.map((p) => ({
+                      wallet: String(p.playerId || '').toLowerCase(),
                       isAi: false,
                       username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
                       chickenName: p.chickenName || 'Default',
@@ -3240,6 +3276,15 @@ preparePromise.then(() => {
         }));
         isTutorial = lobbyMeta.matchType === 'tutorial';
         if (!isTutorial) expectedRoster = expectedRoster.filter(e => !e.isAi);
+        // If free non-tutorial resolves to 0 due to API race, rebuild from presence
+        const isFreeEdge1 = !isTutorial && (lobbyMeta.amount || 0) === 0;
+        if (isFreeEdge1 && expectedRoster.length === 0) {
+          try {
+            const presenceSet = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
+            const fromPresence = Array.from(presenceSet.values()).map((w) => String(w || '').toLowerCase()).filter(Boolean);
+            expectedRoster = fromPresence.map((w) => ({ wallet: w, isAi: false, username: w.slice(0,8)+'...', chickenName: 'Default' }));
+          } catch {}
+        }
         // Ensure tutorial expected roster includes AI backfill to capacity
         if (isTutorial) {
           const missing = Math.max(0, (lobbyMeta.capacity || 8) - expectedRoster.length);
@@ -3252,8 +3297,8 @@ preparePromise.then(() => {
           }
         }
         // Free (non-tutorial) robustness: if roster is empty, fall back to socket presence
-        const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
-        if (isFreeNonTutorial && (!expectedRoster || expectedRoster.length === 0)) {
+        const isFreeEdge2 = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+        if (isFreeEdge2 && (!expectedRoster || expectedRoster.length === 0)) {
           try {
             const presenceSet = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
             const fromPresence = Array.from(presenceSet.values()).map((w) => String(w || '').toLowerCase()).filter(Boolean);
