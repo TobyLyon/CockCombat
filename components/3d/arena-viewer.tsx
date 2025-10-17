@@ -13,11 +13,12 @@ function ArenaFloor() {
   
   // Use try/catch to handle texture loading errors
   try {
+    // Use small PNGs we ship locally to avoid exotic formats failing on some GPUs/CDNs
     const sandTextures = useTexture({
-      map: "/textures/textures/sandy_gravel_02_diff_4k.jpg",
-      normalMap: "/textures/textures/sandy_gravel_02_nor_gl_4k.exr",
-      roughnessMap: "/textures/textures/sandy_gravel_02_rough_4k.exr",
-      displacementMap: "/textures/textures/sandy_gravel_02_disp_4k.png",
+      map: "/textures/ground/Ground085_1K-PNG_Color.png",
+      normalMap: "/textures/ground/Ground085_1K-PNG_NormalGL.png",
+      roughnessMap: "/textures/ground/Ground085_1K-PNG_Roughness.png",
+      displacementMap: "/textures/ground/Ground085_1K-PNG_Displacement.png",
     })
     
     // Apply texture settings for better quality
@@ -71,10 +72,10 @@ function ArenaFloor() {
 function ArenaWalls() {
   try {
     const rockTextures = useTexture({
-      map: "/textures/textures/coast_sand_rocks_02_diff_4k.jpg",
-      normalMap: "/textures/textures/coast_sand_rocks_02_nor_gl_4k.exr",
-      roughnessMap: "/textures/textures/coast_sand_rocks_02_rough_4k.exr",
-      displacementMap: "/textures/textures/coast_sand_rocks_02_disp_4k.png",
+      map: "/textures/wood/WoodFloor044_1K-PNG_Color.png",
+      normalMap: "/textures/wood/WoodFloor044_1K-PNG_NormalGL.png",
+      roughnessMap: "/textures/wood/WoodFloor044_1K-PNG_Roughness.png",
+      displacementMap: "/textures/wood/WoodFloor044_1K-PNG_Displacement.png",
     })
     
     // Apply texture settings for better quality

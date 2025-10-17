@@ -37,10 +37,12 @@ export function loadTexture(
   
   // Load new texture
   return new Promise((resolve, reject) => {
-    const loader = new THREE.TextureLoader();
+    // Use a shared LoadingManager with retry and cache busting support
+    const manager = new THREE.LoadingManager();
+    const loader = new THREE.TextureLoader(manager);
     
-    loader.load(
-      path,
+    const tryLoad = (src: string, attempt: number) => loader.load(
+      src,
       (texture) => {
         // Optimize and configure texture
         optimizeTexture(texture, { maxSize: options.maxSize ?? DEFAULT_TEXTURE_SIZE, ...options });
@@ -52,7 +54,13 @@ export function loadTexture(
       },
       undefined, // onProgress not implemented
       (error) => {
-        console.warn(`Error loading texture ${path}, using fallback color:`, error);
+        if (attempt < 2) {
+          // Retry once with a cache-busting query and relaxed settings
+          const bust = src.includes('?') ? `${src}&t=${Date.now()}` : `${src}?t=${Date.now()}`;
+          setTimeout(() => tryLoad(bust, attempt + 1), 50);
+          return;
+        }
+        console.warn(`Error loading texture ${path} (attempts exhausted), using fallback color:`, error);
         try {
           const fallback = createColorTexture('#7a6a50');
           optimizeTexture(fallback, { maxSize: options.maxSize ?? DEFAULT_TEXTURE_SIZE, ...options });
@@ -64,6 +72,9 @@ export function loadTexture(
         }
       }
     );
+
+    // Kick off initial load
+    tryLoad(path, 0);
   });
 }
 
@@ -101,8 +112,9 @@ function optimizeTexture(texture: THREE.Texture, options: TextureOptions): void 
   // Apply default optimizations
   try { (texture as any).colorSpace = (THREE as any).SRGBColorSpace; } catch {}
   texture.generateMipmaps = true;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  // Use mipmap-capable minFilter and clamp magFilter for stability on low-end GPUs
+  try { texture.minFilter = THREE.LinearMipmapLinearFilter; } catch {}
+  try { texture.magFilter = THREE.LinearFilter; } catch {}
   texture.needsUpdate = true;
 }
 
@@ -111,23 +123,19 @@ function optimizeTexture(texture: THREE.Texture, options: TextureOptions): void 
  */
 function applyTextureOptions(texture: THREE.Texture, options: TextureOptions): void {
   // Set anisotropy for better texture quality at angles
-  texture.anisotropy = options.anisotropy || DEFAULT_ANISOTROPY;
+  try { texture.anisotropy = options.anisotropy || DEFAULT_ANISOTROPY; } catch {}
   
   // Set texture wrapping
-  if (options.wrapS !== undefined) texture.wrapS = options.wrapS; else texture.wrapS = THREE.RepeatWrapping;
-  if (options.wrapT !== undefined) texture.wrapT = options.wrapT; else texture.wrapT = THREE.RepeatWrapping;
+  try { texture.wrapS = (options.wrapS !== undefined) ? options.wrapS : THREE.RepeatWrapping; } catch {}
+  try { texture.wrapT = (options.wrapT !== undefined) ? options.wrapT : THREE.RepeatWrapping; } catch {}
   
   // Set repeat and offset
-  if (options.repeat) {
-    texture.repeat.set(options.repeat[0], options.repeat[1]);
-  }
+  try { if (options.repeat) texture.repeat.set(options.repeat[0], options.repeat[1]); } catch {}
   
-  if (options.offset) {
-    texture.offset.set(options.offset[0], options.offset[1]);
-  }
+  try { if (options.offset) texture.offset.set(options.offset[0], options.offset[1]); } catch {}
   
   // Set flip Y
-  if (options.flipY !== undefined) texture.flipY = options.flipY;
+  try { if (options.flipY !== undefined) texture.flipY = options.flipY; } catch {}
 }
 
 /**

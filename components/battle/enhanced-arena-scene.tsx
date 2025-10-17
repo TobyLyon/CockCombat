@@ -87,8 +87,20 @@ enum GameState {
 
 // Replace the ArenaFloor component to use the optimized texture loading
 function ArenaFloor({ lowPerf = false }: { lowPerf?: boolean }) {
-  const floorTexture = useTexture("/textures/grass/Grass005_1K-PNG_Color.png");
-  const dirtTexture = useTexture("/textures/ground/Ground085_1K-PNG_Color.png");
+  const [floorTexture, setFloorTexture] = useState<THREE.Texture | null>(null)
+  const [dirtTexture, setDirtTexture] = useState<THREE.Texture | null>(null)
+  useEffect(() => {
+    let mounted = true
+    import("@/lib/texture-loader").then(mod => {
+      mod.loadTexture("/textures/grass/Grass005_1K-PNG_Color.png", { repeat: [12,12] })
+        .then(t => { if (mounted) setFloorTexture(t) })
+        .catch(() => {})
+      mod.loadTexture("/textures/ground/Ground085_1K-PNG_Color.png", { repeat: [10,10] })
+        .then(t => { if (mounted) setDirtTexture(t) })
+        .catch(() => {})
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
   // Apply texture settings directly to the loaded texture
   useEffect(() => {
@@ -120,12 +132,12 @@ function ArenaFloor({ lowPerf = false }: { lowPerf?: boolean }) {
     <group>
       {/* Grass annulus (reduced extent) */}
       <Plane args={[600, 600]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow castShadow>
-        <meshStandardMaterial map={floorTexture} roughness={0.95} metalness={0.05} />
+        <meshStandardMaterial map={floorTexture || undefined} roughness={0.95} metalness={0.05} />
       </Plane>
       {/* Dirt in-fighting ring (slightly smaller circle) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow castShadow>
         <circleGeometry args={[ARENA_CONFIG.ringRadius * 0.9, 64]} />
-        <meshStandardMaterial map={dirtTexture} roughness={0.98} metalness={0.02} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        <meshStandardMaterial map={dirtTexture || undefined} roughness={0.98} metalness={0.02} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
     </group>
   );
