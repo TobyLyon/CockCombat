@@ -256,6 +256,8 @@ function SceneContent({
   const freezeUntilRef = useRef<number>(0)
   const invulnerableUntilRef = useRef<number>(0)
   const hasArmedCountdownRef = useRef<boolean>(false)
+  // Ensure we only signal readiness once per scene mount
+  const hasEmittedReadyRef = useRef<boolean>(false)
   // Server clock offset (serverNow - clientNow)
   const serverOffsetRef = useRef<number>(0)
 
@@ -273,6 +275,17 @@ function SceneContent({
     if (gameState !== 'battle') {
       roundStartAtMsRef.current = null
       setSyncedCountdown(null)
+    }
+  }, [gameState])
+
+  // Default-freeze movement until the server begins round countdown/start to avoid early movers
+  useEffect(() => {
+    if (gameState === 'battle') {
+      const now = Date.now()
+      // Only set a fallback freeze if no future freeze has been scheduled yet
+      if (typeof freezeUntilRef.current !== 'number' || freezeUntilRef.current <= now) {
+        freezeUntilRef.current = now + 60000 // 60s safety window; will be tightened by round_countdown
+      }
     }
   }, [gameState])
 
@@ -802,6 +815,21 @@ function SceneContent({
       socket.off('match_state', onMatchState)
     }
   }, [socket, onPlayerDamage])
+
+  // Emit arena_client_ready once the 3D scene and textures are loaded
+  useEffect(() => {
+    if (!socket) return
+    if (gameState !== 'battle') return
+    if (texturesLoading) return
+    if (hasEmittedReadyRef.current) return
+    try {
+      const msid = (typeof window !== 'undefined') ? (window as any).__last_match_session_id : null
+      if (msid) {
+        socket.emit('arena_client_ready', { matchSessionId: msid })
+        hasEmittedReadyRef.current = true
+      }
+    } catch {}
+  }, [socket, gameState, texturesLoading])
 
   // Measure server clock offset periodically
   useEffect(() => {

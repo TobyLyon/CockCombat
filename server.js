@@ -986,6 +986,21 @@ preparePromise.then(() => {
       }
     });
 
+    // Handle client signal that the arena scene finished loading and is ready
+    socket.on('arena_client_ready', (payload) => {
+      try {
+        const matchSessionId = String((payload && payload.matchSessionId) || '')
+        const wallet = String((activeConnections.get(socket.id)?.walletAddress || '')).toLowerCase()
+        if (!matchSessionId || !wallet) return
+        if (!global.matchReadyAcks) global.matchReadyAcks = new Map()
+        const set = global.matchReadyAcks.get(matchSessionId) || new Set()
+        set.add(wallet)
+        global.matchReadyAcks.set(matchSessionId, set)
+        // Optional trace for debugging
+        try { socket.emit('debug_trace', { type: 'arena_client_ready_ack', matchSessionId, wallet }) } catch {}
+      } catch {}
+    })
+
     // Handle matchmaking queue
     socket.on('join_queue', (playerData) => {
       console.log(`🎯 Player ${socket.id} joining queue:`, playerData);
@@ -3533,8 +3548,9 @@ preparePromise.then(() => {
         } catch {}
       }
 
-      // Lock roster and schedule a synchronized round start
-      const roundStartAtEpochMs = Date.now() + 3000;
+      // Lock roster and notify clients to enter arena; do not start countdown yet
+      // We will start the synchronized 3s countdown after all clients signal arena readiness
+      const roundStartAtEpochMs = 0;
       try {
         const payload = { matchSessionId, finalRoster, arenaSeed: session.arenaSeed, roundStartAtEpochMs };
         io.to(lobbyId).emit('arena_lock_roster', payload);
@@ -3576,67 +3592,81 @@ preparePromise.then(() => {
         } catch {}
       } catch {}
 
-      // Emit 3..0 countdown aligned to round start (synced across clients)
-      let c = 3;
-      const interval = setInterval(() => {
-        try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
-        c--;
-        if (c < 0) {
-          clearInterval(interval);
-          // Mark lobby in-progress and emit start
-          try {
-            const lob = lobbies.find(l => l && l.id === lobbyId);
-            if (lob) lob.status = 'in-progress';
-            // Mark round started time for API lock checks
-            try {
-              if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
-              const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
-              if (meta) meta.roundStartedAt = Date.now();
-            } catch {}
-          } catch {}
-          try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
-          try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
-          try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
-          try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
-          try { global.queueSessions.delete(matchSessionId); } catch {}
-          try { global.activeQueueForLobby.delete(lobbyId); } catch {}
-          // Reset readiness and wagers to ensure re-entry requires paying again
-          try {
-            const map = getRosterMap(lobbyId);
-            for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); }
-            const lob = lobbies.find(l => l && l.id === lobbyId);
-            if (lob && Array.isArray(lob.players)) {
-              lob.players = lob.players.map(p => ({ ...p, isReady: false, hasWagered: false }));
-            }
-            const version = nextLobbyVersion(lobbyId);
-            buildLobbySnapshot(lobbyId).then((snap) => {
-              try { if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version }); } catch {}
-            }).catch(() => {});
-          } catch {}
-          // Release per-lobby lock on successful round start
-          try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
-          // Keep authoritative match state alive during the match for periodic resync and reconnect recovery
-          // Immediately unlock lobby state for back-to-back starts
-          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
-          // Safety: force-unlock free lobbies (amount==0) 10s after start in case end signals are missed
-          setTimeout(() => {
-            try {
-              const lob = lobbies.find(l => l && l.id === lobbyId);
-              if (!lob) return;
-              const isFree = lob.matchType !== 'tutorial' && (lob.amount || 0) === 0;
-              if (!isFree) return;
-              lob.status = 'open';
-              // Clear presence and any lingering queue locks
-              try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lobbyId) || new Set()).clear?.(); } catch {}
-              try { if (global.activeQueueForLobby && global.activeQueueForLobby.delete) global.activeQueueForLobby.delete(lobbyId); } catch {}
-              try { if (global.queueLocks && global.queueLocks.delete) global.queueLocks.delete(lobbyId); } catch {}
-              // Emit counts and snapshot
-              try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
-              try { const version = nextLobbyVersion(lobbyId); buildLobbySnapshot(lobbyId).then(snap => { try { if (snap) io.emit('lobby_updated', { ...snap, version }); } catch {} }).catch(() => {}); } catch {}
-            } catch {}
-          }, 10000);
-        }
-      }, 1000);
+      // Gate the synchronized countdown on arena client readiness
+      const humansLower = finalRoster.filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase());
+      const gateStartAt = Date.now();
+      const ackDeadlineMs = 12000; // max wait for clients to load the arena
+      const gateTimer = setInterval(() => {
+        try {
+          const acks = (global.matchReadyAcks && global.matchReadyAcks.get && global.matchReadyAcks.get(matchSessionId)) || new Set();
+          const allReady = humansLower.length > 0 && humansLower.every(w => acks.has(w));
+          const timedOut = (Date.now() - gateStartAt) >= ackDeadlineMs;
+          if (allReady || timedOut) {
+            clearInterval(gateTimer);
+            // Start 3..0 countdown now; clients will estimate the epoch from this
+            let c = 3;
+            const interval = setInterval(() => {
+              try { io.to(lobbyId).emit('round_countdown', { matchSessionId, count: c }); } catch {}
+              c--;
+              if (c < 0) {
+                clearInterval(interval);
+                // Mark lobby in-progress and emit start
+                try {
+                  const lob = lobbies.find(l => l && l.id === lobbyId);
+                  if (lob) lob.status = 'in-progress';
+                  // Mark round started time for API lock checks
+                  try {
+                    if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
+                    const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
+                    if (meta) meta.roundStartedAt = Date.now();
+                  } catch {}
+                } catch {}
+                try { io.to(lobbyId).emit('round_start', { matchSessionId, finalRoster }); } catch {}
+                try { console.log(`[match] round_start`, { lobbyId, matchSessionId }); } catch {}
+                try { io.to(lobbyId).emit('debug_trace', { type: 'round_start', lobbyId, matchSessionId }); } catch {}
+                try { const s = global.queueSessions && global.queueSessions.get(matchSessionId); if (s) s.__finalized = true; } catch {}
+                try { global.queueSessions.delete(matchSessionId); } catch {}
+                try { global.activeQueueForLobby.delete(lobbyId); } catch {}
+                // Reset readiness and wagers to ensure re-entry requires paying again
+                try {
+                  const map = getRosterMap(lobbyId);
+                  for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); }
+                  const lob = lobbies.find(l => l && l.id === lobbyId);
+                  if (lob && Array.isArray(lob.players)) {
+                    lob.players = lob.players.map(p => ({ ...p, isReady: false, hasWagered: false }));
+                  }
+                  const version = nextLobbyVersion(lobbyId);
+                  buildLobbySnapshot(lobbyId).then((snap) => {
+                    try { if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version }); } catch {}
+                  }).catch(() => {});
+                } catch {}
+                // Release per-lobby lock on successful round start
+                try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
+                // Keep authoritative match state alive during the match for periodic resync and reconnect recovery
+                // Immediately unlock lobby state for back-to-back starts
+                try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+                // Safety: force-unlock free lobbies (amount==0) 10s after start in case end signals are missed
+                setTimeout(() => {
+                  try {
+                    const lob = lobbies.find(l => l && l.id === lobbyId);
+                    if (!lob) return;
+                    const isFree = lob.matchType !== 'tutorial' && (lob.amount || 0) === 0;
+                    if (!isFree) return;
+                    lob.status = 'open';
+                    // Clear presence and any lingering queue locks
+                    try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lobbyId) || new Set()).clear?.(); } catch {}
+                    try { if (global.activeQueueForLobby && global.activeQueueForLobby.delete) global.activeQueueForLobby.delete(lobbyId); } catch {}
+                    try { if (global.queueLocks && global.queueLocks.delete) global.queueLocks.delete(lobbyId); } catch {}
+                    // Emit counts and snapshot
+                    try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
+                    try { const version = nextLobbyVersion(lobbyId); buildLobbySnapshot(lobbyId).then(snap => { try { if (snap) io.emit('lobby_updated', { ...snap, version }); } catch {} }).catch(() => {}); } catch {}
+                  } catch {}
+                }, 10000);
+              }
+            }, 1000);
+          }
+        } catch {}
+      }, 150);
     } catch (e) {
       console.warn('finalizeQueueSession error:', e?.message || e);
     }
