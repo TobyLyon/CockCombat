@@ -2637,7 +2637,7 @@ preparePromise.then(() => {
           } catch {}
         }
 
-        // Check if we have minimum players and all are ready (uniform policy)
+        // Check if we have minimum players and all are ready
         const isTutorialLobby = (lobby && lobby.matchType === 'tutorial');
         const isRankedLobby = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
         const minPlayers = isTutorialLobby ? 1 : (isRankedLobby ? 4 : 2);
@@ -2650,11 +2650,12 @@ preparePromise.then(() => {
           return p.isReady || (lobby.matchType === 'tutorial' && p.isAi);
         });
         const hasHumanReady = (lobby && lobby.matchType === 'tutorial') ? eligiblePlayers.some(p => !p.isAi && p.isReady) : true;
-        let allReady = eligiblePlayers.length >= minPlayers && 
-                       readyPlayers.length === eligiblePlayers.length && hasHumanReady;
-        // Tutorial lobbies: relax to 1-human-ready start to avoid stalls due to ghost/unready spectators
+        let allReady = false;
         if (isTutorialLobby) {
-          allReady = (eligiblePlayers.length >= 1) && hasHumanReady;
+          // Tutorial: one ready human is enough regardless of AI/presence flaps
+          allReady = readyPlayers.some(p => !p.isAi);
+        } else {
+          allReady = eligiblePlayers.length >= minPlayers && readyPlayers.length === eligiblePlayers.length && hasHumanReady;
         }
 
         // Ranked enforcement: require wagers; auto-assign escrow if missing (do not block countdown)
@@ -2992,9 +2993,10 @@ preparePromise.then(() => {
                   return socketReady || apiReady;
                 });
                 const hasHumanReadyNow = isTutorialNow ? eligibleNow.some(p => !p.isAi && readyNow.some(r => r.playerId === p.playerId)) : true;
-                // Free lobbies can be stricter on the initial check, but allow presence flaps: if everyone
-                // was ready moments ago and still appears ready, proceed. Keep ranked strict.
-                let allReadyNow = eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow;
+                // Tutorial: 1 ready human is sufficient, ignore AI/presence flaps
+                let allReadyNow = isTutorialNow
+                  ? readyNow.some(p => !p.isAi)
+                  : (eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow);
                 if (!isTutorialNow && (liveLobbyNow.amount || 0) === 0 && !allReadyNow) {
                   // Soft tolerance window for free lobbies: allow tiny presence races
                   const recentlyReady = (() => {
