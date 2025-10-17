@@ -578,19 +578,29 @@ function SceneContent({
       if (e.code === 'Space') jumpRequestRef.current = true
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') peckRequestRef.current = true
     }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') peckRequestRef.current = false
+    }
     // Clear any stuck input on visibility/blur changes
     const onBlur = () => { peckRequestRef.current = false }
     const onVisibility = () => { if (document.hidden) peckRequestRef.current = false }
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) peckRequestRef.current = true
     }
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) peckRequestRef.current = false
+    }
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
     window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('blur', onBlur)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mouseup', onMouseUp)
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('visibilitychange', onVisibility)
     }
@@ -996,6 +1006,8 @@ function SceneContent({
     }
     // Time-window driven peck state maintenance and release
     if (selfIsPecking && !peckActive) setSelfIsPecking(false)
+    // Hard safety: if input is idle and last edge is old, force peck off
+    if (selfIsPecking && (nowMs - lastPeckEdgeAtRef.current) > 350) setSelfIsPecking(false)
 
     // Apply gravity (slightly lower for smoother arc at low frame rates)
     selfVelocity.current.y -= 13.5 * deltaTime; // Gravity strength
@@ -1582,11 +1594,32 @@ function ChickenInstances({
     return h >>> 0
   }
 
-    useFrame((_, delta) => {
-      // Build deterministic list of human targets from authoritative remote transforms
-      const humanIds = (() => {
-        try { return Object.keys(remoteHumans || {}).map(k => String(k).toLowerCase()).sort() } catch { return [] }
-      })()
+  useFrame((_, delta) => {
+      // Per-frame book-keeping so multiple AIs don't all pick the same target
+      const assignedTargets = new Set<string>()
+
+      // Resolve a stable world position for any participant id (human, AI, or local player)
+      const getWorldPosForId = (id: string): THREE.Vector3 | null => {
+        try {
+          const key = String(id || '').toLowerCase()
+          if (remoteHumans && (remoteHumans as any)[key]) {
+            const r = (remoteHumans as any)[key]
+            return new THREE.Vector3(r.pos.x, r.pos.y, r.pos.z)
+          }
+        } catch {}
+        try {
+          if (playerRef?.current && id === playerChickenId) {
+            const v = new THREE.Vector3()
+            playerRef.current.getWorldPosition(v)
+            return v
+          }
+        } catch {}
+        try {
+          const g = groupsRef.current[id]
+          if (g) return g.position.clone()
+        } catch {}
+        return null
+      }
 
       const now = Date.now()
       const ringRadius = ARENA_CONFIG.ringRadius
@@ -1658,23 +1691,43 @@ function ChickenInstances({
           continue
         }
 
-        // Deterministic per-AI target selection using arenaSeed and human ids
-        let targetId: string | null = null
-        if (humanIds.length > 0) {
-          const base = String(arenaSeed || 'seed') + '|' + String(chicken.id || '')
-          const idx = humanIds.length > 0 ? (hashString(base) % humanIds.length) : 0
-          targetId = humanIds[idx]
-        }
-        let targetPos: THREE.Vector3 | null = null
-        if (targetId && remoteHumans && remoteHumans[targetId]) {
-          const r = remoteHumans[targetId]
-          targetPos = new THREE.Vector3(r.pos.x, r.pos.y, r.pos.z)
-        }
-        if (!targetId || !targetPos) {
-          // No remote human data yet; skip AI movement this frame
+        // Deterministic, fair target selection across ALL opponents (humans and AIs)
+        // Build candidate set: all other alive chickens plus the local player id
+        const candidateIds: string[] = []
+        try {
+          for (const other of chickens) {
+            if (!other || !other.isAlive) continue
+            const oid = String(other.id || '').toLowerCase()
+            if (!oid || oid === String(chicken.id || '').toLowerCase()) continue
+            candidateIds.push(oid)
+          }
+          // Include the local player explicitly if not present
+          if (playerChickenId) {
+            const me = String(playerChickenId).toLowerCase()
+            if (!candidateIds.includes(me)) candidateIds.push(me)
+          }
+        } catch {}
+
+        // Map candidates to positions and distances
+        const candidates = candidateIds.map((cid) => {
+          const p = getWorldPosForId(cid)
+          const d = p ? Math.hypot((p.x - pos.x), (p.z - pos.z)) : Infinity
+          return { id: cid, pos: p as THREE.Vector3 | null, dist: d }
+        }).filter(c => !!c.pos)
+
+        // Prefer nearest; tie-break by id for determinism
+        candidates.sort((a, b) => (a.dist - b.dist) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+        // Anti-focus: avoid multiple AIs picking the same target in the same frame
+        let chosen = candidates.find(c => !assignedTargets.has(c.id)) || candidates[0]
+        if (!chosen || !chosen.pos) {
           try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
           continue
         }
+        const targetId = chosen.id
+        const targetPos = chosen.pos
+        assignedTargets.add(targetId)
+
         const toTarget = targetPos.clone().sub(pos)
         const dist = Math.hypot(toTarget.x, toTarget.z)
 
@@ -1716,10 +1769,9 @@ function ChickenInstances({
           if (isEngaged && !isFrozen && !isInvulnerable && attackIndex > lastIdx && dy <= verticalWindow) {
             lastAttackIndexRef.current[chicken.id] = attackIndex
             try {
-              if (targetId && targetId !== playerChickenId && onAiDamageTarget) {
-                onAiDamageTarget(targetId, 1, chicken.id)
-              } else if (targetId === playerChickenId && onAiDamagePlayer) {
-                onAiDamagePlayer()
+              if (targetId) {
+                // Let server authority resolve actual HP; this triggers visual feedback locally
+                if (onAiDamageTarget) onAiDamageTarget(targetId, 1, chicken.id)
               }
             } catch {}
           }

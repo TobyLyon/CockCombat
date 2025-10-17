@@ -810,7 +810,7 @@ function ArenaEnvironment() {
       let tex: THREE.Texture | null = null
       try {
         tex = loader.load(
-          '/textures/ground/Ground085_1K-PNG_Color.png',
+          '/textures/pixel-dirt.png',
           (t) => {
             t.wrapS = t.wrapT = THREE.RepeatWrapping
             t.repeat.set(20, 20)
@@ -982,7 +982,7 @@ function FarmyardEnvironment() {
       let tex: THREE.Texture | null = null
       try {
         tex = loader.load(
-          '/textures/ground/Ground085_1K-PNG_Color.png',
+          '/textures/pixel-dirt.png',
           (t) => {
             t.wrapS = t.wrapT = THREE.RepeatWrapping
             t.repeat.set(18, 18)

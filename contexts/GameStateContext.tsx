@@ -568,6 +568,9 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
       return true
     })
 
+    // Ensure deterministic ordering across clients so spawn indices map to the same circle slots
+    roster.sort((a: any, b: any) => String(a.id || '').toLowerCase().localeCompare(String(b.id || '').toLowerCase()))
+
     const totalChickens = roster.length;
     const positions = generateOpponentPositions(totalChickens, ringRadius);
     const positionedPlayers: PlayerStatus[] = roster.map((entry: any, index) => {
