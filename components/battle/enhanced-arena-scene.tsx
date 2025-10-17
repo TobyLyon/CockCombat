@@ -848,6 +848,37 @@ function SceneContent({
     }
   }, [syncedCountdown])
 
+  // --- Global hit markers (authoritative, visible to all) ---
+  const [hitMarkers, setHitMarkers] = useState<Array<{ id: string; x: number; y: number; z: number; ts: number }>>([])
+  useEffect(() => {
+    if (!socket) return
+    const addMarkerAt = (targetId: string) => {
+      try {
+        const g = opponentGroupsRef.current?.[targetId]
+        const pos = new THREE.Vector3()
+        if (g && typeof g.getWorldPosition === 'function') {
+          g.getWorldPosition(pos)
+        } else {
+          const p = (players as any[] || []).find(e => e && e.id === targetId)
+          if (p && p.position) {
+            if (p.position instanceof THREE.Vector3) pos.copy(p.position)
+            else if (Array.isArray(p.position)) pos.set(p.position[0]||0, p.position[1]||0.85, p.position[2]||0)
+            else if (typeof p.position === 'object') pos.set(p.position.x||0, p.position.y||0.85, p.position.z||0)
+          } else {
+            pos.set(0, 0.85, 0)
+          }
+        }
+        setHitMarkers(prev => [...prev, { id: `${targetId}:${Date.now()}`, x: pos.x, y: pos.y + 1.1, z: pos.z, ts: Date.now() }])
+        setTimeout(() => { setHitMarkers(cur => cur.filter(m => (Date.now() - m.ts) < 900)) }, 950)
+      } catch {}
+    }
+    const onDamage = (payload: any) => { try { const tid = String(payload?.targetId||''); if (tid) addMarkerAt(tid) } catch {} }
+    const onDelta = (payload: any) => { try { const tid = String(payload?.targetId||''); if (tid) addMarkerAt(tid) } catch {} }
+    socket.on('player_damage', onDamage)
+    socket.on('state_update', onDelta)
+    return () => { socket.off('player_damage', onDamage); socket.off('state_update', onDelta) }
+  }, [socket, players])
+
   // MAIN RENDER LOOP HOOK (useFrame)
   // The useFrame hook itself must be called unconditionally.
   // The logic *inside* its callback can, of course, be conditional.
@@ -1152,10 +1183,10 @@ function SceneContent({
       // If you have drumsticks in the scene to collect, you'd check their positions against playerPosition here.
     }
 
-    // Emit local player transform at ~20 Hz (only on meaningful deltas)
+    // Emit local player transform at ~20–30 Hz (only on meaningful deltas)
     try {
       const nowMs = Date.now()
-      if (socket && nowMs - lastEmitAtRef.current > 50) {
+      if (socket && nowMs - lastEmitAtRef.current > 34) {
         const msid = (window as any)?.__last_match_session_id
         const sent = lastSentRef.current
         const posDelta = Math.hypot(selfPosition.x - sent.x, selfPosition.z - sent.z)
@@ -1167,14 +1198,15 @@ function SceneContent({
         const stateChanged = peckEdge || (selfIsJumping !== sent.jp) || (selfIsPecking && !sent.pk)
         if (posDelta > 0.02 || yDelta > 0.015 || rotDelta > 0.02 || stateChanged) {
           lastEmitAtRef.current = nowMs
-          // Quantize to 2 decimals to reduce bandwidth while keeping smoothness
+          // Quantize to 2 decimals for position, 3 for rotation to reduce jitter
           const q = (n: number) => Math.round(n * 100) / 100
+          const qr = (n: number) => Math.round(n * 1000) / 1000
           sent.x = selfPosition.x; sent.y = selfPosition.y; sent.z = selfPosition.z
           sent.ry = selfRotation.y; sent.pk = selfIsPecking; sent.jp = selfIsJumping
           socket.emit('player_state', {
             matchSessionId: msid,
             position: [q(selfPosition.x), q(selfPosition.y), q(selfPosition.z)],
-            rotationY: q(selfRotation.y),
+            rotationY: qr(selfRotation.y),
             isPecking: selfIsPecking,
             isJumping: selfIsJumping,
           })
@@ -1244,6 +1276,16 @@ function SceneContent({
       <ArenaFloor lowPerf={true} />
       <BarbedWireFence />
       {staticDecorations}
+
+      {/* Global hit markers */}
+      {hitMarkers.map(m => (
+        <group key={m.id} position={[m.x, m.y, m.z]}>
+          <mesh>
+            <planeGeometry args={[0.34, 0.34]} />
+            <meshBasicMaterial color="#ff3b3b" transparent opacity={0.9} />
+          </mesh>
+        </group>
+      ))}
 
       {/* Simple Barn placed outside the ring */}
       <SimpleBarn position={[ARENA_CONFIG.ringRadius + 8, 0, -ARENA_CONFIG.ringRadius - 6]} />

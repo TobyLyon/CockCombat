@@ -1538,6 +1538,26 @@ preparePromise.then(() => {
             winner: result.winner,
             battleData: result 
           });
+          // Proactively unlock lobby state and clear presence 10s after end so lobby cards update live
+          try {
+            setTimeout(() => {
+              try {
+                const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(room.matchSessionId || '')) || null;
+                const lobbyId = meta && meta.lobbyId;
+                if (lobbyId) {
+                  // Mark lobby open and set roundEndedAt for lock logic
+                  try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+                  try { if (meta) meta.roundEndedAt = Date.now(); } catch {}
+                  // Clear presence and ready flags for that lobby
+                  try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lobbyId) || new Set()).clear?.(); } catch {}
+                  try { const map = getRosterMap(lobbyId); for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); } } catch {}
+                  // Broadcast fresh counts and snapshot to update home screen without manual refresh
+                  try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
+                  try { const version = nextLobbyVersion(lobbyId); buildLobbySnapshot(lobbyId).then(snap => { try { if (snap) io.emit('lobby_updated', { ...snap, version }); } catch {} }).catch(() => {}); } catch {}
+                }
+              } catch {}
+            }, 10_000);
+          } catch {}
           try { io.to(roomId).emit('play_sound', { key: 'victory' }); } catch {}
 
           // Best-effort lobby cleanup so rosters don't persist between rounds
@@ -2511,6 +2531,23 @@ preparePromise.then(() => {
             winner: otherPlayerId, 
             byDisconnect: true 
           });
+          // Proactively unlock lobby after disconnect-end as well
+          try {
+            setTimeout(() => {
+              try {
+                const meta = (global.recentMatchMetaByWallet && global.recentMatchMetaByWallet.get && global.recentMatchMetaByWallet.get(String(otherPlayerWallet || '').toLowerCase())) || null;
+                const lobbyId = meta && meta.lobbyId;
+                if (lobbyId) {
+                  try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+                  try { if (meta) meta.roundEndedAt = Date.now(); } catch {}
+                  try { if (global.lobbyPresence && global.lobbyPresence.get) (global.lobbyPresence.get(lobbyId) || new Set()).clear?.(); } catch {}
+                  try { const map = getRosterMap(lobbyId); for (const [k, v] of map.entries()) { map.set(k, { ...v, isReady: false, hasWagered: false }); } } catch {}
+                  try { const c = getLobbyCounts(lobbyId); io.emit('lobby_counts', { id: lobbyId, liveHumans: c.humans, liveTotal: c.total }); } catch {}
+                  try { const version = nextLobbyVersion(lobbyId); buildLobbySnapshot(lobbyId).then(snap => { try { if (snap) io.emit('lobby_updated', { ...snap, version }); } catch {} }).catch(() => {}); } catch {}
+                }
+              } catch {}
+            }, 10_000);
+          } catch {}
           
           gameRooms.delete(roomId);
           break;
@@ -3057,6 +3094,30 @@ preparePromise.then(() => {
                 let allReadyNow = isTutorialNow
                   ? readyNow.some(p => !p.isAi)
                   : (eligibleNow.length >= minPlayersNow && readyNow.length === eligibleNow.length && hasHumanReadyNow);
+
+                // Tutorial robustness: ensure AI backfill here as well and tolerate brief recheck races
+                if (isTutorialNow) {
+                  try {
+                    const capacity = typeof liveLobbyNow.capacity === 'number' ? liveLobbyNow.capacity : 8;
+                    const cur = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players.slice() : [];
+                    const need = Math.max(0, capacity - cur.length);
+                    if (need > 0) {
+                      const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                      for (let i = 0; i < need; i++) {
+                        const name = aiNames[Math.floor(Math.random() * aiNames.length)];
+                        cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
+                      }
+                      try { const mem = lobbies.find(l => l && l.id === lobbyId); if (mem) mem.players = cur; } catch {}
+                      try { const versionPre = nextLobbyVersion(lobbyId); const snapPre = await buildLobbySnapshot(lobbyId); if (snapPre) io.to(lobbyId).emit('lobby_updated', { ...snapPre, version: versionPre }); } catch {}
+                    }
+                  } catch {}
+                  if (!allReadyNow) {
+                    const recentlyReady = (() => {
+                      try { const stamp = (global.__lastAllReadyAt && global.__lastAllReadyAt[lobbyId]) || 0; return Date.now() - stamp < 3000; } catch { return false }
+                    })();
+                    if (recentlyReady) allReadyNow = true;
+                  }
+                }
                 if (!isTutorialNow && (liveLobbyNow.amount || 0) === 0 && !allReadyNow) {
                   // Soft tolerance window for free lobbies: allow tiny presence races
                   const recentlyReady = (() => {
