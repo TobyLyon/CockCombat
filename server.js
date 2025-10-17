@@ -3210,7 +3210,7 @@ preparePromise.then(() => {
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-          minHumans: isTutorial ? 1 : 4,
+          minHumans: isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4),
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
@@ -3274,7 +3274,7 @@ preparePromise.then(() => {
       });
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 1 : 4;
+      const minHumans = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function
