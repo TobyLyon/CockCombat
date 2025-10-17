@@ -656,7 +656,9 @@ function SceneContent({
             selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
           }
         } catch {}
-        onPlayerDamage(targetId, amount, byId)
+        // Do not mutate HP from the raw player_damage event; treat as visual-only.
+        // Authoritative HP comes from 'state_update'.
+        onPlayerDamage(targetId, 0.5, byId)
       } catch {}
     }
     socket.on('player_state', onPlayerState)
@@ -743,17 +745,16 @@ function SceneContent({
             selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
           }
         } catch {}
-        // Apply via damage handler by inferring delta; prefer direct set when delta cannot be inferred
+        // Apply authoritative HP delta once: currentHp - desiredHp
         try {
-          if (onPlayerDamage) {
-            // We only know target and new hp; call onPlayerDamage repeatedly until hp matches
-            // Bound to max 3 for safety
-            const desired = Math.max(0, Math.min(3, Math.round(hp)))
-            // We do not have direct access to current hp; rely on a brief sequence of 1-damage applications as a best-effort
-            const applyTicks = () => {
-              try { onPlayerDamage(targetId, 1) } catch {}
-            }
-            if (desired <= 2) applyTicks()
+          if (!onPlayerDamage) return
+          // Find current hp from scene players prop
+          const cur = Array.isArray(players) ? players.find(p => p && p.id === targetId) : null
+          const currentHp = cur && typeof cur.hp === 'number' ? Math.max(0, Math.min(3, Math.round(cur.hp))) : 3
+          const desiredHp = Math.max(0, Math.min(3, Math.round(hp)))
+          const delta = Math.max(0, currentHp - desiredHp)
+          if (delta > 0) {
+            onPlayerDamage(targetId, delta)
           }
         } catch {}
       } catch {}
