@@ -364,6 +364,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     socket.on('match_starting', handleMatchStarting);
     socket.on('match_started', handleMatchStarted);
     socket.on('round_start', handleMatchStarted);
+    // Force transition out of lobby on roster lock to avoid 5s overlay leaking into arena
+    socket.on('arena_lock_roster', handleMatchStarted);
     // Refresh handler: ask server for authoritative snapshot when nudged
     const onRefresh = () => {
       try { socket.emit('get_lobby_state', lobby.id) } catch {}
@@ -411,6 +413,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('match_starting', handleMatchStarting);
       socket.off('match_started', handleMatchStarted);
       socket.off('round_start', handleMatchStarted);
+      socket.off('arena_lock_roster', handleMatchStarted);
       socket.off('refresh_lobby_state', onRefresh)
       socket.off('lobby_synced', onLobbySynced)
       // no refresh timer
