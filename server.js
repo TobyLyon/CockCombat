@@ -3123,28 +3123,22 @@ preparePromise.then(() => {
                 try { if (global.countdownIntervals && global.countdownIntervals[lobbyId]) delete global.countdownIntervals[lobbyId]; } catch {}
                 // Begin server-side queue confirmation phase (fire-and-forget)
                 try {
-                  // Build an override roster to avoid API dependency races
+                  // Build a conservative override roster from the merged lobby view (humans only).
+                  // This avoids relying on out-of-scope variables and still gives clients a stable handoff.
                   let override = null;
-                  const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
-                  const isFreeNonTutorialNow = !isTutorialNow && (liveLobbyNow.amount || 0) === 0;
-                  if (isTutorialNow) {
-                    override = lobbyPlayers.filter(p => !p.isAi).map(p => ({
-                      wallet: String(p.playerId || '').toLowerCase(),
-                      isAi: false,
-                      username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
-                      chickenName: p.chickenName || 'Default',
-                    }));
-                  } else if (isFreeNonTutorialNow) {
-                    // Use eligible humans present at countdown time
-                    const humansNow = (eligibleNow || []).filter((p) => !p.isAi);
-                    override = humansNow.map((p) => ({
-                      wallet: String(p.playerId || '').toLowerCase(),
-                      isAi: false,
-                      username: p.username || (p.playerId ? p.playerId.slice(0,8)+'...' : 'Player'),
-                      chickenName: p.chickenName || 'Default',
-                    }));
-                  }
-                  startQueuePhase(lobbyId, io, override || undefined).catch(() => {});
+                  try {
+                    const base = Array.isArray(lobbyPlayers) ? lobbyPlayers : [];
+                    override = base
+                      .filter((p) => !p.isAi)
+                      .map((p) => ({
+                        wallet: String(p.playerId || '').toLowerCase(),
+                        isAi: false,
+                        username: p.username || (p.playerId ? p.playerId.slice(0, 8) + '...' : 'Player'),
+                        chickenName: p.chickenName || 'Default',
+                      }));
+                  } catch {}
+                  // If we couldn't build a roster, let startQueuePhase compute it from API/presence.
+                  startQueuePhase(lobbyId, io, (override && override.length > 0) ? override : undefined).catch(() => {});
                 } catch (e) { console.warn('queue begin failed (non-fatal):', e?.message || e); }
               }
             }, 1000);
