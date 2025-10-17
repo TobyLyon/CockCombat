@@ -163,7 +163,8 @@ export default function BattleArena() {
         } catch {}
       }
     }
-    const onStarted = () => ensureStart()
+    // Do not auto-enter on round_start/match_started; rely on arena_lock_roster scheduling for a synced 3s countdown
+    const onStarted = () => {}
     const onLock = (payload: any) => {
       try {
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
@@ -175,12 +176,10 @@ export default function BattleArena() {
         }
       } catch {}
     }
-    socket.on('round_start', onStarted)
-    socket.on('match_started', onStarted)
+    // Removed: starting on round_start/match_started caused desync and skipped countdown
     socket.on('arena_lock_roster', onLock)
     return () => {
-      socket.off('round_start', onStarted)
-      socket.off('match_started', onStarted)
+      // no-op (listeners removed)
       socket.off('arena_lock_roster', onLock)
       if (startTimer) clearTimeout(startTimer)
     }
