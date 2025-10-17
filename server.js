@@ -3320,6 +3320,21 @@ preparePromise.then(() => {
             }
           }
         }
+        // Free non-tutorial robustness: if override humans are fewer than min required, top up from presence
+        try {
+          const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+          const minHumansNeeded = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
+          const humansOnly = (expectedRoster || []).filter(r => !r.isAi);
+          if (isFreeNonTutorial && humansOnly.length < minHumansNeeded) {
+            const present = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
+            const have = new Set((expectedRoster || []).filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase()));
+            for (const addr of present.values()) {
+              const w = String(addr || '').toLowerCase();
+              if (!w || w.startsWith('ai-') || have.has(w)) continue;
+              expectedRoster.push({ wallet: w, isAi: false, username: w.slice(0,8)+'...', chickenName: 'Default' });
+            }
+          }
+        } catch {}
       } else {
         if (!lobbyMeta) return;
         // Build expected roster from API (tutorial may include AI; ranked is humans only)
@@ -3360,6 +3375,21 @@ preparePromise.then(() => {
             expectedRoster = fromPresence.map((w) => ({ wallet: w, isAi: false, username: w.slice(0,8)+'...', chickenName: 'Default' }));
           } catch {}
         }
+        // Additional robustness: if free non-tutorial and humans are fewer than minimum, top up from presence
+        try {
+          const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
+          const minHumansNeeded = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
+          const humansOnly = (expectedRoster || []).filter(r => !r.isAi);
+          if (isFreeNonTutorial && humansOnly.length < minHumansNeeded) {
+            const present = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
+            const have = new Set(humansOnly.map(r => String(r.wallet || '').toLowerCase()));
+            for (const addr of present.values()) {
+              const w = String(addr || '').toLowerCase();
+              if (!w || w.startsWith('ai-') || have.has(w)) continue;
+              expectedRoster.push({ wallet: w, isAi: false, username: w.slice(0,8)+'...', chickenName: 'Default' });
+            }
+          }
+        } catch {}
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
         // Hydrate missing usernames for humans to avoid wallet fallback for remote clients
         try {

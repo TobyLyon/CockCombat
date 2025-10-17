@@ -53,8 +53,8 @@ export default function WaitingQueue({
   const { socket, isConnected } = useSocket()
   const [currentLobby, setCurrentLobby] = useState<Lobby>(lobby);
   const [latencyByWallet, setLatencyByWallet] = useState<Record<string, number>>({})
-  // No countdown on the secondary confirmation screen
-  const [countdown] = useState<number | null>(null);
+  // Countdown overlay for the match room (queue screen)
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [allPlayersReady, setAllPlayersReady] = useState(false);
   const { syncLobbyPlayers } = useGameState()
   // Track stable full-roster to auto-advance without asking users to ready again
@@ -78,6 +78,30 @@ export default function WaitingQueue({
       : Math.max(2, Array.isArray(lobby.players) ? lobby.players.length : 0)
   )
 
+  // Apply roster payloads to the local lobby UI and sync game-state roster
+  const applyRosterToLobby = (roster: any[]) => {
+    try {
+      const list = (Array.isArray(roster) ? roster : []).map((p: any) => {
+        const rawId = String((p && (p.wallet ?? p.playerId)) || '')
+        const isGuest = rawId.startsWith('guest_')
+        const username = (p && p.username) || (isGuest ? rawId : (rawId ? rawId.slice(0,8)+"..." : ''))
+        const chickenName = (p && (p.chickenName || p.chickenId)) || 'Default'
+        return {
+          playerId: rawId,
+          username,
+          chickenId: chickenName, // satisfy Lobby type; UI may still read chickenName from payloads elsewhere
+          isReady: Boolean(p && ((p.isReady || p.ready) || p.isAi)),
+          isAi: Boolean(p && p.isAi),
+        } as any
+      })
+      setCurrentLobby(prev => ({ ...prev, players: list as any }))
+      // Keep latest roster cached for start override
+      latestRosterRef.current = (Array.isArray(roster) ? roster : []).map((p: any) => ({ wallet: (p && (p.wallet ?? p.playerId)) || '', username: p?.username, isAi: !!p?.isAi }))
+      try { (window as any).__latest_roster_override = list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) } catch {}
+      try { syncLobbyPlayers(list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
+    } catch {}
+  }
+
   useEffect(() => {
     // If sockets are connected, rely on realtime updates and skip HTTP polling
     return;
@@ -88,29 +112,7 @@ export default function WaitingQueue({
   // Listen for queue phase events; advance on round_start (no local countdown display)
   useEffect(() => {
     if (!socket) return
-    // Helper to apply a roster payload (queue_begin/arena_lock or roster_full) to local lobby state
-    const applyRosterToLobby = (roster: any[]) => {
-      try {
-        const list = (Array.isArray(roster) ? roster : []).map((p: any) => {
-          const rawId = String((p && (p.wallet ?? p.playerId)) || '')
-          const isGuest = rawId.startsWith('guest_')
-          const username = (p && p.username) || (isGuest ? rawId : (rawId ? rawId.slice(0,8)+"..." : ''))
-          return {
-            playerId: rawId,
-            username,
-            chickenName: (p && (p.chickenName || p.chickenId)) || 'Default',
-            // Treat AI as ready for tutorial flow to allow auto-start
-            isReady: Boolean(p && ((p.isReady || p.ready) || p.isAi)),
-            isAi: Boolean(p && p.isAi),
-          }
-        })
-        setCurrentLobby(prev => ({ ...prev, players: list }))
-        // Keep latest roster cached for start override
-        latestRosterRef.current = (Array.isArray(roster) ? roster : []).map((p: any) => ({ wallet: (p && (p.wallet ?? p.playerId)) || '', username: p?.username, isAi: !!p?.isAi }))
-        try { (window as any).__latest_roster_override = list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) } catch {}
-        try { syncLobbyPlayers(list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
-      } catch {}
-    }
+    // Use helper above for roster application
     const onQueueBegin = (payload: any) => {
       // Use provided usernames; guest_* stays literal, wallets are shortened
       const expected = Array.isArray(payload?.expectedRoster) ? payload.expectedRoster : []
@@ -241,6 +243,7 @@ export default function WaitingQueue({
       // Cancel any scheduled start if server event arrives
       if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
       if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null }
+      try { setCountdown(null) } catch {}
       // Slight delay to allow any sync above to apply; if still empty, retry fetching up to 1.5s
       const startWithOverride = () => {
         try {
@@ -270,6 +273,15 @@ export default function WaitingQueue({
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
+    // Countdown updates for queue screen
+    const onMatchStarting = (payload: any) => {
+      try { const n = Number(payload?.countdown); if (Number.isFinite(n)) setCountdown(Math.max(0, Math.floor(n))) } catch {}
+    }
+    const onRoundCountdown = (payload: any) => {
+      try { const n = Number(payload?.count); if (Number.isFinite(n)) setCountdown(Math.max(0, Math.floor(n))) } catch {}
+    }
+    socket.on('match_starting', onMatchStarting)
+    socket.on('round_countdown', onRoundCountdown)
     const onCancelled = (_payload: any) => {
       try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
       try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
@@ -393,6 +405,8 @@ export default function WaitingQueue({
       
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
+      socket.off('match_starting', onMatchStarting)
+      socket.off('round_countdown', onRoundCountdown)
       socket.off('match_started', onStarted)
       socket.off('match_cancelled', onCancelled)
       socket.off('roster_full', onRosterFull)
