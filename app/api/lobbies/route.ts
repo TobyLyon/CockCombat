@@ -199,6 +199,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby is not open for joining' }, { status: 409 });
     }
 
+    // Block wagered matches for now
+    try {
+      const isPaid = (lobby.amount || 0) > 0 && lobby.matchType !== 'tutorial';
+      if (isPaid) {
+        return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
+      }
+    } catch {}
+
     // Prevent joins if lobby is starting (countdown), queued, or currently in an active match window
     try {
       const isCountdownActive = Boolean((global as any).countdownActive && (global as any).countdownActive[lobbyId]);
