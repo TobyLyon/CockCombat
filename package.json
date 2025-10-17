@@ -9,7 +9,8 @@
     "dev": "node server.js",
     "build": "NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production next build",
     "start": "NODE_ENV=production node server.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:integration": "node scripts/integration.test.js"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",

@@ -181,6 +181,51 @@ preparePromise.then(() => {
     httpServer.requestTimeout = 0;
   } catch {}
 
+  // Periodic lobby heartbeat: emit authoritative snapshots to each lobby room
+  try {
+    if (!global.__lobby_heartbeat_interval) {
+      const heartbeatMs = Math.max(4000, parseInt(String(process.env.LOBBY_HEARTBEAT_MS || ''), 10) || 7000);
+      global.__lobby_heartbeat_interval = setInterval(async () => {
+        try {
+          for (const lob of (lobbies || [])) {
+            if (!lob || !lob.id) continue;
+            try {
+              const version = nextLobbyVersion(lob.id);
+              const snap = await buildLobbySnapshot(lob.id).catch(() => null);
+              if (snap) io.to(lob.id).emit('lobby_updated', { ...snap, version });
+            } catch {}
+          }
+        } catch {}
+      }, heartbeatMs);
+    }
+  } catch {}
+
+  // Periodic match-state resync: emit compact HP snapshots to match rooms
+  try {
+    if (!global.__match_resync_interval) {
+      const resyncMs = Math.max(800, parseInt(String(process.env.MATCH_RESYNC_MS || ''), 10) || 1500);
+      global.__match_resync_interval = setInterval(() => {
+        try {
+          const map = (global.matchStateBySession && typeof global.matchStateBySession.entries === 'function') ? global.matchStateBySession : null;
+          if (!map) return;
+          for (const [msid, store] of map.entries()) {
+            try {
+              if (!msid || !store || !store.hp) continue;
+              const players = [];
+              for (const k in store.hp) {
+                try {
+                  const hp = Math.max(0, Math.min(3, Number(store.hp[k] || 0)));
+                  players.push({ wallet: k, hp, isAlive: hp > 0 });
+                } catch {}
+              }
+              if (players.length > 0) io.to(msid).emit('match_state', { matchSessionId: msid, players, startedAt: store.startedAt || null });
+            } catch {}
+          }
+        } catch {}
+      }, resyncMs);
+    }
+  } catch {}
+
   // Initialize Socket.io
   const io = new Server(httpServer, {
     path: '/api/socketio',
@@ -2506,7 +2551,9 @@ preparePromise.then(() => {
         }
 
         // Check if we have minimum players and all are ready (uniform policy)
-        const minPlayers = (lobby && lobby.matchType === 'tutorial') ? 1 : 2;
+        const isTutorialLobby = (lobby && lobby.matchType === 'tutorial');
+        const isRankedLobby = !!(lobby && lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0);
+        const minPlayers = isTutorialLobby ? 1 : (isRankedLobby ? 4 : 2);
         // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
         const readyPlayers = eligiblePlayers.filter(p => {
           if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !p.isAi) {
@@ -2813,7 +2860,8 @@ preparePromise.then(() => {
                 const presenceSetNow = new Set();
                 try { for (const [, c] of activeConnections.entries()) { if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSetNow.add(String(c.walletAddress).toLowerCase()); } } catch {}
                 const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
-                const minPlayersNow = isTutorialNow ? 1 : 2;
+                const isRankedNow = !isTutorialNow && (liveLobbyNow.amount || 0) > 0;
+                const minPlayersNow = isTutorialNow ? 1 : (isRankedNow ? 4 : 2);
                 const roster = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players : [];
                 const eligibleNow = roster.filter(p => p.isAi || presenceSetNow.has(String(p.playerId || '').toLowerCase()));
                 const readyNow = eligibleNow.filter(p => {
@@ -3156,13 +3204,13 @@ preparePromise.then(() => {
       } catch {}
 
       // Notify clients to begin queue confirmation
-        const qbPayload = {
+      const qbPayload = {
         matchSessionId,
         expectedRoster,
         arenaSeed,
         serverNow: Date.now(),
         ackDeadlineMs,
-          minHumans: isTutorial ? 1 : 2,
+          minHumans: isTutorial ? 1 : 4,
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
@@ -3226,7 +3274,7 @@ preparePromise.then(() => {
       });
 
       // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 1 : 2;
+      const minHumans = isTutorial ? 1 : 4;
       if (!isTutorial && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function
@@ -3349,8 +3397,7 @@ preparePromise.then(() => {
           } catch {}
           // Release per-lobby lock on successful round start
           try { if (global.queueLocks) global.queueLocks.delete(lobbyId); } catch {}
-          // Clear authoritative match state now that start fired and clients are in-scene
-          try { if (global.matchStateBySession && global.matchStateBySession.delete) global.matchStateBySession.delete(matchSessionId); } catch {}
+          // Keep authoritative match state alive during the match for periodic resync and reconnect recovery
           // Immediately unlock lobby state for back-to-back starts
           try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
         }
