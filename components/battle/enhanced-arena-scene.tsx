@@ -810,6 +810,16 @@ function SceneContent({
     return () => clearInterval(id)
   }, [syncedCountdown])
 
+  // Play a ping on each 3..2..1 tick of the arena countdown only
+  useEffect(() => {
+    try {
+      if (typeof syncedCountdown !== 'number') return
+      if (syncedCountdown <= 0) return
+      // Only ping for values 3,2,1 to avoid clutter
+      if (syncedCountdown <= 3 && playSound) playSound('ping')
+    } catch {}
+  }, [syncedCountdown, playSound])
+
   // Background/visibility resync: request snapshot when tab gains focus or on mount
   useEffect(() => {
     const sendRequest = () => {
