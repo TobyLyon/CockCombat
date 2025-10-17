@@ -283,10 +283,9 @@ export default function WaitingQueue({
     const onCancelled = (_payload: any) => {
       try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
       try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
-      // Stay on the queue screen and show status; do not auto-kick back to lobby
+      // Return to lobby to avoid getting stuck
       try { playSound('click') } catch {}
-      // Request fresh lobby state so UI reflects cancellation without losing context
-      try { socket.emit('get_lobby_state', lobby.id) } catch {}
+      try { onLeaveQueue() } catch {}
     }
     socket.on('match_cancelled', onCancelled)
     // Align roster handling with Match Room: consume roster_full/diff
@@ -502,6 +501,14 @@ export default function WaitingQueue({
     } catch {}
     socket.emit('join_lobby_room', lobby.id)
     try { (window as any).currentLobbyId = lobby.id } catch {}
+    // Fallback: if a match session id was just created but we missed queue_begin, send presence using cached id
+    try {
+      const msid = (typeof window !== 'undefined') ? (window as any).__last_match_session_id : null
+      const id = resolvePlayerId()
+      if (msid && id) {
+        socket.emit('queue_presence', { matchSessionId: msid, wallet: String(id).toLowerCase(), latencyMs: 0 })
+      }
+    } catch {}
     return () => {
       socket.emit('leave_lobby_room', lobby.id)
       try { if ((window as any).currentLobbyId === lobby.id) (window as any).currentLobbyId = undefined } catch {}
