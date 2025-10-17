@@ -1,5 +1,5 @@
-import GameClientPage from "@/components/GameClientPage";
+import BattleArena from "@/components/battle/battle-arena";
 
 export default function Home() {
-  return <GameClientPage />;
+  return <BattleArena />;
 }

@@ -648,7 +648,8 @@ function SceneContent({
         try { remoteHitUntilRef.current[targetId] = now + 600 } catch {}
         // If this client is the target, also trigger a brief screen red flash
         try {
-          if (selfIdRef.current && targetId === selfIdRef.current) {
+          const selfLower = (selfIdRef.current ? String(selfIdRef.current) : '').toLowerCase()
+          if (selfLower && targetId.toLowerCase() === selfLower) {
             if (selfHitTimerRef.current) { clearTimeout(selfHitTimerRef.current); selfHitTimerRef.current = null }
             setSelfHitActive(true)
             selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
@@ -711,23 +712,8 @@ function SceneContent({
       } catch {}
     }
     socket.on('round_countdown', onRoundCountdown)
-    // Fallback: if server only emits 'match_started' without epoch, enforce a 3s synchronized freeze
-    const onMatchStarted = (payload?: any) => {
-      // Ensure we are in the match room and arm freeze if needed
-      try {
-        const msid = payload?.matchSessionId || (window as any)?.__last_match_session_id
-        if (msid) socket.emit('join_match_room', { matchSessionId: msid })
-      } catch {}
-      const now = Date.now()
-      // If we never received arena_lock_roster/round_start epoch, set startAt = now + 3000ms
-      if (!roundStartAtMsRef.current || roundStartAtMsRef.current < now) {
-        const startAt = now + 3000
-        roundStartAtMsRef.current = startAt
-        freezeUntilRef.current = startAt
-        invulnerableUntilRef.current = startAt + 1000
-        try { (window as any).__last_round_start_at = startAt } catch {}
-      }
-    }
+    // Ignore match_started for arena countdown control; rely only on round_countdown/arena_lock/round_start
+    const onMatchStarted = (_payload?: any) => {}
     socket.on('match_started', onMatchStarted)
     const onDebug = (p: any) => console.log('[ARENA][DEBUG]', p)
     socket.on('debug_trace', onDebug)
@@ -742,7 +728,8 @@ function SceneContent({
         if (!Number.isFinite(hp)) return
         // If this update targets the local player, show a brief hit flash
         try {
-          if (selfIdRef.current && targetId === selfIdRef.current) {
+          const selfLower = (selfIdRef.current ? String(selfIdRef.current) : '').toLowerCase()
+          if (selfLower && targetId.toLowerCase() === selfLower) {
             if (selfHitTimerRef.current) { clearTimeout(selfHitTimerRef.current); selfHitTimerRef.current = null }
             setSelfHitActive(true)
             selfHitTimerRef.current = setTimeout(() => { setSelfHitActive(false); selfHitTimerRef.current = null }, 220)
@@ -1382,6 +1369,8 @@ function SceneContent({
               if (targetId) (remoteHitUntilRef.current as any)[String(targetId)] = Date.now() + 600
             } catch {}
           }}
+          roundStartAtMs={roundStartAtMsRef.current}
+          arenaSeed={String((window as any)?.__last_match_session_id || '')}
         />
       )}
 
@@ -1563,7 +1552,9 @@ function ChickenInstances({
     remoteHitUntil,
       groupMapRef,
       onAiDamagePlayer,
-      onAiDamageTarget
+      onAiDamageTarget,
+      roundStartAtMs,
+      arenaSeed
   }: {
     chickens: PlayerStatus[],
     playerChickenId: string,
@@ -1574,79 +1565,34 @@ function ChickenInstances({
     remoteHitUntil?: Record<string, number>,
       groupMapRef?: React.RefObject<Record<string, THREE.Group | null>>,
       onAiDamagePlayer?: () => void,
-      onAiDamageTarget?: (targetId: string, amount?: number, byId?: string) => void
+      onAiDamageTarget?: (targetId: string, amount?: number, byId?: string) => void,
+      roundStartAtMs?: number | null,
+      arenaSeed?: string | null
   }) {
     const groupsRef = useRef<Record<string, THREE.Group | null>>({})
     const lastPeckRef = useRef<Record<string, number>>({})
     const wanderTargetRef = useRef<Record<string, THREE.Vector3>>({})
     const wanderUntilRef = useRef<Record<string, number>>({})
-  // Limit how many AIs actively engage the player at once to avoid ganging up
-  const engagedWithPlayerRef = useRef<Record<string, number>>({}) // id -> untilMs
-  const lastEngagementRecalcAtRef = useRef<number>(0)
-  // Reduce simultaneous pressure on the human player
-  const MAX_ACTIVE_ATTACKERS = 1
-    // Free-for-all targeting: allow AIs to target non-player opponents with per-target caps
-    const aiFocusRef = useRef<Record<string, string>>({}) // aiId -> targetId (non-player preferred)
-    const aiRetargetAfterRef = useRef<Record<string, number>>({}) // aiId -> timestamp
-  const MAX_ATTACKERS_PER_TARGET = 2
+  // Deterministic attack scheduling per AI
+  const lastAttackIndexRef = useRef<Record<string, number>>({})
+  // Simple deterministic string hash
+  const hashString = (s: string) => {
+    let h = 2166136261 >>> 0
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24); }
+    return h >>> 0
+  }
 
     useFrame((_, delta) => {
-      const playerPos = (() => {
-        try {
-          const v = new THREE.Vector3()
-          if (playerRef?.current) { playerRef.current.getWorldPosition(v); return v }
-        } catch {}
-        return new THREE.Vector3(0, 0.85, 0)
+      // Build deterministic list of human targets from authoritative remote transforms
+      const humanIds = (() => {
+        try { return Object.keys(remoteHumans || {}).map(k => String(k).toLowerCase()).sort() } catch { return [] }
       })()
 
       const now = Date.now()
       const ringRadius = ARENA_CONFIG.ringRadius
       const maxBounds = ringRadius - 2
 
-      // Periodically rebalance which AIs are allowed to actively engage the player
-      if (now >= (lastEngagementRecalcAtRef.current || 0)) {
-        // Prune expired engagements
-        try {
-          for (const [k, until] of Object.entries(engagedWithPlayerRef.current)) {
-            if (!until || until < now) delete engagedWithPlayerRef.current[k]
-          }
-        } catch {}
-        // Fill remaining slots with nearest AI within a reasonable radius
-        const slotsOpen = Math.max(0, MAX_ACTIVE_ATTACKERS - Object.keys(engagedWithPlayerRef.current).length)
-        if (slotsOpen > 0) {
-          try {
-            const candidates: Array<{ id: string; d: number; isHuman: boolean }> = []
-            for (const c of chickens) {
-              if (!(c as any).isAi || !c.isAlive || c.id === playerChickenId) continue
-              const g = groupsRef.current[c.id]
-              if (!g) continue
-              const dx = g.position.x - playerPos.x
-              const dz = g.position.z - playerPos.z
-              const d = Math.hypot(dx, dz)
-              if (d <= 9) candidates.push({ id: c.id, d, isHuman: false })
-            }
-            // Prefer AIs to engage first; then nearest
-            candidates.sort((a, b) => (Number(a.isHuman) - Number(b.isHuman)) || (a.d - b.d))
-            const pick = candidates
-              .filter(c => !(engagedWithPlayerRef.current[c.id] || 0))
-              .slice(0, slotsOpen)
-            const engageForMs = 2200
-            for (const c of pick) engagedWithPlayerRef.current[c.id] = now + engageForMs
-          } catch {}
-        }
-        // Recalculate roughly a few times per second
-        lastEngagementRecalcAtRef.current = now + 450
-      }
-
-      // Build focus counts for anti-gang on non-player targets (humans or AIs)
-      const focusCounts: Record<string, number> = {}
-      try {
-        for (const [aid, tid] of Object.entries(aiFocusRef.current)) {
-          if (!aid || !tid) continue
-          if (tid === playerChickenId) continue
-          focusCounts[tid] = (focusCounts[tid] || 0) + 1
-        }
-      } catch {}
+      // No local engagement slots; target selection is deterministic per AI
 
       for (const chicken of chickens) {
         if (!chicken.isAlive || chicken.id === playerChickenId) continue
@@ -1712,63 +1658,24 @@ function ChickenInstances({
           continue
         }
 
-        // Determine target for this AI: prefer assigned focus; otherwise player if engaged
-        const engagedUntil = engagedWithPlayerRef.current[chicken.id] || 0
-        const engagedWithPlayer = engagedUntil > now
-
-        // Resolve current non-player target
-        let targetId: string | null = engagedWithPlayer ? playerChickenId : (aiFocusRef.current[chicken.id] || null)
+        // Deterministic per-AI target selection using arenaSeed and human ids
+        let targetId: string | null = null
+        if (humanIds.length > 0) {
+          const base = String(arenaSeed || 'seed') + '|' + String(chicken.id || '')
+          const idx = humanIds.length > 0 ? (hashString(base) % humanIds.length) : 0
+          targetId = humanIds[idx]
+        }
         let targetPos: THREE.Vector3 | null = null
-        if (targetId === playerChickenId) {
-          targetPos = playerPos.clone()
-        } else if (targetId) {
-          const tg = groupsRef.current[targetId]
-          if (tg) targetPos = tg.position.clone()
+        if (targetId && remoteHumans && remoteHumans[targetId]) {
+          const r = remoteHumans[targetId]
+          targetPos = new THREE.Vector3(r.pos.x, r.pos.y, r.pos.z)
         }
-
-        // Retarget non-player target when needed
-        if (!engagedWithPlayer) {
-          const shouldRetarget = (!targetId || !targetPos || (aiRetargetAfterRef.current[chicken.id] || 0) < now)
-          if (shouldRetarget) {
-            try {
-              const candidates: Array<{ id: string; d: number; pos: THREE.Vector3; isHuman: boolean }> = []
-              for (const other of chickens) {
-                if (!other.isAlive) continue
-                if (other.id === chicken.id) continue
-                const og = groupsRef.current[other.id]
-                if (!og) continue
-                const dx = og.position.x - pos.x
-                const dz = og.position.z - pos.z
-                const d = Math.hypot(dx, dz)
-                if (d <= 20) candidates.push({ id: other.id, d, pos: og.position.clone(), isHuman: !Boolean((other as any).isAi) })
-              }
-              // Prefer AI-vs-AI skirmishes first; then nearest
-              candidates.sort((a, b) => (Number(a.isHuman) - Number(b.isHuman)) || (a.d - b.d))
-              let picked: { id: string; pos: THREE.Vector3 } | null = null
-              for (const c of candidates) {
-                const cur = focusCounts[c.id] || 0
-                const cap = c.isHuman ? 1 : MAX_ATTACKERS_PER_TARGET
-                if (cur < cap) { picked = { id: c.id, pos: c.pos }; break }
-              }
-              if (picked) {
-                targetId = picked.id
-                targetPos = picked.pos
-                aiFocusRef.current[chicken.id] = picked.id
-                aiRetargetAfterRef.current[chicken.id] = now + 1000
-                focusCounts[picked.id] = (focusCounts[picked.id] || 0) + 1
-              } else {
-                // No valid target; clear focus
-                aiFocusRef.current[chicken.id] = ''
-                targetId = null
-                targetPos = null
-              }
-            } catch {}
-          }
+        if (!targetId || !targetPos) {
+          // No remote human data yet; skip AI movement this frame
+          try { if (g) { g.userData.vx = 0; g.userData.vz = 0 } } catch {}
+          continue
         }
-
-        // Compute vector to chosen target; fall back to player for orientation
-        const actualTargetPos = targetPos || playerPos
-        const toTarget = actualTargetPos.clone().sub(pos)
+        const toTarget = targetPos.clone().sub(pos)
         const dist = Math.hypot(toTarget.x, toTarget.z)
 
         // Face player - custom angle lerp (THREE.MathUtils.lerpAngle not available)
@@ -1781,58 +1688,33 @@ function ChickenInstances({
         }
         g.rotation.y = lerpAngle(g.rotation.y, targetAngle, 0.15)
 
-        // Slightly slower when chasing the human; normal vs other AIs
-        let speed = targetId === playerChickenId ? 1.6 : 2.2
+        // Fixed speed for deterministic chase
+        let speed = 2.0
         let moveVec = new THREE.Vector3(0, 0, 0)
 
         const isFrozen = typeof freezeUntilMs === 'number' && now < freezeUntilMs
         const isInvulnerable = typeof invulnerableUntilMs === 'number' && now < invulnerableUntilMs
-        const isEngaged = engagedWithPlayer || Boolean(targetId)
+        const isEngaged = Boolean(targetId)
 
         if (isFrozen) {
           moveVec.set(0, 0, 0)
-        } else if (dist > 6) {
-          // Wander when far: pick a temporary target and stroll
-          if (!wanderTargetRef.current[chicken.id] || (wanderUntilRef.current[chicken.id] || 0) < now) {
-            const angle = Math.random() * Math.PI * 2
-            const r = Math.min(maxBounds - 1, 6 + Math.random() * 6)
-            wanderTargetRef.current[chicken.id] = new THREE.Vector3(
-              Math.cos(angle) * r,
-              0.85,
-              Math.sin(angle) * r
-            )
-            wanderUntilRef.current[chicken.id] = now + 2500 + Math.random() * 2000
-          }
-          const w = wanderTargetRef.current[chicken.id].clone().sub(pos)
-          const len = Math.hypot(w.x, w.z) || 1
-          moveVec.set((w.x / len) * 1.2, 0, (w.z / len) * 1.2)
         } else if (dist > 2.6) {
-          // Near: only engaged AIs directly chase; others orbit to avoid dogpiling
-          if (isEngaged) {
-            const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
-            moveVec.set((toTarget.x / len) * speed, 0, (toTarget.z / len) * speed)
-          } else {
-            // Orbit around target clockwise at a comfortable radius
-            const tangent = new THREE.Vector3(-toTarget.z, 0, toTarget.x)
-            const len = Math.max(0.0001, Math.hypot(tangent.x, tangent.z))
-            moveVec.set((tangent.x / len) * 1.2, 0, (tangent.z / len) * 1.2)
-            // Light keep-distance behavior: nudge outward if getting too close
-            if (dist < 3.2) {
-              const baseLen = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
-              moveVec.x += (toTarget.x / baseLen) * 0.6
-              moveVec.z += (toTarget.z / baseLen) * 0.6
-            }
-          }
+          // Direct chase toward target
+          const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
+          moveVec.set((toTarget.x / len) * speed, 0, (toTarget.z / len) * speed)
         } else {
-          // In range: try to peck with cooldown
-          const last = lastPeckRef.current[chicken.id] || 0
-          const cdMs = (targetId === playerChickenId ? 2000 : 1200)
-          if (isEngaged && !isFrozen && !isInvulnerable && now - last > cdMs) {
-            // Require vertical alignment similar to player hits
-            const dy = Math.abs(pos.y - actualTargetPos.y)
-            const verticalWindow = 0.45
-            if (dy <= verticalWindow) {
-            lastPeckRef.current[chicken.id] = now
+          // In range: peck using a deterministic schedule synced to server start epoch
+          const cdMs = 1200
+          const base = String(arenaSeed || 'seed') + '|' + String(chicken.id || '')
+          const phase = hashString(base) % 500
+          const startedAt = typeof roundStartAtMs === 'number' ? roundStartAtMs : 0
+          const attackIndex = Math.floor(Math.max(0, (now - startedAt + phase)) / cdMs)
+          const lastIdx = lastAttackIndexRef.current[chicken.id] || -1
+          // Require vertical alignment similar to player hits
+          const dy = Math.abs(pos.y - targetPos.y)
+          const verticalWindow = 0.45
+          if (isEngaged && !isFrozen && !isInvulnerable && attackIndex > lastIdx && dy <= verticalWindow) {
+            lastAttackIndexRef.current[chicken.id] = attackIndex
             try {
               if (targetId && targetId !== playerChickenId && onAiDamageTarget) {
                 onAiDamageTarget(targetId, 1, chicken.id)
@@ -1840,12 +1722,6 @@ function ChickenInstances({
                 onAiDamagePlayer()
               }
             } catch {}
-            }
-          }
-          // If not engaged, back off slightly to let others take turns
-          if (!isEngaged) {
-            const len = Math.max(0.0001, Math.hypot(toTarget.x, toTarget.z))
-            moveVec.set((toTarget.x / len) * 0.8, 0, (toTarget.z / len) * 0.8)
           }
         }
 

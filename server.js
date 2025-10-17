@@ -570,7 +570,15 @@ preparePromise.then(() => {
     // Handle registration of identity (wallet or guest) to socket connection
     const handleRegisterIdentity = (walletAddress) => {
       // Normalize to lowercase for consistent identity matching
-      const normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
+      let normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
+      // For guest_* identities, allow a stable override from header to avoid duplicate guest ids
+      try {
+        if (normalized && typeof normalized === 'string' && normalized.startsWith('guest_')) {
+          const fromHeader = (socket && socket.handshake && socket.handshake.headers && socket.handshake.headers['x-guest-id']) || '';
+          const candidate = String(fromHeader || '').toLowerCase();
+          if (candidate && candidate.startsWith('guest_')) normalized = candidate;
+        }
+      } catch {}
       // Suppress rapid duplicate logs/updates from the same socket
       try {
         const now = Date.now();
@@ -607,6 +615,19 @@ preparePromise.then(() => {
               // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal
               try { otherConn.socket?.disconnect?.(true); } catch {}
               activeConnections.delete(otherId);
+            }
+          }
+        } catch {}
+        // Clean duplicate roster entries across lobbies for this identity (prevents double-count in free lobby)
+        try {
+          if (global.lobbyRoster && typeof global.lobbyRoster.entries === 'function') {
+            for (const [lobId, map] of global.lobbyRoster.entries()) {
+              if (!map || typeof map.delete !== 'function') continue;
+              const key = String(normalized || '').toLowerCase();
+              if (connection.currentLobby && connection.currentLobby !== lobId && map.has(key)) {
+                map.delete(key);
+                emitRosterDiff(io, lobId, 'remove', { playerId: key });
+              }
             }
           }
         } catch {}
@@ -3922,7 +3943,11 @@ preparePromise.then(() => {
                 } catch {}
                 return false;
               })();
-              if (humans === 0 && !hasActiveQueue && !recentMetaActive) {
+              // Reliable auto-reopen for FREE lobbies: if no humans are present OR we have only AI
+              // and there is no queue session nor a very recent round start, force 'open'.
+              const isFree = lob.matchType !== 'tutorial' && (lob.amount || 0) === 0;
+              const onlyAiPresent = (set.size > 0 && humans === 0);
+              if (isFree && (humans === 0 || onlyAiPresent) && !hasActiveQueue && !recentMetaActive) {
                 const was = lob.status;
                 lob.status = 'open';
                 // Clear presence and any countdown/precountdown flags for a clean slate
@@ -3930,6 +3955,9 @@ preparePromise.then(() => {
                 try { if (global.countdownActive && global.countdownActive[lob.id]) delete global.countdownActive[lob.id]; } catch {}
                 try { if (global.countdownIntervals && global.countdownIntervals[lob.id]) { clearInterval(global.countdownIntervals[lob.id]); delete global.countdownIntervals[lob.id]; } } catch {}
                 try { if (global.preCountdownTimers && global.preCountdownTimers[lob.id]) { clearTimeout(global.preCountdownTimers[lob.id]); delete global.preCountdownTimers[lob.id]; } } catch {}
+                // Also release any stray queue locks and clear activeQueueForLobby to avoid stickiness
+                try { if (global.activeQueueForLobby && global.activeQueueForLobby.delete) global.activeQueueForLobby.delete(lob.id); } catch {}
+                try { if (global.queueLocks && global.queueLocks.delete) global.queueLocks.delete(lob.id); } catch {}
                 // Emit fresh snapshot
                 try { io.emit('lobby_updated', { id: lob.id, players: [], capacity: lob.capacity, amount: lob.amount, currency: lob.currency, matchType: lob.matchType, version: nextLobbyVersion(lob.id) }); } catch {}
                 console.log(`♻️ Reopened empty lobby '${lob.id}' (was '${was}')`);
