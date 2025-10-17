@@ -480,10 +480,10 @@ export async function POST(req: NextRequest) {
               username: p.username || pid.slice(0, 8) + '...',
               chickenName: p.chickenId || 'Default',
               isReady,
-              isAi: false
+              isAi: !!p.isAi
             }
           })
-        } catch { return [] as any[] }
+        } catch { return lobby.players.map((p: any) => ({ playerId: String(p.playerId||''), username: p.username || String(p.playerId||'').slice(0,8)+'...', chickenName: p.chickenId || 'Default', isReady: false, isAi: !!p.isAi })) as any[] }
       })();
       const nextVersion = (() => { try { const cur = ((global as any).lobbyVersions?.get(lobbyId) || 0) + 1; (global as any).lobbyVersions?.set(lobbyId, cur); return cur } catch { return 1 } })();
       

@@ -133,6 +133,13 @@ export default function WaitingQueue({
         // Reset asset readiness when a new session begins
         assetsReadyRef.current = false
       }
+      // Capture server time offset for synchronized countdowns/freeze
+      try {
+        const serverNow = Number(payload?.serverNow) || 0
+        if (serverNow > 0) {
+          (window as any).__server_time_offset_ms = serverNow - Date.now()
+        }
+      } catch {}
       // Ack presence immediately; defer assets ack until we prefetch essentials
       try {
         const id = resolvePlayerId()
@@ -214,8 +221,10 @@ export default function WaitingQueue({
         const startAt = Number(payload?.roundStartAtEpochMs) || 0
         try { if (startAt > 0) (window as any).__last_round_start_at = startAt } catch {}
         if (startAt > 0) {
-          // Enter the battle scene ~3s before start so the synced countdown displays
-          const delay = Math.max(0, startAt - Date.now() - 3000)
+          // Enter the battle scene ~3s before start using server time offset for consistency
+          const off = Number((window as any)?.__server_time_offset_ms || 0)
+          const nowServer = Date.now() + off
+          const delay = Math.max(0, startAt - nowServer - 3000)
           scheduledStartRef.current = Date.now() + delay
           startTimerRef.current = setTimeout(() => {
             try { playSound('button') } catch {}
@@ -278,8 +287,6 @@ export default function WaitingQueue({
     socket.on('queue_begin', onQueueBegin)
     socket.on('arena_lock_roster', onArenaLock)
     socket.on('round_start', onStarted)
-    // Also treat match_started as a start signal (robust for FREE/tutorial re-queues)
-    socket.on('match_started', onStarted)
     const onCancelled = (_payload: any) => {
       try { if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null } } catch {}
       try { if (finalizeFallbackRef.current) { clearTimeout(finalizeFallbackRef.current); finalizeFallbackRef.current = null } } catch {}
@@ -394,14 +401,13 @@ export default function WaitingQueue({
     }
     socket.on('queue_begin', onQueueBeginJoin)
     socket.on('arena_lock_roster', onArenaLockJoinRoom)
-    socket.on('match_started', onArenaLockJoinRoom)
     const onDebug = (p: any) => console.log('[MATCH][DEBUG]', p)
     socket.on('debug_trace', onDebug)
     return () => {
       socket.off('queue_begin', onQueueBegin)
       socket.off('queue_begin', onQueueBeginJoin)
       socket.off('arena_lock_roster', onArenaLockJoinRoom)
-      socket.off('match_started', onArenaLockJoinRoom)
+      
       socket.off('arena_lock_roster', onArenaLock)
       socket.off('round_start', onStarted)
       socket.off('match_started', onStarted)

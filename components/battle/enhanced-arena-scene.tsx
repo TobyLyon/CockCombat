@@ -767,15 +767,14 @@ function SceneContent({
     const onMatchState = (payload: any) => {
       try {
         const arr = Array.isArray(payload?.players) ? payload.players : []
-        // Coerce any dead players immediately
+        // Do not mutate HP here; rely strictly on server 'state_update' deltas.
+        // Optionally mark a brief hit flash for any player with hp < 3 for visual continuity.
         for (const p of arr) {
           try {
             const id = String(p?.wallet || p?.playerId || '')
             const hp = Number(p?.hp)
             if (!id || !Number.isFinite(hp)) continue
-            const missing = Math.max(0, Math.min(3, Math.round(hp)))
-            // Apply damage ticks up to 3 to force local state under onPlayerDamage path
-            if (missing <= 2 && onPlayerDamage) onPlayerDamage(id, 1)
+            if (hp < 3) { try { (remoteHitUntilRef.current as any)[id] = Date.now() + 400 } catch {} }
           } catch {}
         }
       } catch {}
