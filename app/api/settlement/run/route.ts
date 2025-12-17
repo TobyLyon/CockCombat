@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { sendIdempotentSolBundlePayment } from '@/lib/solana-payments'
 import { getChain } from '@/lib/chain'
 
 export const runtime = 'nodejs'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +23,14 @@ export async function POST(request: Request) {
     const chain = getChain()
     if (chain !== 'solana') {
       return NextResponse.json({ error: 'Settlement runner only implemented for solana' }, { status: 501 })
+    }
+
+    let sendIdempotentSolBundlePayment: (args: any) => Promise<{ txSig: string }>
+    try {
+      ;({ sendIdempotentSolBundlePayment } = await import('@/lib/solana-payments'))
+    } catch (e: any) {
+      const details = e?.message ? String(e.message) : String(e)
+      return NextResponse.json({ error: 'Failed to load solana-payments', details }, { status: 500 })
     }
 
     const body = await request.json().catch(() => ({} as any))
