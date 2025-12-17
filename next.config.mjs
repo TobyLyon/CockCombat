@@ -24,12 +24,14 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'https://cockcombat.onrender.com/api/:path*',
-      },
-    ]
+    return {
+      fallback: [
+        {
+          source: '/api/:path*',
+          destination: 'https://cockcombat.onrender.com/api/:path*',
+        },
+      ],
+    }
   },
   images: {
     unoptimized: true,
