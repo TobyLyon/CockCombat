@@ -238,8 +238,10 @@ class AuthService {
    * Check if a signature has been used before (replay protection)
    */
   public async isSignatureUsed(signature: string): Promise<boolean> {
-    if (!this.supabase) return false;
-    
+    if (!this.supabase) {
+      throw new Error('Replay protection unavailable (Supabase not configured)');
+    }
+
     try {
       const { data, error } = await this.supabase
         .from('used_signatures')
@@ -249,9 +251,7 @@ class AuthService {
 
       return !error && !!data;
     } catch (error) {
-      // Gracefully degrade if table doesn't exist
-      console.warn('⚠️ Signature check failed (table may not exist):', error);
-      return false;
+      throw new Error(`Replay protection check failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -264,10 +264,12 @@ class AuthService {
     endpoint: string,
     metadata?: Record<string, any>
   ): Promise<void> {
-    if (!this.supabase) return;
-    
+    if (!this.supabase) {
+      throw new Error('Replay protection unavailable (Supabase not configured)');
+    }
+
     try {
-      await this.supabase
+      const { error } = await this.supabase
         .from('used_signatures')
         .insert({
           signature,
@@ -275,9 +277,11 @@ class AuthService {
           endpoint,
           metadata: metadata || {},
         });
+      if (error) {
+        throw error;
+      }
     } catch (error) {
-      // Gracefully degrade if table doesn't exist
-      console.warn('⚠️ Failed to mark signature as used (table may not exist):', error);
+      throw new Error(`Failed to persist replay protection record: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

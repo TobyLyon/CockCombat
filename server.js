@@ -67,18 +67,18 @@ global.gameRooms = gameRooms;
 
 // Username cache to reduce database queries
 const usernameCache = new Map();
-async function getUsernameForWallet(wallet) {
-  try {
-    const key = String(wallet || '');
-    if (!key) return '';
-    const cached = usernameCache.get(key);
-    if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.name;
-    const baseUrl = `http://localhost:${port}`;
-    // Try canonical (as-is) then lowercase variant to handle stored lowercase records
-    let res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
-    if (!res || !res.ok) {
-      try { res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key.toLowerCase())}`).catch(() => null); } catch {}
-    }
+async function getUsernameForWallet(walletAddress) {
+  const key = String(walletAddress || '').toLowerCase();
+  if (!key) return '';
+  const cached = usernameCache.get(key);
+  if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.name;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+  // Try canonical (as-is) then lowercase variant to handle stored lowercase records
+  let res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key)}`).catch(() => null);
+  if (!res || !res.ok) {
+    res = await fetch(`${baseUrl}/api/profile/${encodeURIComponent(key.toLowerCase())}`).catch(() => null);
+  }
+  if (res && res.ok) {
     let name = null;
     if (res && res.ok) {
       try { const data = await res.json(); name = (data && data.username) ? String(data.username) : null; } catch {}
@@ -86,14 +86,13 @@ async function getUsernameForWallet(wallet) {
     if (!name) name = `${key.slice(0,8)}...`;
     usernameCache.set(key, { name, ts: Date.now() });
     return name;
-  } catch {
-    try {
-      const key = String(wallet || '');
-      const fallback = key ? `${key.slice(0,8)}...` : '';
-      usernameCache.set(key, { name: fallback, ts: Date.now() });
-      return fallback;
-    } catch { return ''; }
   }
+  try {
+    const key = String(walletAddress || '');
+    const fallback = key ? `${key.slice(0,8)}...` : '';
+    usernameCache.set(key, { name: fallback, ts: Date.now() });
+    return fallback;
+  } catch { return ''; }
 }
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -211,14 +210,16 @@ preparePromise.then(() => {
           for (const [msid, store] of map.entries()) {
             try {
               if (!msid || !store || !store.hp) continue;
-              const players = [];
-              for (const k in store.hp) {
-                try {
-                  const hp = Math.max(0, Math.min(3, Number(store.hp[k] || 0)));
-                  players.push({ wallet: k, hp, isAlive: hp > 0 });
-                } catch {}
-              }
-              if (players.length > 0) io.to(msid).emit('match_state', { matchSessionId: msid, players, startedAt: store.startedAt || null });
+              const hpMap = store.hp || {};
+              const alive = [];
+              try {
+                for (const k in hpMap) {
+                  if (!Object.prototype.hasOwnProperty.call(hpMap, k)) continue;
+                  const hp = Number(hpMap[k] ?? 0);
+                  if (hp > 0) alive.push(String(k).toLowerCase());
+                }
+              } catch {}
+              if (alive.length > 0) io.to(msid).emit('match_state', { matchSessionId: msid, players: alive.map(w => ({ wallet: w, hp: hpMap[w] || 0, isAlive: hpMap[w] > 0 })), startedAt: store.startedAt || null });
             } catch {}
           }
         } catch {}
@@ -293,30 +294,17 @@ preparePromise.then(() => {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const reconcile = async () => {
         try {
-          const { data: rows } = await supabase
-            .from('match_results')
-            .select('id,winner_wallet,total_prize_pool,payout_processed,status')
-            .eq('status', 'completed')
-            .eq('payout_processed', false)
-            .limit(20);
-          if (Array.isArray(rows) && rows.length > 0) {
-            for (const r of rows) {
-              try {
-                const resp = await fetch(`${baseUrl}/api/payout`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${payoutSecret}` },
-                  body: JSON.stringify({ winnerAddress: r.winner_wallet, prizePool: r.total_prize_pool, matchId: r.id }),
-                }).catch(() => null);
-                if (resp && resp.ok) {
-                  console.log('🧾 reconciled_payout', { matchId: r.id });
-                } else {
-                  const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                  console.warn('⚠️ reconcile_failed', { matchId: r.id, details: txt });
-                }
-              } catch (e) {
-                console.warn('reconcile error', r?.id, e?.message || e);
-              }
-            }
+          const resp = await fetch(`${baseUrl}/api/settlement/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${payoutSecret}` },
+            body: JSON.stringify({ maxRows: 10 }),
+          }).catch(() => null);
+          if (resp && resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            console.log('🧾 settlement_reconcile_tick', { claimed: data?.claimed, settled: Array.isArray(data?.settled) ? data.settled.length : undefined });
+          } else {
+            const txt = resp ? await resp.text().catch(() => '') : 'no response';
+            console.warn('⚠️ settlement_reconcile_failed', { details: txt });
           }
         } catch (e) {
           console.warn('reconcile query error', e?.message || e);
@@ -550,6 +538,115 @@ preparePromise.then(() => {
   try { global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0.005'); global.activeQueueForLobby.delete && global.activeQueueForLobby.delete('lobby-0p005'); } catch {}
   try { global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0.005'); global.lobbyVersions.delete && global.lobbyVersions.delete('lobby-0p005'); } catch {}
 
+  // Server-authoritative arena match end resolution.
+  // Settles paid matches based on authoritative HP state only (clients are untrusted).
+  function maybeResolveArenaMatchEnd(matchSessionId, io) {
+    try {
+      if (!matchSessionId) return;
+      if (!global.__arenaResolvedBySession) global.__arenaResolvedBySession = new Set();
+      if (!global.__arenaResolveInFlightBySession) global.__arenaResolveInFlightBySession = new Set();
+      const key = String(matchSessionId);
+      if (global.__arenaResolvedBySession.has(key) || global.__arenaResolveInFlightBySession.has(key)) return;
+
+      const store = (global.matchStateBySession && global.matchStateBySession.get && global.matchStateBySession.get(matchSessionId)) || null;
+      if (!store || !store.hp) return;
+      const hpMap = store.hp || {};
+      const alive = [];
+      try {
+        for (const k in hpMap) {
+          if (!Object.prototype.hasOwnProperty.call(hpMap, k)) continue;
+          const hp = Number(hpMap[k] ?? 0);
+          if (hp > 0) alive.push(String(k).toLowerCase());
+        }
+      } catch {}
+      if (alive.length !== 1) return;
+
+      const winnerLower = alive[0];
+      const meta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
+      const amount = Number(meta?.amount || 0);
+      const humans = Array.isArray(meta?.humans) ? meta.humans.slice() : [];
+      const humansCount = Number(meta?.humansCount || humans.length || 0);
+      const escrowId = meta?.escrow || null;
+      const matchId = meta?.matchResultId || null;
+      const canonicalMap = (meta && meta.walletCanonicalByKey) ? meta.walletCanonicalByKey : null;
+      const winnerWallet = (canonicalMap && canonicalMap[winnerLower]) ? canonicalMap[winnerLower] : winnerLower;
+
+      // Free/tutorial: no settlement; just broadcast end to let clients exit.
+      if (!(amount > 0 && humansCount > 0)) {
+        global.__arenaResolvedBySession.add(key);
+        try { io.to(matchSessionId).emit('arena_match_ended', { matchSessionId, winner: winnerWallet, ts: Date.now() }); } catch {}
+        return;
+      }
+
+      // Paid match: winner must be one of the expected humans
+      if (!humans.map(w => String(w).toLowerCase()).includes(winnerLower)) {
+        return;
+      }
+      if (!escrowId || !matchId) {
+        console.warn('[MATCH][END] Missing escrowId or matchId; cannot settle deterministically', { matchSessionId, escrowId, matchId });
+        return;
+      }
+
+      global.__arenaResolveInFlightBySession.add(key);
+
+      ;(async () => {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+          const secret = process.env.PAYOUT_SERVER_SECRET;
+          if (!secret) {
+            console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
+            return;
+          }
+
+          // Persist match completion (winner) for reconciliation and payout validation
+          try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (supabaseUrl && supabaseServiceKey) {
+              const { createClient } = require('@supabase/supabase-js');
+              const supabase = createClient(supabaseUrl, supabaseServiceKey);
+              await supabase
+                .from('match_results')
+                .update({
+                  winner_wallet: winnerWallet,
+                  match_ended_at: new Date().toISOString(),
+                  status: 'completed',
+                })
+                .eq('id', matchId);
+            }
+          } catch (e) {
+            console.warn('[MATCH][END] Failed to update match_results', { matchSessionId, matchId, err: e?.message || e });
+          }
+
+          const prizePool = amount * humansCount;
+          console.log('[PAYOUT][REQUEST][HTTP][SERVER_END]', { matchId, matchSessionId, winner: winnerWallet, prizePool, escrowId });
+          const resp = await fetch(`${baseUrl}/api/settlement/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
+            body: JSON.stringify({ matchId })
+          }).catch(() => null);
+
+          if (resp && resp.ok) {
+            console.log('[SETTLEMENT][OK][SERVER_END]', { matchId, matchSessionId });
+          } else {
+            const status = resp ? resp.status : 'no_response';
+            const txt = resp ? await resp.text().catch(() => '') : 'no response';
+            console.warn('[SETTLEMENT][FAILED][SERVER_END]', { matchId, matchSessionId, status, details: txt });
+          }
+
+          global.__arenaResolvedBySession.add(key);
+          try { io.to(matchSessionId).emit('arena_match_ended', { matchSessionId, winner: winnerWallet, ts: Date.now() }); } catch {}
+          // Provide a victory sound hint (clients already play local victory/death too)
+          try { io.to(matchSessionId).emit('play_sound', { key: 'victory' }); } catch {}
+        } catch (e) {
+          console.warn('[MATCH][END] resolve error', e?.message || e);
+        } finally {
+          try { global.__arenaResolveInFlightBySession.delete(key); } catch {}
+        }
+      })();
+    } catch {}
+  }
+
   // Socket.io connection handling
   io.on('connection', (socket) => {
     console.log(`✅ Client connected: ${socket.id}`);
@@ -629,6 +726,124 @@ preparePromise.then(() => {
     socket.on('register_wallet', handleRegisterIdentity);
     socket.on('register_identity', handleRegisterIdentity);
 
+    // Test-only controls (disabled in production). These allow deterministic money-path smoke tests.
+    // Guarded by TEST_CONTROL_TOKEN so they cannot be abused.
+    try {
+      const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+      const testToken = String(process.env.TEST_CONTROL_TOKEN || '');
+      const isAuthed = (payload) => {
+        try {
+          if (isProd) return false;
+          if (!testToken) return false;
+          return String(payload && payload.token || '') === testToken;
+        } catch { return false; }
+      };
+
+      socket.on('test_seed_arena_match', async (payload) => {
+        try {
+          if (!isAuthed(payload)) return;
+          const matchSessionId = String(payload?.matchSessionId || '');
+          const lobbyId = String(payload?.lobbyId || 'test-lobby');
+          const humansRaw = Array.isArray(payload?.humans) ? payload.humans : [];
+          const humans = humansRaw.map((w) => String(w || '')).filter(Boolean);
+          const amount = Number(payload?.amount || 0);
+          const escrowId = payload?.escrowId ? String(payload.escrowId) : null;
+          if (!matchSessionId || humans.length < 2) return;
+
+          // Create authoritative match state
+          try {
+            if (!global.matchStateBySession) global.matchStateBySession = new Map();
+            const hp = Object.create(null);
+            const pos = Object.create(null);
+            for (const w of humans) {
+              hp[String(w).toLowerCase()] = 3;
+              pos[String(w).toLowerCase()] = { x: 0, y: 0.85, z: 0, rotY: 0, ts: Date.now() };
+            }
+            global.matchStateBySession.set(matchSessionId, { lobbyId, hp, pos, startedAt: Date.now(), createdAt: Date.now() });
+          } catch {}
+
+          // Pre-create match_results row for payout validation
+          let matchResultId = null;
+          if (amount > 0) {
+            try {
+              const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+              const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+              if (supabaseUrl && supabaseServiceKey) {
+                const { createClient } = require('@supabase/supabase-js');
+                const supabase = createClient(supabaseUrl, supabaseServiceKey);
+                const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
+                const { data: mrRow } = await supabase.from('match_results').insert({
+                  lobby_id: lobbyId,
+                  match_session_id: matchSessionId,
+                  escrow_wallet_id: escrowId,
+                  match_started_at: new Date().toISOString(),
+                  status: 'in_progress',
+                  total_prize_pool: amount * humans.length,
+                  participants,
+                  game_data: { matchSessionId },
+                  payout_processed: false,
+                }).select('id').single();
+                matchResultId = mrRow?.id || null;
+                try {
+                  if (matchResultId) {
+                    await supabase.rpc('link_wager_deposits_to_match', {
+                      p_match_result_id: matchResultId,
+                      p_match_session_id: matchSessionId,
+                      p_lobby_id: lobbyId,
+                      p_player_wallets: humans,
+                    });
+                  }
+                } catch {}
+              }
+            } catch {}
+          }
+
+          // Persist meta used by server-authoritative resolve
+          try {
+            if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
+            if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
+            const walletCanonicalByKey = Object.create(null);
+            humans.forEach((w) => { walletCanonicalByKey[String(w).toLowerCase()] = String(w); });
+            const meta = {
+              lobbyId,
+              matchSessionId,
+              humans: humans.map((w) => String(w).toLowerCase()),
+              humansCount: humans.length,
+              amount,
+              escrow: escrowId,
+              matchResultId,
+              walletCanonicalByKey,
+              startAt: Date.now(),
+            };
+            global.recentMatchMetaBySession.set(matchSessionId, meta);
+            humans.forEach((w) => global.recentMatchMetaByWallet.set(String(w).toLowerCase(), meta));
+          } catch {}
+
+          try { socket.emit('test_seeded', { matchSessionId, lobbyId, amount, escrowId, matchResultId }); } catch {}
+        } catch {}
+      });
+
+      socket.on('test_force_arena_win', async (payload) => {
+        try {
+          if (!isAuthed(payload)) return;
+          const matchSessionId = String(payload?.matchSessionId || '');
+          const winner = String(payload?.winner || '');
+          if (!matchSessionId || !winner) return;
+          const store = (global.matchStateBySession && global.matchStateBySession.get && global.matchStateBySession.get(matchSessionId)) || null;
+          if (!store || !store.hp) return;
+          const winnerKey = String(winner).toLowerCase();
+          try {
+            for (const k in store.hp) {
+              if (!Object.prototype.hasOwnProperty.call(store.hp, k)) continue;
+              store.hp[k] = (String(k).toLowerCase() === winnerKey) ? 1 : 0;
+            }
+          } catch {}
+          try { maybeResolveArenaMatchEnd(matchSessionId, io); } catch {}
+          try { socket.emit('test_forced', { matchSessionId, winner }); } catch {}
+        } catch {}
+      });
+    } catch {}
+
     // Simple in-memory rate limiting helper per socket
     const rateLimitMap = new Map();
     function checkRateLimit(action, maxPerMinute = 10) {
@@ -677,7 +892,7 @@ preparePromise.then(() => {
             // Do not fully cancel active countdown; but re-emit a fresh 'lobby_updated' snapshot immediately for the joiner
             setTimeout(async () => {
               try {
-                const baseUrl = `http://localhost:${port}`;
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
                 const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null)
                 const all = response ? await response.json().catch(() => []) : []
                 const lob = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null
@@ -741,7 +956,7 @@ preparePromise.then(() => {
           // Ensure roster reflects authoritative readiness for existing players in the lobby (late-join sync)
           try {
             // Always call our local API to avoid cross-origin/env mismatches
-            const baseUrl = `http://localhost:${port}`;
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -816,7 +1031,7 @@ preparePromise.then(() => {
           const wallet = connection && connection.walletAddress ? String(connection.walletAddress).toLowerCase() : null;
           if (wallet) {
             // Always use local API and bypass caches to avoid stale lobby snapshots during leave
-            const baseUrl = `http://localhost:${port}`;
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -939,7 +1154,7 @@ preparePromise.then(() => {
 
         // Emit an updated lobby roster immediately
         try {
-          const baseUrl = `http://localhost:${port}`;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const all = res ? await res.json().catch(() => []) : [];
           const lobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
@@ -948,7 +1163,7 @@ preparePromise.then(() => {
             for (const player of lobby.players) {
               let isReady = false;
               for (const [, c] of activeConnections.entries()) {
-                if (c.currentLobby === lobbyId && c.walletAddress === player.playerId) { isReady = !!c.isReady; break; }
+                if (c.currentLobby === lobbyId && c.walletAddress === player.playerId) { isReady = !!c.isReady; break }
               }
               const displayName = player.username && player.username.trim().length > 0
                 ? player.username
@@ -1055,12 +1270,12 @@ preparePromise.then(() => {
           // Derive hasWagered from live lobby (already read above) to persist in roster
           let hasWagered = false;
           try {
-            const baseUrl = `http://localhost:${port}`;
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const liveLobby = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
-            if (liveLobby) {
-              const me = (liveLobby.players || []).find(p => String(p.playerId || '').toLowerCase() === normalizedPlayerId);
+            if (liveLobby && Array.isArray(liveLobby.players)) {
+              const me = liveLobby.players.find(p => String(p.playerId||'').toLowerCase() === normalizedPlayerId);
               hasWagered = !!(me && me.hasWagered);
             }
           } catch {}
@@ -1095,7 +1310,7 @@ preparePromise.then(() => {
           }
         } catch {}
         try {
-          const baseUrl = `http://localhost:${port}`;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           const resSnap = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' }).catch(() => null);
           const allSnap = resSnap ? await resSnap.json().catch(() => []) : [];
           const lobbySnap = Array.isArray(allSnap) ? allSnap.find(l => l && l.id === lobbyId) : null;
@@ -1108,11 +1323,8 @@ preparePromise.then(() => {
               const pidLower = pid.toLowerCase();
               let ready = false;
               if (!p.isAi) {
-                // Ranked: treat wagered as ready (authoritative), fallback to roster map
+                // Ranked authority: if paid lobby, derive readiness from hasWagered for humans; tutorial uses connection state
                 ready = Boolean(p.hasWagered);
-                if (!ready) {
-                  try { const cur = map && map.get ? map.get(pidLower) : null; ready = !!(cur && cur.hasWagered); } catch {}
-                }
               } else if (p.isAi) {
                 ready = true;
               }
@@ -1175,7 +1387,7 @@ preparePromise.then(() => {
       } catch {}
       try {
         // Fetch lobby data from API to get real usernames and player list
-        const baseUrl = `http://localhost:${port}`;
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
         const inflight = fetch(`${baseUrl}/api/lobbies`).then(r => r.json()).finally(() => { try { delete global.__lobbyStateInflight[lobbyId] } catch {} });
         global.__lobbyStateInflight[lobbyId] = inflight;
         const lobbies = await inflight;
@@ -1219,7 +1431,7 @@ preparePromise.then(() => {
               for (const addr of presence.values()) {
                 let ready = false;
                 for (const [, c] of activeConnections.entries()) {
-                  if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(addr).toLowerCase()) { ready = !!c.isReady; break; }
+                  if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(addr).toLowerCase()) { ready = !!c.isReady; break }
                 }
                 lobbyPlayers.push({
                   playerId: addr,
@@ -1382,7 +1594,7 @@ preparePromise.then(() => {
                 const isReady = Boolean(conn.isReady);
                 if (!isReady && last > 0 && (now - last) > idleMs) {
                   // Boot: remove from lobby via API and from socket room
-                  const baseUrl = `http://localhost:${port}`;
+                  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
                   try {
                     await fetch(`${baseUrl}/api/lobbies`, {
                       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
@@ -1521,7 +1733,7 @@ preparePromise.then(() => {
 
           // Best-effort lobby cleanup so rosters don't persist between rounds
         try {
-          const baseUrl = `http://localhost:${port}`;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
           const res = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
             const all = res ? await res.json().catch(() => []) : [];
             const targetLobbies = Array.isArray(all) ? all.filter(l => l && (l.matchType === 'tutorial' || (l.amount || 0) > 0)) : [];
@@ -1568,7 +1780,7 @@ preparePromise.then(() => {
                 }
               } catch {}
               if (meta && (meta.amount > 0) && (meta.humansCount > 0)) {
-                const baseUrl = `http://localhost:${port}`;
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
                 const secret = process.env.PAYOUT_SERVER_SECRET;
                 const prizePool = (meta.amount || 0) * (meta.humansCount || 0);
                 if (secret && winnerWallet) {
@@ -1582,6 +1794,7 @@ preparePromise.then(() => {
                       const participants = Array.isArray(meta.humans) ? meta.humans.map((w)=>({ wallet: w, wager_amount: meta.amount })) : [];
                       const { data: mrRow } = await supabase.from('match_results').insert({
                         lobby_id: meta.lobbyId || null,
+                        match_session_id: (meta && meta.matchSessionId) ? meta.matchSessionId : null,
                         escrow_wallet_id: meta.escrow || null,
                         match_started_at: room.startTime ? new Date(room.startTime).toISOString() : new Date().toISOString(),
                         match_ended_at: new Date().toISOString(),
@@ -1593,20 +1806,30 @@ preparePromise.then(() => {
                         payout_processed: false,
                       }).select('id').single();
                       const matchId = mrRow?.id || null;
-                      console.log('[PAYOUT][REQUEST][HTTP][FAST]', { matchId, winner: winnerWallet, prizePool });
-                      const resp = await fetch(`${baseUrl}/api/payout`, {
+                      try {
+                        if (matchId) {
+                          await supabase.rpc('link_wager_deposits_to_match', {
+                            p_match_result_id: matchId,
+                            p_match_session_id: (meta && meta.matchSessionId) ? meta.matchSessionId : null,
+                            p_lobby_id: meta.lobbyId || null,
+                            p_player_wallets: participants.map((p) => p.wallet),
+                          });
+                        }
+                      } catch {}
+                      console.log('[SETTLEMENT][REQUEST][HTTP][FAST]', { matchId, winner: winnerWallet, prizePool });
+                      const resp = await fetch(`${baseUrl}/api/settlement/run`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                        body: JSON.stringify({ winnerAddress: winnerWallet, prizePool, matchId, matchSessionId: (meta && meta.matchSessionId) ? meta.matchSessionId : undefined })
+                        body: JSON.stringify({ matchId })
                       }).catch(() => null);
                       if (resp && resp.ok) {
-                        console.log('💸 Ranked payout executed via HTTP (fast path)');
+                        console.log('💸 Ranked settlement executed via HTTP (fast path)');
                         try { room._payoutTriggered = true; } catch {}
                         return;
                       } else {
                         const status = resp ? resp.status : 'no_response';
                         const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                        console.warn('⚠️ HTTP payout failed (fast path)', { matchId, status, details: txt });
+                        console.warn('⚠️ HTTP settlement failed (fast path)', { matchId, status, details: txt });
                       }
                     }
                   } catch (fpErr) {
@@ -1691,6 +1914,7 @@ preparePromise.then(() => {
                         .map((p) => ({ wallet: p.playerId, wager_amount: rankedAmount })));
                   const { data: mr, error: mrErr } = await supabase.from('match_results').insert({
                     lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
+                    match_session_id: meta?.matchSessionId || null,
                     escrow_wallet_id: escrowIdVal || null,
                     match_started_at: new Date(room.startTime || Date.now()).toISOString(),
                     match_ended_at: new Date().toISOString(),
@@ -1702,6 +1926,14 @@ preparePromise.then(() => {
                     payout_processed: false,
                   }).select('id').single();
                   if (!mrErr && mr?.id) {
+                    try {
+                      await supabase.rpc('link_wager_deposits_to_match', {
+                        p_match_result_id: mr.id,
+                        p_match_session_id: meta?.matchSessionId || null,
+                        p_lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
+                        p_player_wallets: participants.map((p) => p.wallet),
+                      });
+                    } catch {}
                     // Also fill in wager amounts on the matches table for history
                     try {
                       await supabase.from('matches').update({
@@ -1714,20 +1946,20 @@ preparePromise.then(() => {
                       const baseUrl = `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
-                        console.log('[PAYOUT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
-                        const resp = await fetch(`${baseUrl}/api/payout`, {
+                        console.log('[SETTLEMENT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
+                        const resp = await fetch(`${baseUrl}/api/settlement/run`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000), matchId: mr.id, matchSessionId: (meta && meta.matchSessionId) ? meta.matchSessionId : undefined })
+                          body: JSON.stringify({ matchId: mr.id })
                         }).catch(() => null);
                         if (resp && resp.ok) {
-                          console.log('💸 Ranked payout executed via HTTP for match_result:', mr.id);
+                          console.log('💸 Ranked settlement executed via HTTP for match_result:', mr.id);
                           try { room._payoutTriggered = true; } catch {}
                           return;
                         } else {
                           const status = resp ? resp.status : 'no_response';
                           const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                          console.warn('⚠️ HTTP payout failed', { matchId: mr.id, status, details: txt });
+                          console.warn('⚠️ HTTP settlement failed', { matchId: mr.id, status, details: txt });
                         }
                       } else {
                         console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
@@ -1989,6 +2221,7 @@ preparePromise.then(() => {
               st.hp[chosen] = nextHp;
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId: chosen, hp: nextHp, isAlive }); } catch {}
+              try { maybeResolveArenaMatchEnd(matchId, io); } catch {}
             }
           }
         } catch {}
@@ -2065,6 +2298,7 @@ preparePromise.then(() => {
               store.hp[tKey] = nextHp;
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId, hp: nextHp, isAlive }); } catch {}
+              try { maybeResolveArenaMatchEnd(matchId, io); } catch {}
             }
           }
         } catch {}
@@ -2156,6 +2390,12 @@ preparePromise.then(() => {
           return;
         }
 
+        // Paid matches: do not accept client-declared match end. Server-authoritative state will settle.
+        try {
+          console.warn('[SECURITY] Ignoring client-declared match_end for paid match', { matchSessionId: msid, wallet: socket.id });
+        } catch {}
+        return;
+
         // Determine winner wallet
         const fromPayload = String(payload?.winnerWallet || '');
         let winnerWallet = fromPayload && fromPayload.startsWith('0x') ? fromPayload : null;
@@ -2194,6 +2434,7 @@ preparePromise.then(() => {
             const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
             const { data: mrRow } = await supabase.from('match_results').insert({
               lobby_id: meta.lobbyId || null,
+              match_session_id: msid,
               escrow_wallet_id: selectedEscrow || null,
               match_started_at: meta.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
               match_ended_at: new Date().toISOString(),
@@ -2205,6 +2446,16 @@ preparePromise.then(() => {
               payout_processed: false,
             }).select('id').single();
             matchId = mrRow?.id || null;
+            try {
+              if (matchId) {
+                await supabase.rpc('link_wager_deposits_to_match', {
+                  p_match_result_id: matchId,
+                  p_match_session_id: msid,
+                  p_lobby_id: meta.lobbyId || null,
+                  p_player_wallets: humans,
+                });
+              }
+            } catch {}
             try { if (!selectedEscrow && meta && meta.escrow) selectedEscrow = meta.escrow } catch {}
             try { if (selectedEscrow && global.cachedEscrowBySession) global.cachedEscrowBySession.set(msid, selectedEscrow); } catch {}
           }
@@ -2212,19 +2463,19 @@ preparePromise.then(() => {
           console.warn('match_results insert (fast path) failed:', e?.message || e);
         }
 
-        console.log('[PAYOUT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
-        const resp = await fetch(`${baseUrl}/api/payout`, {
+        console.log('[SETTLEMENT][REQUEST][HTTP][CLIENT_END]', { matchId, matchSessionId: msid, winner: winnerWallet, prizePool: (amount * humansCount) });
+        const resp = await fetch(`${baseUrl}/api/settlement/run`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-          body: JSON.stringify({ winnerAddress: winnerWallet, prizePool: (amount * humansCount), matchId: matchId || undefined, matchSessionId: msid, escrowWalletId: selectedEscrow || undefined })
+          body: JSON.stringify({ matchId: matchId || undefined })
         }).catch(() => null);
         if (resp && resp.ok) {
-          console.log('💸 Ranked payout executed via HTTP (client-declared end)');
+          console.log('💸 Ranked settlement executed via HTTP (client-declared end)');
           try { if (global.payoutTriggeredBySession) global.payoutTriggeredBySession.add(idempoKey); } catch {}
         } else {
           const status = resp ? resp.status : 'no_response';
           const txt = resp ? await resp.text().catch(() => '') : 'no response';
-          console.warn('⚠️ HTTP payout failed (client-declared end)', { matchId, status, details: txt });
+          console.warn('⚠️ HTTP settlement failed (client-declared end)', { matchId, status, details: txt });
         }
         try { if (global.payoutInFlightBySession) global.payoutInFlightBySession.delete(idempoKey); } catch {}
         // Unlock lobby immediately after match end for back-to-back games
@@ -3225,6 +3476,30 @@ preparePromise.then(() => {
         lobbyMeta = Array.isArray(all) ? all.find(l => l && l.id === lobbyId) : null;
       } catch {}
 
+      // Canonical wallet mapping (case-preserving) for Solana base58 and other case-sensitive ids.
+      // Keyed by lowercased wallet string for consistent ack/hp maps.
+      const walletCanonicalByKey = Object.create(null);
+      try {
+        const arr = (lobbyMeta && Array.isArray(lobbyMeta.players)) ? lobbyMeta.players : [];
+        for (const p of arr) {
+          const raw = String(p && p.playerId ? p.playerId : '').trim();
+          if (!raw) continue;
+          walletCanonicalByKey[raw.toLowerCase()] = raw;
+        }
+      } catch {}
+
+      // Paid matches must have an escrow assigned before queue begins.
+      try {
+        const isPaid = Boolean(lobbyMeta && !isTutorial && Number(lobbyMeta.amount || 0) > 0);
+        escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
+        if (isPaid && !escrowIdVal) {
+          console.warn('[queue] Missing escrowWalletId for paid lobby; cancelling', { lobbyId });
+          try { io.to(lobbyId).emit('match_cancelled', { reason: 'escrow_not_assigned' }); } catch {}
+          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+          return;
+        }
+      } catch {}
+
       if (Array.isArray(rosterOverride) && rosterOverride.length > 0) {
         // Normalize override roster wallet identities to lowercase for consistent ack matching
         expectedRoster = rosterOverride.map((r) => ({
@@ -3380,6 +3655,7 @@ preparePromise.then(() => {
         ackDeadlineMs,
         presenceAcks: new Map(), // wallet -> ts
         assetsAcks: new Map(),   // wallet -> ts
+        walletCanonicalByKey,
       };
       try { global.queueSessions.set(matchSessionId, session); } catch {}
       try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
@@ -3392,9 +3668,10 @@ preparePromise.then(() => {
           if (supabaseUrl && supabaseServiceKey) {
             const { createClient } = require('@supabase/supabase-js');
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            const participants = humans.map((w) => ({ wallet: w, wager_amount: Number(lobbyMeta?.amount || 0) }));
+            const participants = humans.map((w) => ({ wallet: (walletCanonicalByKey && walletCanonicalByKey[String(w).toLowerCase()]) ? walletCanonicalByKey[String(w).toLowerCase()] : w, wager_amount: Number(lobbyMeta?.amount || 0) }));
             const { data: mrRow } = await supabase.from('match_results').insert({
               lobby_id: lobbyId,
+              match_session_id: matchSessionId,
               escrow_wallet_id: escrowIdVal || null,
               match_started_at: new Date().toISOString(),
               status: 'in_progress',
@@ -3406,9 +3683,19 @@ preparePromise.then(() => {
             const mrId = mrRow?.id || null;
             try {
               if (mrId) {
+                await supabase.rpc('link_wager_deposits_to_match', {
+                  p_match_result_id: mrId,
+                  p_match_session_id: matchSessionId,
+                  p_lobby_id: lobbyId,
+                  p_player_wallets: humans,
+                });
+              }
+            } catch {}
+            try {
+              if (mrId) {
                 if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
                 if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
-                const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount: Number(lobbyMeta?.amount || 0), escrow: escrowIdVal, matchResultId: mrId };
+                const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount: Number(lobbyMeta?.amount || 0), escrow: escrowIdVal, matchResultId: mrId, walletCanonicalByKey };
                 global.recentMatchMetaBySession.set(matchSessionId, meta);
                 humans.forEach(w => global.recentMatchMetaByWallet.set(String(w).toLowerCase(), meta));
               }
@@ -3560,7 +3847,8 @@ preparePromise.then(() => {
           const escrow = lobby && lobby.escrowWalletId ? lobby.escrowWalletId : null;
           if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
           if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
-          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs, roundStartedAt: Date.now() };
+          const prevMeta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
+          const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs, roundStartedAt: Date.now(), matchResultId: (prevMeta && prevMeta.matchResultId) ? prevMeta.matchResultId : null, walletCanonicalByKey: (prevMeta && prevMeta.walletCanonicalByKey) ? prevMeta.walletCanonicalByKey : ((session && session.walletCanonicalByKey) ? session.walletCanonicalByKey : Object.create(null)) };
           try { global.recentMatchMetaBySession.set(matchSessionId, meta); } catch {}
           try { humans.forEach(w => { global.recentMatchMetaByWallet.set(w, meta); }); } catch {}
         } catch {}

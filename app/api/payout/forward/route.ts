@@ -1,7 +1,18 @@
-import { NextResponse, NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = req.headers.get('authorization') || ''
+    const expected = process.env.PAYOUT_FORWARD_SECRET || ''
+    if (!expected || expected.length < 16) {
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    }
+    if (auth !== `Bearer ${expected}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Require server secret to exist
     const serverSecret = process.env.PAYOUT_SERVER_SECRET
     if (!serverSecret || serverSecret.length < 8) {

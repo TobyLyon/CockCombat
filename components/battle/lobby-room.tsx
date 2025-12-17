@@ -10,6 +10,7 @@ import { isBsc } from "@/lib/chain"
 import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Lobby } from "@/lib/lobbies"
+import { Connection, Transaction, clusterApiUrl } from "@solana/web3.js"
 // Solana tx helpers removed in EVM-only build
 import { toast } from "sonner"
 import { useAudio } from "@/contexts/AudioContext"
@@ -561,20 +562,21 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       });
 
       if (!wagerResponse.ok) {
-        const errorData = await wagerResponse.json();
+        const errorData = await wagerResponse.json().catch(() => ({} as any));
         throw new Error(errorData.error || 'Failed to create wager transaction');
       }
 
+      const wagerData: any = await wagerResponse.json().catch(() => ({} as any));
+      const intentId: string | undefined = wagerData.intentId || undefined;
+
       if (isBsc()) {
-        const data = await wagerResponse.json();
-        const to: string = data.to;
-        const value: string = data.value; // hex-encoded wei
-        const gas: string | undefined = data.gas; // optional hex
-        const gasPrice: string | undefined = data.gasPrice; // optional hex
+        const to: string = String(wagerData.to || '');
+        const value: string = String(wagerData.value || '');
+        const gas: string | undefined = wagerData.gas || undefined;
+        const gasPrice: string | undefined = wagerData.gasPrice || undefined;
 
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : null;
         if (!eth) throw new Error('No EVM provider');
-        // Ensure wallet connected and on BSC
         try { await eth.request({ method: 'eth_requestAccounts' }); } catch {}
         let chainId: string | undefined;
         try { chainId = await eth.request({ method: 'eth_chainId' }); } catch {}
@@ -584,7 +586,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           } catch (e: any) {
             if (e && (e.code === 4902 || e.code === -32603)) {
               try {
-            await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BSC', nativeCurrency: { name: 'BSC', symbol: 'BSC', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com'] }] });
+                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BSC', nativeCurrency: { name: 'BSC', symbol: 'BSC', decimals: 18 }, rpcUrls: ['https://bsc-dataseed.binance.org/'], blockExplorerUrls: ['https://bscscan.com'] }] });
               } catch {}
             }
           }
@@ -592,7 +594,6 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const accts: string[] = await eth.request({ method: 'eth_requestAccounts' });
         const from = (accts && accts[0]) ? accts[0] : publicKey.toString();
         const txParams: Record<string, string> = { from, to, value };
-        // Gas/gasPrice fallbacks for wallets that require explicit fields
         let gasToUse = gas;
         let gasPriceToUse = gasPrice;
         if (!gasToUse) {
@@ -601,27 +602,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         if (!gasPriceToUse) {
           try { gasPriceToUse = await eth.request({ method: 'eth_gasPrice' }); } catch {}
         }
-        if (!gasToUse) gasToUse = '0x5208'; // 21000 fallback for simple transfer
+        if (!gasToUse) gasToUse = '0x5208';
         if (gasToUse) txParams.gas = gasToUse;
         if (gasPriceToUse) txParams.gasPrice = gasPriceToUse;
-        const txHash: string = await eth.request({
-          method: 'eth_sendTransaction',
-          params: [txParams],
-        });
 
-        const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: String(from || '').toLowerCase() };
+        const txHash: string = await eth.request({ method: 'eth_sendTransaction', params: [txParams] });
+
+        const confirmPayload = { lobbyId: lobby.id, signature: txHash, playerPublicKey: String(from || '').toLowerCase(), intentId };
         const tryConfirm = async (url: string) => {
           const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(confirmPayload) });
           return res;
         };
         let confirmRes = await tryConfirm('/api/wager/confirm');
         if (!confirmRes.ok) {
-          // Retry once after short delay (chain receipt race)
           await new Promise(r => setTimeout(r, 1800));
           confirmRes = await tryConfirm('/api/wager/confirm');
         }
         if (!confirmRes.ok) {
-          // Absolute URL fallback in case relative /api path is misrouted by CDN
           const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
           confirmRes = await tryConfirm(absUrl);
         }
@@ -631,7 +628,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         }
       } else {
         if (!sendTransaction) throw new Error('Wallet does not support Solana transactions');
-        const { transaction: serializedTransaction } = await wagerResponse.json();
+        const serializedTransaction = wagerData.transaction;
+        if (!serializedTransaction) throw new Error('Missing Solana transaction from server');
         const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
         const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
         const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
@@ -652,10 +650,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const confirmRes = await fetch('/api/wager/confirm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lobbyId: lobby.id, signature, playerPublicKey: publicKey.toString() })
+          body: JSON.stringify({ lobbyId: lobby.id, signature, playerPublicKey: publicKey.toString(), intentId })
         });
         if (!confirmRes.ok) {
-          const err = await confirmRes.json();
+          const err = await confirmRes.json().catch(() => ({} as any));
           throw new Error(err.error || 'Wager confirmation failed');
         }
       }

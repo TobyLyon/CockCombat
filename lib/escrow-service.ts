@@ -51,6 +51,54 @@ class EscrowService {
     this.initializeWallets();
   }
 
+  public async transferSolBundle(
+    transfers: Array<{ toAddress: string; lamports: number }>,
+    fromWallet?: EscrowWallet
+  ): Promise<string> {
+    if (!this.connection) {
+      throw new Error('Connection not initialized')
+    }
+
+    if (!Array.isArray(transfers) || transfers.length === 0) {
+      throw new Error('No transfers provided')
+    }
+
+    const wallet = fromWallet || await this.getNextWallet()
+    const tx = new Transaction()
+    for (const t of transfers) {
+      const toPublicKey = new PublicKey(t.toAddress)
+      const lamports = Math.max(0, Math.floor(Number(t.lamports) || 0))
+      if (!lamports) continue
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: toPublicKey,
+          lamports,
+        })
+      )
+    }
+
+    if (tx.instructions.length === 0) {
+      throw new Error('No valid transfers to execute')
+    }
+
+    try {
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        tx,
+        [wallet.keypair],
+        {
+          commitment: 'confirmed',
+          maxRetries: 3,
+        }
+      )
+      return signature
+    } catch (error) {
+      console.error(`❌ SOL bundle transfer failed from wallet ${wallet.id}:`, error)
+      throw error
+    }
+  }
+
   /**
    * Get singleton instance
    */

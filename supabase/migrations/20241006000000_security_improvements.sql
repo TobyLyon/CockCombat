@@ -1,6 +1,10 @@
 -- Security Improvements Migration
 -- Adds replay protection, session management, and audit logging
 
+-- Ensure required extensions exist
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
+
 -- 1. Create table for replay protection (prevent signature reuse)
 CREATE TABLE IF NOT EXISTS used_signatures (
   signature TEXT PRIMARY KEY,
@@ -101,7 +105,7 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS blockchain_signature TEXT;
 
 -- 8. Enable RLS on new tables
-xALTER TABLE used_signatures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE used_signatures ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE match_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
@@ -174,8 +178,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_match_results_timestamp ON match_results;
 CREATE TRIGGER update_match_results_timestamp
     BEFORE UPDATE ON match_results
     FOR EACH ROW
     EXECUTE FUNCTION update_match_results_updated_at();
-

@@ -10,6 +10,7 @@ import { ethers } from 'ethers'
 import escrowService from '@/lib/escrow-service'
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js'
 import { createClient } from '@supabase/supabase-js'
+import { sendIdempotentSolPayment } from '@/lib/solana-payments'
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -254,6 +255,7 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
     }
   } else {
     // Solana: transfer back from escrow to player (server-signed)
+    if (!lobby.escrowWalletId) throw new Error('Escrow not assigned')
     const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
     const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
     const rpcUrl = (() => {
@@ -270,131 +272,49 @@ export async function processRefundServerOnly(args: { lobbyId: string; playerPub
     escrowService.setConnection(connection)
     const lamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
     try {
-      const sig = await escrowService.transferSOL(playerPublicKey, lamports)
+      // Build an incident-scoped opId using the confirmed wager signature when available.
+      let incidentSig: string | null = null
+      try { if (!incidentSig && player && (player as any).__lastWagerSig) incidentSig = String((player as any).__lastWagerSig) } catch {}
+      try { if (!incidentSig && rosterRec && (rosterRec as any).lastWagerSig) incidentSig = String((rosterRec as any).lastWagerSig) } catch {}
+      if (!incidentSig) {
+        // Best-effort DB lookup for last confirm signature (survives restarts)
+        try {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+          if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey)
+            const walletRaw = String(playerPublicKey || '')
+            const walletLower = walletRaw.toLowerCase()
+            const { data } = await supabase
+              .from('used_signatures')
+              .select('signature, created_at')
+              .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
+              .eq('endpoint', '/api/wager/confirm')
+              .contains('metadata', { lobbyId })
+              .order('created_at', { ascending: false })
+              .limit(1)
+            if (Array.isArray(data) && data.length > 0) {
+              incidentSig = String(data[0].signature)
+            }
+          }
+        } catch {}
+      }
+      const opId = incidentSig ? `sol:refund:${lobbyId}:${playerPublicKeyLower}:${incidentSig}` : `sol:refund:${lobbyId}:${playerPublicKeyLower}`
+
+      const res = await sendIdempotentSolPayment({
+        opId,
+        type: 'refund',
+        fromEscrowId: lobby.escrowWalletId as any,
+        to: playerPublicKey,
+        lamports,
+      })
+      const sig = res.txSig
       try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
       return { ok: true, txHash: sig }
     } catch (e: any) {
       console.warn('[REFUND][FAILED][SOL]', { lobbyId, player: playerPublicKeyLower, error: e?.message || String(e) })
       throw e
     }
-  }
-
-  // Build an incident-scoped opId using the confirmed wager signature so multiple distinct refunds
-  // (across separate wager sessions) do not collide on idempotency.
-  let incidentSig: string | null = null
-  let incidentSigCreatedAt: string | null = null
-  try { if (!incidentSig && player && (player as any).__lastWagerSig) incidentSig = String((player as any).__lastWagerSig) } catch {}
-  try { if (!incidentSig && rosterRec && (rosterRec as any).lastWagerSig) incidentSig = String((rosterRec as any).lastWagerSig) } catch {}
-  if (!incidentSig) {
-    // Query Supabase used_signatures to fetch the last confirm signature for this wallet+lobby
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-      if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
-        const walletRaw = String(playerPublicKey || '')
-        const walletLower = walletRaw.toLowerCase()
-        const { data } = await supabase
-          .from('used_signatures')
-          .select('signature, created_at')
-          .or(`wallet_address.eq.${walletRaw},wallet_address.eq.${walletLower}`)
-          .eq('endpoint', '/api/wager/confirm')
-          .contains('metadata', { lobbyId })
-          .order('created_at', { ascending: false })
-          .limit(1)
-        if (Array.isArray(data) && data.length > 0) {
-          incidentSig = String(data[0].signature)
-          incidentSigCreatedAt = String(data[0].created_at || '')
-        }
-      }
-    } catch {}
-  } else if (!incidentSigCreatedAt) {
-    // We know the signature from memory; fetch its created_at for ordering/idempotency
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-      if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
-        const { data } = await supabase
-          .from('used_signatures')
-          .select('created_at')
-          .eq('endpoint', '/api/wager/confirm')
-          .eq('signature', incidentSig)
-          .limit(1)
-        if (Array.isArray(data) && data.length > 0) {
-          incidentSigCreatedAt = String(data[0].created_at || '')
-        }
-      }
-    } catch {}
-  }
-  const baseOpId = `refund:${lobbyId}:${playerPublicKeyLower}`
-  const timeSuffix = (!incidentSig && incidentSigCreatedAt) ? `t${Date.parse(incidentSigCreatedAt) || 0}` : null
-  const opId = incidentSig ? `${baseOpId}:${incidentSig}` : (timeSuffix ? `${baseOpId}:${timeSuffix}` : baseOpId)
-  const playerIdForLog = (() => { try { return String((player as any)?.playerId || rosterRec?.playerId || playerPublicKeyLower).toLowerCase() } catch { return playerPublicKeyLower } })()
-
-  // Cross-process idempotency: only accept exact opId hits to avoid reusing older base rows
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (supabaseUrl && supabaseServiceKey) {
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
-      const { data: row } = await supabase
-        .from('payments')
-        .select('op_id, tx_hash, state')
-        .eq('op_id', opId)
-        .maybeSingle()
-      if (row && (row.tx_hash || row.state === 'in_progress' || row.state === 'pending' || row.state === 'sent' || row.state === 'confirmed_soft')) {
-        if (row.tx_hash) {
-          console.log('[REFUND][IDEMPOTENT_HIT]', { opId: row.op_id, txHash: row.tx_hash })
-          return { ok: true, txHash: String(row.tx_hash) }
-        }
-        console.log('[REFUND][IDEMPOTENT_IN_PROGRESS]', { opId: row.op_id, state: row.state })
-        return { ok: true, message: 'Refund already processing' }
-      }
-    }
-  } catch {}
-
-  console.log('[REFUND][REQUEST]', { opId, lobbyId, player: playerIdForLog, escrowId: escrow.id, refundTo, wei: wei.toString(), hasWageredFlag, alreadyRefunded, reason })
-  try {
-    const res = await sendIdempotentPayment({ opId, type: 'refund', fromEscrowId: escrow.id as any, to: refundTo, amountWei: wei })
-    const txHash = res.txHash
-    console.log('[REFUND][SENT]', { opId, txHash })
-    console.log('↩️ refund_executed', { lobbyId, player: playerIdForLog, amount: lobby.amount, currency: lobby.currency, escrowId: lobby.escrowWalletId, refundTo, txHash, reason: reason || null })
-    try { if (player) { (player as any).__refunded = true; player.hasWagered = false; player.isReady = false } } catch {}
-    try {
-      await auditLogger.log({
-        eventType: 'payout_executed',
-        actorWallet: playerPublicKey,
-        endpoint: 'server:processRefund',
-        severity: 'info',
-        metadata: { kind: 'refund', lobbyId, amount: lobby.amount, escrowId: lobby.escrowWalletId, txHash, reason, refundTo },
-      })
-    } catch {}
-    try {
-      const io = (global as any).socketIo
-      if (io) {
-        io.to(lobbyId).emit('player_ready_status', { lobbyId, playerId: playerPublicKey, isReady: false })
-        const lobbyPlayers = lobby.players.map(p => ({
-          playerId: p.playerId,
-          username: p.username || p.playerId.slice(0, 8) + '...',
-          chickenName: p.chickenId || 'Default',
-          isReady: p.isAi ? true : Boolean(p.isReady),
-          isAi: p.isAi || false
-        }))
-        io.to(lobbyId).emit('lobby_updated', {
-          id: lobbyId,
-          players: lobbyPlayers,
-          capacity: lobby.capacity,
-          amount: lobby.amount,
-          currency: lobby.currency,
-          matchType: lobby.matchType
-        })
-      }
-    } catch {}
-    return { ok: true, txHash }
-  } catch (e: any) {
-    console.warn('[REFUND][FAILED]', { opId, error: e?.message || String(e) })
-    throw e
   }
 }
 

@@ -8,6 +8,7 @@ import { isBsc } from '@/lib/chain';
 import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey } from '@solana/web3.js';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
@@ -21,6 +22,7 @@ async function handleWagerConfirmation(req: NextRequest) {
       lobbyId: z.string().min(3),
       signature: z.string().min(32),
       playerPublicKey: z.string().min(32),
+      intentId: z.string().uuid().optional(),
     });
 
     const parsed = BodySchema.safeParse(await req.json());
@@ -28,15 +30,16 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { lobbyId, signature, playerPublicKey } = parsed.data;
+    const { lobbyId, signature, playerPublicKey, intentId } = parsed.data;
 
     if (!lobbyId || !signature || !playerPublicKey) {
       return NextResponse.json({ error: 'Lobby ID, signature, and player public key are required' }, { status: 400 });
     }
 
-  // EVM-only build: validate EVM address format lightly if needed (skipped here)
+    // EVM-only build: validate EVM address format lightly if needed (skipped here)
 
     const lobby = lobbies.find(l => l.id === lobbyId);
+
     if (!lobby) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
@@ -47,7 +50,11 @@ async function handleWagerConfirmation(req: NextRequest) {
       return a === b;
     });
     if (!player) {
-      // Fallback: add the wallet into this lobby roster to ensure confirm can proceed (server will enforce payouts)
+      // For paid matches, do not mutate roster here. Player must already be in the lobby.
+      if (Number(lobby.amount || 0) > 0) {
+        return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
+      }
+      // Free/tutorial: allow a best-effort roster insert to keep UX working.
       try {
         const username = (playerPublicKey || '').slice(0, 8) + '...';
         const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
@@ -61,7 +68,14 @@ async function handleWagerConfirmation(req: NextRequest) {
 
     // Verify the transaction moved the exact wager to the escrow wallet
     // Replay protection (database-backed)
-    const isUsed = await authService.isSignatureUsed(signature);
+
+    let isUsed = false;
+    try {
+      isUsed = await authService.isSignatureUsed(signature);
+    } catch (e: any) {
+      console.error('Replay protection unavailable:', e?.message || String(e));
+      return NextResponse.json({ error: 'Replay protection unavailable' }, { status: 503 });
+    }
     if (isUsed) {
       await auditLogger.logSuspiciousActivity(
         'Wager signature replay attempt',
@@ -70,6 +84,17 @@ async function handleWagerConfirmation(req: NextRequest) {
         { signature, lobbyId }
       );
       return NextResponse.json({ error: 'Signature already confirmed' }, { status: 409 });
+    }
+
+    const shouldRequireIntent = (() => {
+      try {
+        return Number(lobby.amount || 0) > 0 && Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+      } catch {
+        return false
+      }
+    })();
+    if (shouldRequireIntent && !intentId) {
+      return NextResponse.json({ error: 'Missing wager intent' }, { status: 400 });
     }
 
     if (isBsc()) {
@@ -130,6 +155,25 @@ async function handleWagerConfirmation(req: NextRequest) {
       }
       // Record exact funding wallet for deterministic refunds
       try { (player as any).__fundingWallet = tx.from; } catch {}
+
+      try {
+        if (intentId) {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            await supabase
+              .from('wager_deposits')
+              .update({
+                player_wallet: String(playerPublicKey || '').toLowerCase(),
+                deposit_signature: signature,
+                status: 'confirmed',
+                commitment: 'confirmed',
+              })
+              .eq('intent_id', intentId);
+          }
+        }
+      } catch {}
     } else {
       // Solana: signature refers to a confirmed transfer to lobby escrow for exact lamports
       const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
@@ -149,12 +193,16 @@ async function handleWagerConfirmation(req: NextRequest) {
       try { await connection.confirmTransaction(signature, 'confirmed') } catch {}
       const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 })
       if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 400 })
+
       const amountLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
       const toExpected = (() => {
         const id = lobby.escrowWalletId
         const key = id ? `ESCROW_WALLET_${id}_PUBLIC_KEY` : ''
         return (key && process.env[key]) ? process.env[key] : null
       })()
+      if (!toExpected) {
+        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 })
+      }
       // Scan instructions for a matching SystemProgram transfer
       const found = (() => {
         try {
@@ -171,7 +219,7 @@ async function handleWagerConfirmation(req: NextRequest) {
             const delta = (after - before)
             if (delta === amountLamports) {
               const recipient = acctKeys[i].toBase58()
-              if (toExpected && recipient !== toExpected) continue
+              if (recipient !== toExpected) continue
               // Validate payer/source matches sender wallet
               const sender = new PublicKey(playerPublicKey).toBase58()
               // Source lost lamports
@@ -189,15 +237,41 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (!found) {
         return NextResponse.json({ error: 'Wager transfer not found or mismatched' }, { status: 400 })
       }
+
+      try {
+        if (intentId) {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            await supabase
+              .from('wager_deposits')
+              .update({
+                player_wallet: String(playerPublicKey || ''),
+                deposit_signature: signature,
+                status: 'confirmed',
+                commitment: 'confirmed',
+                slot: (tx as any).slot ?? null,
+              })
+              .eq('intent_id', intentId);
+          }
+        }
+      } catch {}
     }
 
     // Mark signature as used (database-backed)
-    await authService.markSignatureUsed(
-      signature,
-      playerPublicKey,
-      '/api/wager/confirm',
-      { lobbyId, amount: lobby.amount }
-    );
+    try {
+      await authService.markSignatureUsed(
+        signature,
+        playerPublicKey,
+        '/api/wager/confirm',
+        { lobbyId, amount: lobby.amount, intentId: intentId || null }
+      );
+
+    } catch (e: any) {
+      console.error('Failed to persist replay protection record:', e?.message || String(e));
+      return NextResponse.json({ error: 'Failed to finalize wager confirmation' }, { status: 503 });
+    }
 
     player.hasWagered = true;
     try { (player as any).__lastWagerSig = signature; } catch {}

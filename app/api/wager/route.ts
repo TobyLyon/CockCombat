@@ -7,10 +7,12 @@ import { getEvmProvider } from '@/lib/evm-config';
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
 import escrowService from '@/lib/escrow-service';
+import { createClient } from '@supabase/supabase-js';
 
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
   try {
+
     const BodySchema = z.object({
       lobbyId: z.string().min(3),
       playerPublicKey: z.string().min(32),
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
 
     // Find the specific lobby to determine the wager amount
     const lobby = lobbies.find((l: Lobby) => l.id === lobbyId);
+
     if (!lobby) {
       return NextResponse.json({ error: "Lobby not found" }, { status: 404 });
     }
@@ -45,6 +48,7 @@ export async function POST(request: Request) {
     }
 
     if (isBsc()) {
+
       // EVM path: return an unsigned tx (player -> escrow)
       // Assign a single escrow wallet per lobby round and reuse it for all participants
       let w = lobby.escrowWalletId ? evmEscrowService.getWallet(lobby.escrowWalletId as any) : undefined;
@@ -67,6 +71,29 @@ export async function POST(request: Request) {
         const fees = await provider.getFeeData();
         if (fees.gasPrice) gasPriceHex = ethers.toBeHex(fees.gasPrice);
       } catch {}
+      let intentId: string | null = null;
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (supabaseUrl && supabaseServiceKey) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          const { data } = await supabase
+            .from('wager_deposits')
+            .insert({
+              lobby_id: lobbyId,
+              player_wallet: String(playerPublicKey || '').toLowerCase(),
+              escrow_wallet_id: String(lobby.escrowWalletId || ''),
+              expected_lamports: String(valueWei),
+              status: 'intent',
+            })
+            .select('intent_id')
+            .single();
+          intentId = (data && (data as any).intent_id) ? String((data as any).intent_id) : null;
+        } else if (process.env.NODE_ENV === 'production') {
+          return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+        }
+      } catch {}
+
       return NextResponse.json({
         chain: 'bsc',
         to: w.address,
@@ -74,6 +101,7 @@ export async function POST(request: Request) {
         gas: gasHex,
         gasPrice: gasPriceHex,
         lobbyId: lobbyId,
+        intentId,
       });
     }
 
@@ -116,12 +144,35 @@ export async function POST(request: Request) {
     tx.feePayer = payer
 
     const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64')
-    return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports, transaction: serialized, lobbyId })
+    let intentId: string | null = null;
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data } = await supabase
+          .from('wager_deposits')
+          .insert({
+            lobby_id: lobbyId,
+            player_wallet: String(playerPublicKey || ''),
+            escrow_wallet_id: String(lobby.escrowWalletId),
+            expected_lamports: lamports,
+            status: 'intent',
+          })
+          .select('intent_id')
+          .single();
+        intentId = (data && (data as any).intent_id) ? String((data as any).intent_id) : null;
+      } else if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+      }
+    } catch {}
+
+    return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports, transaction: serialized, lobbyId, intentId })
 
   } catch (error) {
     console.error("❌ Error creating wager transaction:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: "Failed to create wager transaction",
       details: errorMessage,
     }, { status: 500 });

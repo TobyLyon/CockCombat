@@ -10,6 +10,7 @@ import { evmEscrowService } from '@/lib/evm-escrow-service';
 import { sendIdempotentPayment } from '@/lib/evm-payments';
 import { getEvmExplorerUrl } from '@/lib/evm-config';
 import { ethers } from 'ethers';
+import { sendIdempotentSolPayment } from '@/lib/solana-payments';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -330,8 +331,21 @@ export async function processPayoutServerOnly(args: { winnerAddress: string; pri
   const houseLamports = Math.floor(lamportsPool * houseCutPercentage)
   const winnerLamports = lamportsPool - houseLamports
 
-  console.log('[PAYOUT][REQUEST][SOL]', { matchId: matchId || null, winner: winnerAddress, winnerLamports, houseLamports })
-  const winnerSignature = await escrowService.transferSOL(winnerAddress, winnerLamports)
-  const houseSignature = await escrowService.transferSOL(house, houseLamports)
-  return { winnerSignature, houseSignature }
+  // Bind payouts to the same escrow wallet that received deposits.
+  // If escrowWalletId is missing, refuse in production to avoid cross-match fund mixing.
+  const escrowId = (escrowWalletId || (matchResult && (matchResult as any).escrow_wallet_id) || null) as any
+  if (!escrowId) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Missing escrowWalletId for payout; refusing to pay from an arbitrary escrow wallet')
+    }
+  }
+
+  console.log('[PAYOUT][REQUEST][SOL]', { matchId: matchId || null, matchSessionId: matchSessionId || null, winner: winnerAddress, winnerLamports, houseLamports, escrowId: escrowId || null })
+
+  const winnerOpId = `sol:payout:winner:${matchId || matchSessionId || 'unknown'}:${winnerAddress.toLowerCase()}`
+  const houseOpId = `sol:payout:house:${matchId || matchSessionId || 'unknown'}:${house.toLowerCase()}`
+
+  const winnerRes = await sendIdempotentSolPayment({ opId: winnerOpId, type: 'payout', fromEscrowId: (escrowId || 'A'), to: winnerAddress, lamports: winnerLamports })
+  const houseRes = await sendIdempotentSolPayment({ opId: houseOpId, type: 'house', fromEscrowId: (escrowId || 'A'), to: house, lamports: houseLamports })
+  return { winnerSignature: winnerRes.txSig, houseSignature: houseRes.txSig }
 }

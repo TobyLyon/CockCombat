@@ -248,6 +248,36 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
   
   // Player data - use mock data from mocks/game-data.ts
   const [players, setPlayers] = useState<PlayerStatus[]>(initialPlayers);
+
+  // Consume server-authoritative match end signal for arena matches.
+  // This prevents clients from getting stuck if they miss HP deltas while backgrounded.
+  useEffect(() => {
+    try {
+      const sock: any = (typeof window !== 'undefined') ? (window as any).__socket__ : null
+      if (!sock || !sock.on) return
+      const handler = (payload: any) => {
+        try {
+          const msid = String(payload?.matchSessionId || '')
+          const winner = String(payload?.winner || '')
+          if (msid) {
+            try { ;(window as any).__last_match_session_id = msid } catch {}
+          }
+          // Only act when in battle; ignore if already exited
+          if (gameState !== 'battle') return
+          setBattleEndAt(Date.now())
+          setGameState('gameOver')
+          // Optional: stash winner for UI usage; current UI derives winner from remaining alive locally.
+          try { ;(window as any).__last_server_winner = winner } catch {}
+        } catch {}
+      }
+      sock.on('arena_match_ended', handler)
+      return () => {
+        try { sock.off && sock.off('arena_match_ended', handler) } catch {}
+      }
+    } catch {
+      return
+    }
+  }, [gameState])
   
   // Audio state - Get interaction state from useAudio
   const { hasInteracted } = useAudio(); 
@@ -423,15 +453,6 @@ export function GameStateProvider({ children }: { children: React.ReactNode }) {
             const winner = alivePlayers[0];
             console.log(`Winner found: ${winner.id}`);
             setPrizeAmount(updatedPlayers.length);
-            try {
-              // Best-effort: notify server of match end to ensure payout path triggers
-              const msid = (typeof window !== 'undefined') ? (window as any).__last_match_session_id : null;
-              const sock: any = (typeof window !== 'undefined') ? (window as any).__socket__ : null;
-              if (sock && msid) {
-                const winnerWallet = winner.id;
-                sock.emit && sock.emit('match_end', { matchSessionId: msid, winnerWallet });
-              }
-            } catch {}
             // Rely on server 'play_sound' broadcast or UI screens to play victory
           } else {
             console.log("All players defeated.");

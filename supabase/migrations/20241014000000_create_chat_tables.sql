@@ -1,6 +1,10 @@
 -- Chat persistence for Arena/Lobby conversations
 -- Messages saved per lobby/match, with X (Twitter) integration for gating
 
+-- Ensure required extensions exist
+create schema if not exists extensions;
+create extension if not exists "pgcrypto" with schema extensions;
+
 -- 1) Chat rooms (optional grouping by lobby/match/global)
 create table if not exists chat_rooms (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +66,14 @@ begin
   end if;
 end$$;
 
+drop policy if exists "Service role can manage chat rooms" on chat_rooms;
+create policy "Service role can manage chat rooms" on chat_rooms
+  for all using (auth.role() = 'service_role');
+
+drop policy if exists "Service role can manage chat messages" on chat_messages;
+create policy "Service role can manage chat messages" on chat_messages
+  for all using (auth.role() = 'service_role');
+
 -- 4) Helper function to auto-create a room for a lobby or match
 create or replace function ensure_chat_room(p_kind text, p_lobby text, p_match text)
 returns uuid language plpgsql as $$
@@ -99,3 +111,12 @@ begin
      and created_at < now() - interval '30 days';
 end$$;
 
+-- Grants
+grant all on chat_rooms to service_role;
+grant all on chat_messages to service_role;
+grant select on chat_rooms to anon;
+grant select on chat_messages to anon;
+grant select on chat_rooms to authenticated;
+grant select on chat_messages to authenticated;
+grant execute on function ensure_chat_room(text, text, text) to service_role;
+grant execute on function cleanup_old_chat_messages() to service_role;

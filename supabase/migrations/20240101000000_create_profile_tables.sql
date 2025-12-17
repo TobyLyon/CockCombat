@@ -19,6 +19,10 @@ EXCEPTION
     WHEN OTHERS THEN NULL;
 END $$;
 
+-- Ensure required extensions exist
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
+
 -- Create profiles table
 CREATE TABLE IF NOT EXISTS profiles (
   wallet_address TEXT PRIMARY KEY,
@@ -276,17 +280,21 @@ END $$;
 
 -- Create lobbies table for matchmaking
 CREATE TABLE IF NOT EXISTS lobbies (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-  wager_amount DECIMAL NOT NULL,
-  currency TEXT DEFAULT 'SOL',
-  max_players INTEGER DEFAULT 8,
-  is_tutorial BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'waiting', -- 'waiting', 'starting', 'in_progress', 'completed'
+  id TEXT PRIMARY KEY,
+  amount NUMERIC NOT NULL,
+  currency TEXT NOT NULL,
   players JSONB DEFAULT '[]'::jsonb,
-  ai_backfill_at TIMESTAMP WITH TIME ZONE,
-  match_id UUID
+  capacity INTEGER NOT NULL,
+  high_roller BOOLEAN DEFAULT FALSE,
+  status TEXT NOT NULL DEFAULT 'open',
+  match_type TEXT NOT NULL DEFAULT 'ranked',
+  is_coming_soon BOOLEAN DEFAULT FALSE,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  escrow_wallet_id TEXT,
+  match_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
 -- Enable Row Level Security
@@ -357,7 +365,7 @@ BEGIN
     CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp);
     CREATE INDEX IF NOT EXISTS idx_achievements_wallet ON achievements(wallet_address);
     CREATE INDEX IF NOT EXISTS idx_lobbies_status ON lobbies(status);
-    CREATE INDEX IF NOT EXISTS idx_lobbies_wager ON lobbies(wager_amount);
+    CREATE INDEX IF NOT EXISTS idx_lobbies_amount ON lobbies(amount);
     CREATE INDEX IF NOT EXISTS idx_lobbies_created ON lobbies(created_at);
 EXCEPTION
     WHEN OTHERS THEN 
