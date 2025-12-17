@@ -23,6 +23,14 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'https://cockcombat.onrender.com/api/:path*',
+      },
+    ]
+  },
   images: {
     unoptimized: true,
   },
