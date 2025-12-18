@@ -96,6 +96,70 @@ async function getUsernameForWallet(walletAddress) {
 }
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+function paidMatchesEnabled() {
+  try {
+    const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true';
+    if (!enabled) return false;
+    const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET);
+    const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN);
+    const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET);
+    return hasSupabase && hasSettlement && hasRefund && hasHouse;
+  } catch {
+    return false;
+  }
+}
+
+async function getOrCreateMatchResultIdBySession(args) {
+  const { supabase, matchSessionId, insertRow, updateRow } = args || {};
+  if (!supabase) return null;
+  const msid = String(matchSessionId || '').trim();
+  if (!msid) return null;
+  const hasUpdate = !!(updateRow && typeof updateRow === 'object' && Object.keys(updateRow).length > 0);
+  try {
+    const { data: existing } = await supabase
+      .from('match_results')
+      .select('id')
+      .eq('match_session_id', msid)
+      .maybeSingle();
+    if (existing && existing.id) {
+      if (hasUpdate) {
+        try { await supabase.from('match_results').update(updateRow).eq('id', existing.id); } catch {}
+      }
+      return existing.id;
+    }
+  } catch {}
+
+  try {
+    const baseInsert = (insertRow && typeof insertRow === 'object') ? insertRow : {};
+    const { data: created } = await supabase
+      .from('match_results')
+      .insert({ ...baseInsert, match_session_id: msid })
+      .select('id')
+      .single();
+    const id = created && created.id ? created.id : null;
+    if (id && hasUpdate) {
+      try { await supabase.from('match_results').update(updateRow).eq('id', id); } catch {}
+    }
+    return id;
+  } catch {}
+
+  try {
+    const { data: existing2 } = await supabase
+      .from('match_results')
+      .select('id')
+      .eq('match_session_id', msid)
+      .maybeSingle();
+    const id = existing2 && existing2.id ? existing2.id : null;
+    if (id && hasUpdate) {
+      try { await supabase.from('match_results').update(updateRow).eq('id', id); } catch {}
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 preparePromise.then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
@@ -276,7 +340,7 @@ preparePromise.then(() => {
     console.warn('⚠️ Redis adapter not enabled:', e?.message || e);
   }
 
-  // Store the socket instance globally so API routes can access it
+  // Make socket.io instance globally accessible for API routes
   global.socketIo = io;
 
   console.log('🚀 Socket.io server initialized');
@@ -437,7 +501,7 @@ preparePromise.then(() => {
         }
       } catch {}
 
-      const isTutorial = false;
+      const isTutorial = Boolean(lobby && lobby.matchType === 'tutorial');
       const result = [];
       for (const p of (lobby.players || [])) {
         const pid = String(p.playerId || '');
@@ -459,8 +523,13 @@ preparePromise.then(() => {
         let isReady = false;
         if (p.isAi) {
           isReady = true;
-        } else if (true) {
-          isReady = Boolean(p.hasWagered);
+        } else {
+          const isPaid = Boolean((lobby.amount || 0) > 0 && !isTutorial);
+          if (isPaid) {
+            isReady = Boolean(p.hasWagered) && Boolean(p.isReady);
+          } else {
+            isReady = Boolean(p.isReady);
+          }
         }
 
         result.push({
@@ -527,11 +596,13 @@ preparePromise.then(() => {
     const key = String(wallet || '').toLowerCase();
     const current = map.get(key) || { playerId: wallet, username: (wallet ? String(wallet).slice(0,8)+'...' : 'Player'), chickenName: 'Default', isAi: false, hasWagered: false, isReady: false };
     const entry = { ...current, ...patch, playerId: String(wallet) };
-    // Rank readiness policy: if ranked and human, prefer hasWagered
+    // Rank readiness policy: for paid lobbies, ready requires hasWagered AND explicit isReady
     try {
       const lobby = lobbies.find(l => l && l.id === lobbyId);
-      if (lobby && !entry.isAi) {
-        entry.isReady = Boolean(entry.hasWagered);
+      const isTutorial = Boolean(lobby && lobby.matchType === 'tutorial');
+      const isPaid = Boolean(lobby && (lobby.amount || 0) > 0 && !isTutorial);
+      if (lobby && !entry.isAi && isPaid) {
+        entry.isReady = Boolean(entry.hasWagered) && Boolean(entry.isReady);
       }
     } catch {}
     map.set(key, entry);
@@ -577,7 +648,7 @@ preparePromise.then(() => {
       const humans = Array.isArray(meta?.humans) ? meta.humans.slice() : [];
       const humansCount = Number(meta?.humansCount || humans.length || 0);
       const escrowId = meta?.escrow || null;
-      const matchId = meta?.matchResultId || null;
+      let matchId = meta?.matchResultId || null;
       const canonicalMap = (meta && meta.walletCanonicalByKey) ? meta.walletCanonicalByKey : null;
       const winnerWallet = (canonicalMap && canonicalMap[winnerLower]) ? canonicalMap[winnerLower] : winnerLower;
 
@@ -592,8 +663,8 @@ preparePromise.then(() => {
       if (!humans.map(w => String(w).toLowerCase()).includes(winnerLower)) {
         return;
       }
-      if (!escrowId || !matchId) {
-        console.warn('[MATCH][END] Missing escrowId or matchId; cannot settle deterministically', { matchSessionId, escrowId, matchId });
+      if (!escrowId) {
+        console.warn('[MATCH][END] Missing escrowId; cannot settle deterministically', { matchSessionId, escrowId, matchId });
         return;
       }
 
@@ -615,17 +686,48 @@ preparePromise.then(() => {
             if (supabaseUrl && supabaseServiceKey) {
               const { createClient } = require('@supabase/supabase-js');
               const supabase = createClient(supabaseUrl, supabaseServiceKey);
-              await supabase
-                .from('match_results')
-                .update({
-                  winner_wallet: winnerWallet,
-                  match_ended_at: new Date().toISOString(),
-                  status: 'completed',
-                })
-                .eq('id', matchId);
+              try {
+                if (!matchId) {
+                  matchId = await getOrCreateMatchResultIdBySession({
+                    supabase,
+                    matchSessionId,
+                    insertRow: {
+                      lobby_id: meta?.lobbyId || null,
+                      escrow_wallet_id: escrowId,
+                      match_started_at: meta?.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
+                      match_ended_at: new Date().toISOString(),
+                      status: 'completed',
+                      total_prize_pool: amount * humansCount,
+                      participants: humans.map((w) => ({ wallet: w, wager_amount: amount })),
+                      game_data: { matchSessionId },
+                      payout_processed: false,
+                    },
+                    updateRow: {
+                      winner_wallet: winnerWallet,
+                      match_ended_at: new Date().toISOString(),
+                      status: 'completed',
+                    },
+                  });
+                  try { if (matchId && meta) meta.matchResultId = matchId; } catch {}
+                } else {
+                  await supabase
+                    .from('match_results')
+                    .update({
+                      winner_wallet: winnerWallet,
+                      match_ended_at: new Date().toISOString(),
+                      status: 'completed',
+                    })
+                    .eq('id', matchId);
+                }
+              } catch {}
             }
           } catch (e) {
             console.warn('[MATCH][END] Failed to update match_results', { matchSessionId, matchId, err: e?.message || e });
+          }
+
+          if (!matchId) {
+            console.warn('[MATCH][END] Missing matchId; cannot settle deterministically', { matchSessionId, escrowId });
+            return;
           }
 
           const prizePool = amount * humansCount;
@@ -836,18 +938,26 @@ preparePromise.then(() => {
                 const { createClient } = require('@supabase/supabase-js');
                 const supabase = createClient(supabaseUrl, supabaseServiceKey);
                 const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
-                const { data: mrRow } = await supabase.from('match_results').insert({
-                  lobby_id: lobbyId,
-                  match_session_id: matchSessionId,
-                  escrow_wallet_id: escrowId,
-                  match_started_at: new Date().toISOString(),
-                  status: 'in_progress',
-                  total_prize_pool: amount * humans.length,
-                  participants,
-                  game_data: { matchSessionId },
-                  payout_processed: false,
-                }).select('id').single();
-                matchResultId = mrRow?.id || null;
+                matchResultId = await getOrCreateMatchResultIdBySession({
+                  supabase,
+                  matchSessionId,
+                  insertRow: {
+                    lobby_id: lobbyId,
+                    escrow_wallet_id: escrowId,
+                    match_started_at: new Date().toISOString(),
+                    status: 'in_progress',
+                    total_prize_pool: amount * humans.length,
+                    participants,
+                    game_data: { matchSessionId },
+                    payout_processed: false,
+                  },
+                  updateRow: {
+                    lobby_id: lobbyId,
+                    escrow_wallet_id: escrowId,
+                    status: 'in_progress',
+                    payout_processed: false,
+                  },
+                });
                 try {
                   if (matchResultId) {
                     await supabase.rpc('link_wager_deposits_to_match', {
@@ -1402,8 +1512,9 @@ preparePromise.then(() => {
               const pidLower = pid.toLowerCase();
               let ready = false;
               if (!p.isAi) {
-                // Ranked authority: if paid lobby, derive readiness from hasWagered for humans; tutorial uses connection state
-                ready = Boolean(p.hasWagered);
+                // Paid lobby: require wager AND explicit ready; free/tutorial: use API isReady
+                const isPaid = Boolean((lobbySnap.amount || 0) > 0 && lobbySnap.matchType !== 'tutorial');
+                ready = isPaid ? (Boolean(p.hasWagered) && Boolean(p.isReady)) : Boolean(p.isReady);
               } else if (p.isAi) {
                 ready = true;
               }
@@ -1478,9 +1589,9 @@ preparePromise.then(() => {
           for (const player of lobby.players) {
             const pid = String(player.playerId || '').toLowerCase();
             let isReady = false;
-            // Ranked authority: if paid lobby, derive readiness from hasWagered for humans; tutorial uses connection state
+            // Paid lobby: require wager AND explicit ready
             if (lobby.matchType !== 'tutorial' && (lobby.amount || 0) > 0 && !player.isAi) {
-              isReady = !!player.hasWagered;
+              isReady = Boolean(player.hasWagered) && Boolean(player.isReady);
             } else {
               for (const [, connection] of activeConnections.entries()) {
                 if (connection.currentLobby === lobbyId && String(connection.walletAddress || '').toLowerCase() === pid) {
@@ -1871,20 +1982,27 @@ preparePromise.then(() => {
                       const { createClient } = require('@supabase/supabase-js');
                       const supabase = createClient(supabaseUrl, supabaseServiceKey);
                       const participants = Array.isArray(meta.humans) ? meta.humans.map((w)=>({ wallet: w, wager_amount: meta.amount })) : [];
-                      const { data: mrRow } = await supabase.from('match_results').insert({
-                        lobby_id: meta.lobbyId || null,
-                        match_session_id: (meta && meta.matchSessionId) ? meta.matchSessionId : null,
-                        escrow_wallet_id: meta.escrow || null,
-                        match_started_at: room.startTime ? new Date(room.startTime).toISOString() : new Date().toISOString(),
-                        match_ended_at: new Date().toISOString(),
-                        winner_wallet: winnerWallet,
-                        total_prize_pool: prizePool,
-                        participants,
-                        game_data: { roomId },
-                        status: 'completed',
-                        payout_processed: false,
-                      }).select('id').single();
-                      const matchId = mrRow?.id || null;
+                      const matchId = await getOrCreateMatchResultIdBySession({
+                        supabase,
+                        matchSessionId: (meta && meta.matchSessionId) ? meta.matchSessionId : null,
+                        insertRow: {
+                          lobby_id: meta.lobbyId || null,
+                          escrow_wallet_id: meta.escrow || null,
+                          match_started_at: room.startTime ? new Date(room.startTime).toISOString() : new Date().toISOString(),
+                          match_ended_at: new Date().toISOString(),
+                          winner_wallet: winnerWallet,
+                          total_prize_pool: prizePool,
+                          participants,
+                          game_data: { roomId },
+                          status: 'completed',
+                          payout_processed: false,
+                        },
+                        updateRow: {
+                          winner_wallet: winnerWallet,
+                          match_ended_at: new Date().toISOString(),
+                          status: 'completed',
+                        },
+                      });
                       try {
                         if (matchId) {
                           await supabase.rpc('link_wager_deposits_to_match', {
@@ -1991,23 +2109,31 @@ preparePromise.then(() => {
                     ? meta.humans.map((w) => ({ wallet: w, wager_amount: rankedAmount }))
                     : ((Array.isArray(rankedLobby?.players) ? rankedLobby.players.filter((p) => !p.isAi) : [])
                         .map((p) => ({ wallet: p.playerId, wager_amount: rankedAmount })));
-                  const { data: mr, error: mrErr } = await supabase.from('match_results').insert({
-                    lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
-                    match_session_id: meta?.matchSessionId || null,
-                    escrow_wallet_id: escrowIdVal || null,
-                    match_started_at: new Date(room.startTime || Date.now()).toISOString(),
-                    match_ended_at: new Date().toISOString(),
-                    winner_wallet: winnerWallet,
-                    total_prize_pool: (prizePoolLamports / 1_000_000_000),
-                    participants,
-                    game_data: { roomId },
-                    status: 'completed',
-                    payout_processed: false,
-                  }).select('id').single();
-                  if (!mrErr && mr?.id) {
+                  const mrId = await getOrCreateMatchResultIdBySession({
+                    supabase,
+                    matchSessionId: meta?.matchSessionId || null,
+                    insertRow: {
+                      lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
+                      escrow_wallet_id: escrowIdVal || null,
+                      match_started_at: new Date(room.startTime || Date.now()).toISOString(),
+                      match_ended_at: new Date().toISOString(),
+                      winner_wallet: winnerWallet,
+                      total_prize_pool: (prizePoolLamports / 1_000_000_000),
+                      participants,
+                      game_data: { roomId },
+                      status: 'completed',
+                      payout_processed: false,
+                    },
+                    updateRow: {
+                      winner_wallet: winnerWallet,
+                      match_ended_at: new Date().toISOString(),
+                      status: 'completed',
+                    },
+                  });
+                  if (mrId) {
                     try {
                       await supabase.rpc('link_wager_deposits_to_match', {
-                        p_match_result_id: mr.id,
+                        p_match_result_id: mrId,
                         p_match_session_id: meta?.matchSessionId || null,
                         p_lobby_id: meta?.lobbyId || (rankedLobby?.id || null),
                         p_player_wallets: participants.map((p) => p.wallet),
@@ -2025,20 +2151,20 @@ preparePromise.then(() => {
                       const baseUrl = `http://localhost:${port}`;
                       const secret = process.env.PAYOUT_SERVER_SECRET;
                       if (secret) {
-                        console.log('[SETTLEMENT][REQUEST][HTTP]', { matchId: mr.id, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
+                        console.log('[SETTLEMENT][REQUEST][HTTP]', { matchId: mrId, winner: winnerWallet, prizePool: (prizePoolLamports / 1_000_000_000) });
                         const resp = await fetch(`${baseUrl}/api/settlement/run`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-                          body: JSON.stringify({ matchId: mr.id })
+                          body: JSON.stringify({ matchId: mrId })
                         }).catch(() => null);
                         if (resp && resp.ok) {
-                          console.log('💸 Ranked settlement executed via HTTP for match_result:', mr.id);
+                          console.log('💸 Ranked settlement executed via HTTP for match_result:', mrId);
                           try { room._payoutTriggered = true; } catch {}
                           return;
                         } else {
                           const status = resp ? resp.status : 'no_response';
                           const txt = resp ? await resp.text().catch(() => '') : 'no response';
-                          console.warn('⚠️ HTTP settlement failed', { matchId: mr.id, status, details: txt });
+                          console.warn('⚠️ HTTP settlement failed', { matchId: mrId, status, details: txt });
                         }
                       } else {
                         console.warn('⚠️ PAYOUT_SERVER_SECRET not set; cannot execute payout');
@@ -2046,8 +2172,6 @@ preparePromise.then(() => {
                     } catch (eh) {
                       console.warn('HTTP payout error:', eh?.message || eh);
                     }
-                  } else if (mrErr) {
-                    console.error('❌ Failed to insert match_results:', mrErr);
                   }
                 }
               } catch (orchestratorErr) {
@@ -2513,20 +2637,27 @@ preparePromise.then(() => {
             const { createClient } = require('@supabase/supabase-js');
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
             const participants = humans.map((w) => ({ wallet: w, wager_amount: amount }));
-            const { data: mrRow } = await supabase.from('match_results').insert({
-              lobby_id: meta.lobbyId || null,
-              match_session_id: msid,
-              escrow_wallet_id: selectedEscrow || null,
-              match_started_at: meta.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
-              match_ended_at: new Date().toISOString(),
-              winner_wallet: winnerWallet,
-              total_prize_pool: (amount * humansCount),
-              participants,
-              game_data: { matchSessionId: msid },
-              status: 'completed',
-              payout_processed: false,
-            }).select('id').single();
-            matchId = mrRow?.id || null;
+            matchId = await getOrCreateMatchResultIdBySession({
+              supabase,
+              matchSessionId: msid,
+              insertRow: {
+                lobby_id: meta.lobbyId || null,
+                escrow_wallet_id: selectedEscrow || null,
+                match_started_at: meta.startAt ? new Date(meta.startAt).toISOString() : new Date().toISOString(),
+                match_ended_at: new Date().toISOString(),
+                winner_wallet: winnerWallet,
+                total_prize_pool: (amount * humansCount),
+                participants,
+                game_data: { matchSessionId: msid },
+                status: 'completed',
+                payout_processed: false,
+              },
+              updateRow: {
+                winner_wallet: winnerWallet,
+                match_ended_at: new Date().toISOString(),
+                status: 'completed',
+              },
+            });
             try {
               if (matchId) {
                 await supabase.rpc('link_wager_deposits_to_match', {
@@ -2917,12 +3048,13 @@ preparePromise.then(() => {
             }
           }
           // Readiness policy:
-          // - Ranked wagered (amount>0): ready if hasWagered OR socket says ready
+          // - Ranked wagered (amount>0): ready if hasWagered AND socket/API says ready
           // - Free (amount==0, non-tutorial): accept socket OR API isReady to tolerate HTTP fallback
           // - Tutorial handled below for AI auto-ready
           let isReady = connectionReady;
           if ((lobby.amount || 0) > 0 && !player.isAi) {
-            isReady = Boolean(player.hasWagered) || connectionReady;
+            const apiReady = !!(player && player.isReady);
+            isReady = Boolean(player.hasWagered) && Boolean(connectionReady || apiReady);
           } else if (!player.isAi) {
             // Accept either socket flag or API isReady (tolerate undefined without TS syntax)
             const apiReady = !!(player && player.isReady);
@@ -3573,6 +3705,23 @@ preparePromise.then(() => {
       try {
         const isPaid = Boolean(lobbyMeta && !isTutorial && Number(lobbyMeta.amount || 0) > 0);
         escrowIdVal = lobbyMeta && lobbyMeta.escrowWalletId ? lobbyMeta.escrowWalletId : null;
+        if (isPaid && !paidMatchesEnabled()) {
+          console.warn('[queue] Paid matches disabled; cancelling queue start', { lobbyId });
+          try { io.to(lobbyId).emit('match_cancelled', { reason: 'paid_disabled' }); } catch {}
+          try { const lob = lobbies.find(l => l && l.id === lobbyId); if (lob) lob.status = 'open'; } catch {}
+          return;
+        }
+        if (isPaid && !escrowIdVal) {
+          // Phase I: allow forcing a single escrow wallet to avoid rotation.
+          const force = String(process.env.FORCE_ESCROW_WALLET_ID || '').trim().toUpperCase();
+          if (force === 'A' || force === 'B' || force === 'C') {
+            escrowIdVal = force;
+            try {
+              const lob = lobbies.find(l => l && l.id === lobbyId);
+              if (lob) lob.escrowWalletId = force;
+            } catch {}
+          }
+        }
         if (isPaid && !escrowIdVal) {
           console.warn('[queue] Missing escrowWalletId for paid lobby; cancelling', { lobbyId });
           try { io.to(lobbyId).emit('match_cancelled', { reason: 'escrow_not_assigned' }); } catch {}
@@ -3750,18 +3899,26 @@ preparePromise.then(() => {
             const { createClient } = require('@supabase/supabase-js');
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
             const participants = humans.map((w) => ({ wallet: (walletCanonicalByKey && walletCanonicalByKey[String(w).toLowerCase()]) ? walletCanonicalByKey[String(w).toLowerCase()] : w, wager_amount: Number(lobbyMeta?.amount || 0) }));
-            const { data: mrRow } = await supabase.from('match_results').insert({
-              lobby_id: lobbyId,
-              match_session_id: matchSessionId,
-              escrow_wallet_id: escrowIdVal || null,
-              match_started_at: new Date().toISOString(),
-              status: 'in_progress',
-              total_prize_pool: Number(lobbyMeta?.amount || 0) * humans.length,
-              participants,
-              game_data: { matchSessionId },
-              payout_processed: false,
-            }).select('id').single();
-            const mrId = mrRow?.id || null;
+            const mrId = await getOrCreateMatchResultIdBySession({
+              supabase,
+              matchSessionId,
+              insertRow: {
+                lobby_id: lobbyId,
+                escrow_wallet_id: escrowIdVal || null,
+                match_started_at: new Date().toISOString(),
+                status: 'in_progress',
+                total_prize_pool: Number(lobbyMeta?.amount || 0) * humans.length,
+                participants,
+                game_data: { matchSessionId },
+                payout_processed: false,
+              },
+              updateRow: {
+                lobby_id: lobbyId,
+                escrow_wallet_id: escrowIdVal || null,
+                status: 'in_progress',
+                payout_processed: false,
+              },
+            });
             try {
               if (mrId) {
                 await supabase.rpc('link_wager_deposits_to_match', {

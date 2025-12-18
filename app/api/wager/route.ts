@@ -9,6 +9,20 @@ import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, cl
 import escrowService from '@/lib/escrow-service';
 import { createClient } from '@supabase/supabase-js';
 
+function paidMatchesEnabled(): boolean {
+  try {
+    const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    if (!enabled) return false
+    const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
+    const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
+    const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
+    return hasSupabase && hasSettlement && hasRefund && hasHouse
+  } catch {
+    return false
+  }
+}
+
 // This function creates and returns a transaction for a wager
 export async function POST(request: Request) {
   try {
@@ -45,6 +59,10 @@ export async function POST(request: Request) {
         message: "No wager required for free matches",
         isFree: true,
       });
+    }
+
+    if (!paidMatchesEnabled()) {
+      return NextResponse.json({ error: 'Wagered matches are disabled' }, { status: 403 })
     }
 
     if (isBsc()) {
@@ -124,10 +142,20 @@ export async function POST(request: Request) {
 
     // Assign or reuse escrow wallet id for this lobby
     if (!lobby.escrowWalletId) {
-      // Use simple rotation A/B/C
-      const candidates: Array<'A'|'B'|'C'> = ['A','B','C']
-      for (const id of candidates) { if (escrowService.getWallet(id)) { lobby.escrowWalletId = id; break } }
+      // Optional override: force a single escrow wallet for Phase I rollouts
+      const force = String(process.env.FORCE_ESCROW_WALLET_ID || '').trim().toUpperCase() as any
+      if (force === 'A' || force === 'B' || force === 'C') {
+        if (escrowService.getWallet(force)) {
+          lobby.escrowWalletId = force
+        }
+      }
+      if (!lobby.escrowWalletId) {
+        // Use simple fallback A/B/C
+        const candidates: Array<'A'|'B'|'C'> = ['A','B','C']
+        for (const id of candidates) { if (escrowService.getWallet(id)) { lobby.escrowWalletId = id; break } }
+      }
     }
+
     if (!lobby.escrowWalletId) {
       return NextResponse.json({ error: 'Escrow wallets not configured' }, { status: 500 })
     }

@@ -13,7 +13,7 @@ export interface Lobby {
   capacity: number;
   highRoller: boolean;
   status: 'open' | 'starting' | 'in-progress';
-  matchType: 'ranked';
+  matchType: 'ranked' | 'tutorial';
   isComingSoon?: boolean;
   escrowWalletId?: 'A' | 'B' | 'C'; // Which escrow wallet this match uses
 }

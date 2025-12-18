@@ -10,6 +10,20 @@ import { ethers } from 'ethers';
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey } from '@solana/web3.js';
 import { createClient } from '@supabase/supabase-js';
 
+function paidMatchesEnabled(): boolean {
+  try {
+    const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    if (!enabled) return false
+    const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
+    const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
+    const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
+    return hasSupabase && hasSettlement && hasRefund && hasHouse
+  } catch {
+    return false
+  }
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
     return handleWagerConfirmation(req);
@@ -43,6 +57,10 @@ async function handleWagerConfirmation(req: NextRequest) {
 
     if (!lobby) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
+    }
+
+    if (Number(lobby.amount || 0) > 0 && !paidMatchesEnabled()) {
+      return NextResponse.json({ error: 'Wagered matches are disabled' }, { status: 403 })
     }
 
     const normalizeForMatch = (id: unknown) => {

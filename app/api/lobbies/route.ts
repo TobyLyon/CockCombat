@@ -28,6 +28,20 @@ async function getSocketInstance() {
 const usernameCache = new Map<string, { username: string; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+ function paidMatchesEnabled(): boolean {
+   try {
+     const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+     if (!enabled) return false
+     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
+     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
+     const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
+     return hasSupabase && hasSettlement && hasRefund && hasHouse
+   } catch {
+     return false
+   }
+ }
+
 // Helper function to get profile username with caching
 async function getPlayerUsername(playerId: string): Promise<string> {
   try {
@@ -148,6 +162,9 @@ export async function POST(req: NextRequest) {
       const isPaid = amt > 0;
       const lamports = Math.round(amt * 1_000_000_000);
       const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000;
+      if (isPaid && !paidMatchesEnabled()) {
+        return NextResponse.json({ error: 'Wagered matches are disabled' }, { status: 403 });
+      }
       if (isPaid && !isAllowedPaidTier) {
         return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
       }
@@ -649,12 +666,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
     }
 
-    // Do not override ranked readiness with false when wagered; UI still needs to reflect intent immediately
-    if (lobby.amount > 0 && (player as any).hasWagered) {
-      player.isReady = true;
-    } else {
-      player.isReady = isReady;
-    }
+    player.isReady = isReady;
 
     // Broadcast via Socket.IO if available and hard-prune any players not present in live presence
     try {

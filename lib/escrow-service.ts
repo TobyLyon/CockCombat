@@ -200,18 +200,37 @@ class EscrowService {
 
     let selectedWallet: EscrowWallet;
 
-    if (this.config.loadBalancingEnabled) {
-      // Select wallet with lowest transaction count
-      selectedWallet = enabledWallets.reduce((prev, current) =>
-        prev.transactionCount < current.transactionCount ? prev : current
-      );
-    } else if (this.config.cyclingEnabled) {
-      // Round-robin selection
-      this.currentWalletIndex = (this.currentWalletIndex + 1) % enabledWallets.length;
-      selectedWallet = enabledWallets[this.currentWalletIndex];
-    } else {
-      // Always use first wallet
-      selectedWallet = enabledWallets[0];
+    // Optional override: force a single escrow wallet for Phase I rollouts.
+    // Set FORCE_ESCROW_WALLET_ID=A|B|C to bypass rotation/load-balancing.
+    try {
+      const forceId = String(process.env.FORCE_ESCROW_WALLET_ID || '').trim().toUpperCase() as any;
+      if (forceId === 'A' || forceId === 'B' || forceId === 'C') {
+        const forced = enabledWallets.find(w => w.id === forceId);
+        if (forced) {
+          selectedWallet = forced;
+        } else {
+          throw new Error(`Forced escrow wallet ${forceId} is not available`);
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ FORCE_ESCROW_WALLET_ID override failed:', (e as any)?.message || e);
+    }
+
+    if (!selectedWallet) {
+
+      if (this.config.loadBalancingEnabled) {
+        // Select wallet with lowest transaction count
+        selectedWallet = enabledWallets.reduce((prev, current) =>
+          prev.transactionCount < current.transactionCount ? prev : current
+        );
+      } else if (this.config.cyclingEnabled) {
+        // Round-robin selection
+        this.currentWalletIndex = (this.currentWalletIndex + 1) % enabledWallets.length;
+        selectedWallet = enabledWallets[this.currentWalletIndex];
+      } else {
+        // Always use first wallet
+        selectedWallet = enabledWallets[0];
+      }
     }
 
     // Update usage stats
