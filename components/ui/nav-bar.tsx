@@ -51,8 +51,8 @@ export default function NavBar() {
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const TOKEN_MINT = "V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump"
-  const tokenEndPreview = `…${TOKEN_MINT.slice(-6)}`
+  const TOKEN_MINT = "soon"
+  const tokenEndPreview = "soon"
 
   const handleCopyTokenAddress = async () => {
     try {
