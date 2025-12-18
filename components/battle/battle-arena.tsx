@@ -381,11 +381,29 @@ export default function BattleArena() {
       if (joinedLobby) {
         const id = getCurrentPlayerId();
         if (id) {
-          await fetch('/api/lobbies', {
+          const res = await fetch('/api/lobbies', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lobbyId: joinedLobby.id, playerId: id })
           });
+
+          try {
+            const data: any = await res.json().catch(() => ({} as any));
+            const refund = data && (data as any).refund;
+            if (refund && typeof refund === 'object') {
+              const tx = String(refund.txHash || '').trim();
+              const msg = String(refund.message || refund.error || '').trim();
+              if (refund.attempted && refund.ok && tx) {
+                toast.success(`Refund sent: ${tx.slice(0, 8)}...${tx.slice(-8)}`, { duration: 5000 });
+              } else if (refund.attempted && refund.ok) {
+                toast.success(msg || 'Refund processed', { duration: 4000 });
+              } else if (refund.attempted && !refund.ok) {
+                toast.error(msg || 'Refund failed', { duration: 5000 });
+              } else if (msg) {
+                toast.message(msg, { duration: 3500 });
+              }
+            }
+          } catch {}
         }
       }
     } catch {}

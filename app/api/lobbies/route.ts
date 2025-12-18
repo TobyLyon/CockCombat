@@ -509,6 +509,7 @@ export async function DELETE(req: NextRequest) {
     const leavingPlayer = lobby.players[idx];
 
     // Best-effort refund if leaving before countdown/queue begins (ranked only) via idempotent server routine
+    const refund: { attempted: boolean; ok?: boolean; txHash?: string; message?: string; error?: string } = { attempted: false };
     try {
       const isPaidRanked = lobby.matchType !== 'tutorial' && lobby.amount > 0;
       // Recover roster record for more accurate flags if available
@@ -528,12 +529,31 @@ export async function DELETE(req: NextRequest) {
       const eligibleForRefund = isPaidRanked && hasWageredFlag && !alreadyRefunded && !isCountdownActive && !hasQueueSession;
 
       if (eligibleForRefund) {
+        refund.attempted = true;
         try {
           const { processRefundServerOnly } = await import('@/app/api/wager/refund/route');
-          await processRefundServerOnly({ lobbyId, playerPublicKey: String((leavingPlayer?.playerId || playerId)), reason: 'left_before_countdown' });
+          const res: any = await processRefundServerOnly({ lobbyId, playerPublicKey: String((leavingPlayer?.playerId || playerId)), reason: 'left_before_countdown' });
+          if (res && res.ok) {
+            refund.ok = true;
+            refund.txHash = String(res.txHash || '');
+            refund.message = 'Refund sent';
+          } else if (res && res.error) {
+            refund.ok = false;
+            refund.error = String(res.error || 'Refund failed');
+          } else {
+            refund.ok = true;
+            refund.message = String(res?.message || 'Refund processed');
+          }
         } catch (err) {
+          refund.ok = false;
+          refund.error = String((err as any)?.message || err || 'Refund failed');
           console.warn('Refund routine failed (non-fatal):', (err as any)?.message || err);
         }
+      } else {
+        refund.attempted = false;
+        if (alreadyRefunded) refund.message = 'Already refunded';
+        else if (!hasWageredFlag) refund.message = 'No recorded wager';
+        else if (isCountdownActive || hasQueueSession) refund.message = 'Refund window closed';
       }
     } catch (e) {
       console.warn('Refund check failed (non-fatal):', (e as any)?.message || e);
@@ -600,7 +620,7 @@ export async function DELETE(req: NextRequest) {
       console.log('Could not broadcast lobby leave:', e);
     }
 
-    return NextResponse.json(lobby);
+    return NextResponse.json({ ...(lobby as any), refund });
   });
 }
 
