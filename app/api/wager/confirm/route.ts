@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
 
 async function handleWagerConfirmation(req: NextRequest) {
   try {
+
     const BodySchema = z.object({
       lobbyId: z.string().min(3),
       signature: z.string().min(32),
@@ -44,23 +45,81 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
+    const normalizeForMatch = (id: unknown) => {
+      try {
+        const s = String(id || '').trim()
+        if (!s) return { raw: '', lower: '' }
+        if (s.toLowerCase().startsWith('guest_')) return { raw: s.toLowerCase(), lower: s.toLowerCase() }
+        if (/^0x[0-9a-fA-F]{40}$/.test(s)) return { raw: s.toLowerCase(), lower: s.toLowerCase() }
+        return { raw: s, lower: s.toLowerCase() }
+      } catch {
+        return { raw: '', lower: '' }
+      }
+    }
+
+    const who = normalizeForMatch(playerPublicKey)
+
     let player = lobby.players.find(p => {
-      const a = String(p.playerId || '').toLowerCase();
-      const b = String(playerPublicKey || '').toLowerCase();
-      return a === b;
+      const cur = normalizeForMatch(p.playerId)
+      return (cur.raw && who.raw && cur.raw === who.raw) || (cur.lower && who.lower && cur.lower === who.lower)
     });
+
+    // NOTE: On Render/Vercel deployments, API requests can be routed across instances.
+    // For paid lobbies, we still want to fail closed, but we can recover safely if:
+    // - a wager intent exists for this wallet+lobby, OR
+    // - socket presence already indicates the player is in the lobby.
     if (!player) {
-      // For paid matches, do not mutate roster here. Player must already be in the lobby.
-      if (Number(lobby.amount || 0) > 0) {
+      const isPaid = Number(lobby.amount || 0) > 0
+      let canInsert = !isPaid
+
+      if (isPaid) {
+        // Prefer intent-based membership (DB-backed) when available
+        try {
+          if (intentId) {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (supabaseUrl && supabaseServiceKey) {
+              const supabase = createClient(supabaseUrl, supabaseServiceKey);
+              const { data } = await supabase
+                .from('wager_deposits')
+                .select('intent_id,lobby_id,player_wallet,status')
+                .eq('intent_id', intentId)
+                .maybeSingle();
+
+              const ok = Boolean(
+                data &&
+                String((data as any).lobby_id || '') === String(lobbyId) &&
+                (
+                  String((data as any).player_wallet || '') === who.raw ||
+                  String((data as any).player_wallet || '').toLowerCase() === who.lower
+                )
+              )
+              if (ok) canInsert = true
+            }
+          }
+        } catch {}
+
+        // Fallback: allow insert if socket presence indicates membership
+        try {
+          const presence: Set<string> | undefined = (global as any).lobbyPresence?.get?.(lobbyId)
+          if (presence && (presence.has(who.raw) || presence.has(who.lower))) {
+            canInsert = true
+          }
+        } catch {}
+      }
+
+      if (!canInsert) {
         return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
       }
-      // Free/tutorial: allow a best-effort roster insert to keep UX working.
+
+      // Best-effort roster insert to keep UX working.
       try {
-        const username = (playerPublicKey || '').slice(0, 8) + '...';
-        const newP: any = { playerId: playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
+        const username = (who.raw || playerPublicKey || '').slice(0, 8) + '...';
+        const newP: any = { playerId: who.raw || playerPublicKey, chickenId: 'default-chicken', username, hasWagered: false, isReady: false };
         lobby.players.push(newP);
         player = newP;
       } catch {}
+
       if (!player) {
         return NextResponse.json({ error: 'Player not found in this lobby' }, { status: 404 });
       }
