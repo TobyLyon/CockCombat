@@ -25,6 +25,14 @@ import SpectatorChat from "../spectator/spectator-chat"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
 import { useSocket } from "../../hooks/use-socket"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog"
 
 export default function BattleArena() {
   const router = useRouter()
@@ -46,6 +54,8 @@ export default function BattleArena() {
   const [xConnected, setXConnected] = useState<boolean>(false)
   const [chatOpen, setChatOpen] = useState<boolean>(false)
   const [activeMatchId, setActiveMatchId] = useState<string | undefined>(undefined)
+  const [walletRequiredOpen, setWalletRequiredOpen] = useState(false)
+  const [walletRequiredAmount, setWalletRequiredAmount] = useState<number | null>(null)
   
   // Use the game state context instead of local state
   const { 
@@ -413,8 +423,8 @@ export default function BattleArena() {
     const joiningAsGuest = (!publicKey && lobby.amount === 0);
     // Require wallet for paid/ranked lobbies
     if (!publicKey && !joiningAsGuest) {
-      toast.error("Connect your wallet to join ranked matches", { duration: 2500 });
-      setVisible(true);
+      setWalletRequiredAmount(Number(lobby.amount || 0) || null)
+      setWalletRequiredOpen(true)
       return;
     }
 
@@ -488,8 +498,7 @@ export default function BattleArena() {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error("❌ Failed to join lobby:", errorMessage);
-      // Add user-facing error notification here (e.g., a toast)
-      alert(`Failed to join lobby: ${errorMessage}`);
+      toast.error(`Failed to join lobby: ${errorMessage}`, { duration: 4000 });
     } finally {
       setIsJoining(null);
     }
@@ -501,6 +510,26 @@ export default function BattleArena() {
     <div className="battle-arena-container relative min-h-screen bg-gray-900 text-white flex flex-col overflow-hidden" style={{
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
+      <Dialog open={walletRequiredOpen} onOpenChange={setWalletRequiredOpen}>
+        <DialogContent className="bg-[#1f1f1f] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Wallet required</DialogTitle>
+            <DialogDescription className="text-white/70">
+              {walletRequiredAmount && walletRequiredAmount > 0
+                ? `Wagered matches (${walletRequiredAmount} SOL) require a connected wallet.`
+                : "Wagered matches require a connected wallet."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <WalletMultiButton />
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" className="border-white/20" onClick={() => setWalletRequiredOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-auto">
         {/* Minimal farm-like background scenes behind UI (non-interactive) */}
         {gameState !== "battle" && (
