@@ -7,6 +7,7 @@
  */
 
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { clusterApiUrl } from '@solana/web3.js';
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -49,6 +50,24 @@ class EscrowService {
     };
 
     this.initializeWallets();
+    // Best-effort default connection for server-side monitoring/health checks.
+    // Callers can still override via setConnection.
+    try {
+      const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
+      const base = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+      const rpcUrl = (() => {
+        try {
+          const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
+          const isHelius = /helius/i.test(String(base || ''))
+          if (network === 'mainnet-beta' && rebate && isHelius) {
+            const sep = base.includes('?') ? '&' : '?'
+            return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
+          }
+        } catch {}
+        return base
+      })()
+      this.connection = new Connection(rpcUrl)
+    } catch {}
   }
 
   public async transferSolBundle(

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js'
 import escrowService from '@/lib/escrow-service'
+import { getBrowserSolanaRpcEndpoint } from '@/lib/solana-rpc'
 import { toast } from "sonner"
 import Image from "next/image"
 // Token service removed for EVM-only build
@@ -42,8 +43,7 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
             const base = (() => {
               const configured = process.env.NEXT_PUBLIC_SOLANA_RPC_URL
               if (configured && String(configured).trim()) return String(configured).trim()
-              if (net === 'mainnet-beta') return 'https://rpc.ankr.com/solana'
-              return clusterApiUrl(net)
+              return getBrowserSolanaRpcEndpoint()
             })()
             const url = (() => {
               try {

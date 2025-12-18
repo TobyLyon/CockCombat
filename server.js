@@ -671,7 +671,24 @@ preparePromise.then(() => {
     const handleRegisterIdentity = (walletAddress) => {
       // Preserve original (Solana base58 is case-sensitive) and track a lowercase variant for matching
       let raw = (walletAddress && typeof walletAddress === 'string') ? String(walletAddress) : walletAddress;
-      let normalized = (raw && typeof raw === 'string') ? raw.toLowerCase() : raw;
+      let normalized = (raw && typeof raw === 'string') ? String(raw) : raw;
+      // Only lowercase identities that are case-insensitive
+      try {
+        if (normalized && typeof normalized === 'string') {
+          const s = String(normalized);
+          if (s.toLowerCase().startsWith('guest_')) {
+            normalized = s.toLowerCase();
+            raw = s.toLowerCase();
+          } else if (/^0x[0-9a-fA-F]{40}$/.test(s)) {
+            normalized = s.toLowerCase();
+            raw = s.toLowerCase();
+          } else {
+            // Solana base58: preserve exact casing
+            normalized = s;
+            raw = s;
+          }
+        }
+      } catch {}
       // For guest_* identities, allow a stable override from header to avoid duplicate guest ids
       try {
         if (normalized && typeof normalized === 'string' && normalized.startsWith('guest_')) {
@@ -746,7 +763,7 @@ preparePromise.then(() => {
         try {
           for (const [otherId, otherConn] of activeConnections.entries()) {
             const otherLower = String(otherConn.walletAddressLower || otherConn.walletAddress || '').toLowerCase();
-            if (otherId !== socket.id && otherLower === normalized) {
+            if (otherId !== socket.id && otherLower === nextLower) {
               const oldLobby = otherConn.currentLobby;
               console.log(`🧹 Cleaning prior socket ${otherId} for identity ${normalized}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
               // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal

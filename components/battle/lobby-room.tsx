@@ -10,11 +10,12 @@ import { isBsc } from "@/lib/chain"
 import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Lobby } from "@/lib/lobbies"
-import { Connection, Transaction, clusterApiUrl } from "@solana/web3.js"
+import { Connection, Transaction } from "@solana/web3.js"
 // Solana tx helpers removed in EVM-only build
 import { toast } from "sonner"
 import { useAudio } from "@/contexts/AudioContext"
 import { useUsername } from "@/hooks/use-username"
+import { getBrowserSolanaRpcEndpoint } from "@/lib/solana-rpc";
 
 interface LobbyPlayer {
   playerId: string
@@ -101,16 +102,31 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   const getCurrentPlayerId = () => {
     try {
-      if (playerIdentifier) return String(playerIdentifier).toLowerCase()
-      if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') return String((publicKey as any).toBase58()).toLowerCase()
+      const normalizeIdentity = (id: unknown): string | null => {
+        try {
+          const s = String(id || '').trim()
+          if (!s) return null
+          if (s.toLowerCase().startsWith('guest_')) return s.toLowerCase()
+          if (/^0x[0-9a-fA-F]{40}$/.test(s)) return s.toLowerCase()
+          return s
+        } catch {
+          return null
+        }
+      }
+      if (playerIdentifier) return normalizeIdentity(playerIdentifier) || undefined
+      if (typeof window !== 'undefined' && publicKey && typeof (publicKey as any).toBase58 === 'function') {
+        const pk = String((publicKey as any).toBase58())
+        return normalizeIdentity(pk) || undefined
+      }
       // Fallback: stable guest identity when no wallet present
       if (typeof window !== 'undefined') {
         const gid = localStorage.getItem('guest_id') || (window as any).__guestId
-        if (gid && typeof gid === 'string') return String(gid).toLowerCase()
+        if (gid && typeof gid === 'string') return normalizeIdentity(gid) || undefined
       }
     } catch {}
     return undefined
   }
+
   // Resolve wallet address for username lookup (guests won't have one)
   const walletAddress = (() => {
     try { return (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '' } catch { return '' }
@@ -125,9 +141,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       console.log(`🏟️ Joining lobby room: ${lobby.id}`);
       
       // Register the player identifier (wallet or guest id) with the socket
-      socket.emit('register_identity', String(id).toLowerCase());
+      socket.emit('register_identity', String(id));
       // Persist join identity for the secondary queue step so presence matches server expectations
-      try { (window as any).__join_identity = String(id).toLowerCase() } catch {}
+      try { (window as any).__join_identity = String(id) } catch {}
       try { (window as any).currentLobbyId = lobby.id } catch {}
       
       // Wait for identity_registered/wallet_registered ACK before joining room (prevents race)
@@ -636,8 +652,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const base = (() => {
           const configured = process.env.NEXT_PUBLIC_SOLANA_RPC_URL
           if (configured && String(configured).trim()) return String(configured).trim()
-          if (network === 'mainnet-beta') return 'https://rpc.ankr.com/solana'
-          return clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta')
+          return getBrowserSolanaRpcEndpoint()
         })()
         const withRebate = (() => {
           try {
