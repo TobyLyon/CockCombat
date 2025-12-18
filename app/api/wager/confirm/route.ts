@@ -24,6 +24,20 @@ function paidMatchesEnabled(): boolean {
   }
 }
 
+function paidMatchesDiagnostics(): Record<string, boolean> {
+  try {
+    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
+    const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
+    const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
+    return { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse }
+  } catch {
+    return { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false }
+  }
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, RATE_LIMITS.WAGER, async () => {
     return handleWagerConfirmation(req);
@@ -60,7 +74,7 @@ async function handleWagerConfirmation(req: NextRequest) {
     }
 
     if (Number(lobby.amount || 0) > 0 && !paidMatchesEnabled()) {
-      return NextResponse.json({ error: 'Wagered matches are disabled' }, { status: 403 })
+      return NextResponse.json({ error: 'Wagered matches are disabled', checks: paidMatchesDiagnostics() }, { status: 403 })
     }
 
     const normalizeForMatch = (id: unknown) => {

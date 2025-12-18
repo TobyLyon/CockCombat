@@ -28,18 +28,24 @@ async function getSocketInstance() {
 const usernameCache = new Map<string, { username: string; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
- function paidMatchesEnabled(): boolean {
+ function paidMatchesDiagnostics(): { enabled: boolean; checks: Record<string, boolean> } {
    try {
-     const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
-     if (!enabled) return false
-     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+     const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+     const hasSupabase = Boolean(hasSupabaseUrl && hasServiceRole)
      const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
      const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
      const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
-     return hasSupabase && hasSettlement && hasRefund && hasHouse
+     const enabled = Boolean(enableFlag && hasSupabase && hasSettlement && hasRefund && hasHouse)
+     return { enabled, checks: { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse } }
    } catch {
-     return false
+     return { enabled: false, checks: { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false } }
    }
+ }
+
+ function paidMatchesEnabled(): boolean {
+   return paidMatchesDiagnostics().enabled
  }
 
 // Helper function to get profile username with caching
@@ -163,7 +169,8 @@ export async function POST(req: NextRequest) {
       const lamports = Math.round(amt * 1_000_000_000);
       const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000;
       if (isPaid && !paidMatchesEnabled()) {
-        return NextResponse.json({ error: 'Wagered matches are disabled' }, { status: 403 });
+        const diag = paidMatchesDiagnostics()
+        return NextResponse.json({ error: 'Wagered matches are disabled', checks: diag.checks }, { status: 403 });
       }
       if (isPaid && !isAllowedPaidTier) {
         return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
