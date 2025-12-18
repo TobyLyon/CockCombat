@@ -442,15 +442,14 @@ export default function BattleArena() {
         }
       }
       // Persist the identity we will use to join for reliable queue presence later
-      const joinPlayerIdLower = joiningAsGuest ? (guestIdGenerated as string) : publicKey!.toBase58().toLowerCase();
+      const joinPlayerId = joiningAsGuest ? (guestIdGenerated as string) : publicKey!.toBase58();
 
       const joinResponse = await fetch('/api/lobbies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lobbyId: lobby.id,
-          // Always use lowercase wallet id to match server normalization and avoid 400s
-          playerId: joinPlayerIdLower,
+          playerId: joinPlayerId,
           chickenId: randomChicken,
         }),
       });
@@ -473,7 +472,7 @@ export default function BattleArena() {
       console.log('✅ Successfully joined lobby:', joinResult);
 
       // Store the exact identity used to join so queue presence matches server expectation
-      try { if (typeof window !== 'undefined') (window as any).__join_identity = joinPlayerIdLower } catch {}
+      try { if (typeof window !== 'undefined') (window as any).__join_identity = joinPlayerId } catch {}
 
       // Stop persisting guest IDs globally to avoid sticky ghost identities
       setGuestId(joiningAsGuest ? guestIdGenerated : null);
@@ -564,7 +563,9 @@ export default function BattleArena() {
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                       const amt = Number(lobby.amount || 0)
                       const isPaid = amt > 0
-                      const isPaidLocked = isPaid && !(amt === 0.01 || amt === 0.05)
+                      const lamports = Math.round(amt * 1_000_000_000)
+                      const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000
+                      const isPaidLocked = isPaid && !isAllowedPaidTier
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
                       const isTutorialLobby = false
                       return (

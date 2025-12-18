@@ -126,9 +126,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid request body', details: parsed.error.flatten() }, { status: 400 });
     }
-    // Normalize wallet/playerId to lowercase to avoid checksum case mismatch across client/server
     const { lobbyId, chickenId, sessionId } = parsed.data;
-    const playerId = String(parsed.data.playerId).toLowerCase();
+    const playerId = String(parsed.data.playerId);
+    const playerIdLower = playerId.toLowerCase();
 
     const lobby = lobbies.find(l => l && l.id === lobbyId);
 
@@ -145,7 +145,8 @@ export async function POST(req: NextRequest) {
     try {
       const amt = Number(lobby.amount || 0);
       const isPaid = amt > 0;
-      const isAllowedPaidTier = amt === 0.01 || amt === 0.05;
+      const lamports = Math.round(amt * 1_000_000_000);
+      const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000;
       if (isPaid && !isAllowedPaidTier) {
         return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
       }
@@ -196,7 +197,7 @@ export async function POST(req: NextRequest) {
     // Enforce single-lobby membership: remove this player from any other lobby before proceeding
     try {
       const socketIo = await getSocketInstance();
-      const playerLower = String(playerId).toLowerCase();
+      const playerLower = playerIdLower;
       for (const other of lobbies) {
         if (!other || other.id === lobbyId) continue;
         const idxOther = other.players.findIndex(p => String(p.playerId || '').toLowerCase() === playerLower);
@@ -251,7 +252,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if player is already in the lobby
-    const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === playerId);
+    const existingPlayer = lobby.players.find(p => String(p.playerId).toLowerCase() === playerIdLower);
     if (existingPlayer) {
     // Get socket instance and broadcast current lobby state (and presence add)
     try {
@@ -320,7 +321,7 @@ export async function POST(req: NextRequest) {
     
     // De-duplicate any prior entry for this player in this lobby
     try {
-      lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
+      lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerIdLower);
     } catch {}
     
     const player = { 
@@ -338,7 +339,7 @@ export async function POST(req: NextRequest) {
     if (lobby.players.length > lobby.capacity) {
       // Remove the player we just added
       try {
-        lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerId);
+        lobby.players = lobby.players.filter(p => String(p.playerId).toLowerCase() !== playerIdLower);
       } catch {}
       return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
     }
