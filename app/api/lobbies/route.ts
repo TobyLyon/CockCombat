@@ -6,6 +6,7 @@ import { authService } from '@/lib/auth-service';
 import { auditLogger } from '@/lib/audit-logger';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 import { z } from 'zod';
+import { PublicKey } from '@solana/web3.js';
 
 // Import the socket.io instance
 let io: any = null;
@@ -186,6 +187,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Guests can only join free lobbies' }, { status: 403 });
       }
     } catch {}
+
+    // Paid lobbies require a wallet address (Solana public key)
+    try {
+      const amt = Number(lobby.amount || 0);
+      if (amt > 0) {
+        new PublicKey(playerId);
+      }
+    } catch {
+      return NextResponse.json({ error: 'Wallet required' }, { status: 403 });
+    }
 
     if (lobby.players.length >= lobby.capacity) {
       return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });

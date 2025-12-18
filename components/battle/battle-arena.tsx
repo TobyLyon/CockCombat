@@ -7,7 +7,7 @@ import { useWallet } from "../../hooks/use-wallet"
 // Solana modal removed in EVM-only build
 import { isBsc } from "../../lib/chain"
 import { Button } from "../ui/button"
-import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye } from "lucide-react"
+import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye, Wallet } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 const EnhancedArenaScene = dynamic(() => import("./enhanced-arena-scene"), { ssr: false })
@@ -620,6 +620,14 @@ export default function BattleArena() {
                           <div className="absolute top-2 right-2 bg-red-600/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border border-white/10">
                             <Flame className="h-3 w-3" />
                             VIP
+                          </div>
+                        )}
+
+                        {/* Wallet Required Badge */}
+                        {isPaid && (
+                          <div className={`absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border border-white/10 ${isPaidLocked ? 'opacity-80' : 'opacity-95'}`}>
+                            <Wallet className="h-3 w-3" />
+                            WALLET
                           </div>
                         )}
                         
