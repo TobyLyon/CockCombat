@@ -177,11 +177,12 @@ async function handleWagerConfirmation(req: NextRequest) {
     } else {
       // Solana: signature refers to a confirmed transfer to lobby escrow for exact lamports
       const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
-      const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+      const base = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
       const rpcUrl = (() => {
         try {
           const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
-          if (network === 'mainnet-beta' && rebate) {
+          const isHelius = /helius/i.test(String(base || ''))
+          if (network === 'mainnet-beta' && rebate && isHelius) {
             const sep = base.includes('?') ? '&' : '?'
             return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
           }
@@ -189,8 +190,22 @@ async function handleWagerConfirmation(req: NextRequest) {
         return base
       })()
       const connection = new Connection(rpcUrl)
-      // Wait for confirmation
-      try { await connection.confirmTransaction(signature, 'confirmed') } catch {}
+      // Wait for confirmation (HTTP polling; avoids websocket failures)
+      try {
+        const maxWaitMs = parseInt(process.env.WAGER_CONFIRM_TIMEOUT_MS || '90000', 10)
+        const pollMs = 1500
+        const startedAt = Date.now()
+        while ((Date.now() - startedAt) < maxWaitMs) {
+          try {
+            const st: any = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true } as any)
+            const s0: any = st?.value?.[0]
+            if (s0?.err) break
+            const cs = String(s0?.confirmationStatus || '')
+            if (cs === 'confirmed' || cs === 'finalized') break
+          } catch {}
+          await new Promise(r => setTimeout(r, pollMs))
+        }
+      } catch {}
       const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 })
       if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 400 })
 

@@ -631,8 +631,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const serializedTransaction = wagerData.transaction;
         if (!serializedTransaction) throw new Error('Missing Solana transaction from server');
         const transaction = Transaction.from(Buffer.from(serializedTransaction, 'base64'));
+
         const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-        const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta');
+        const base = (() => {
+          const configured = process.env.NEXT_PUBLIC_SOLANA_RPC_URL
+          if (configured && String(configured).trim()) return String(configured).trim()
+          if (network === 'mainnet-beta') return 'https://rpc.ankr.com/solana'
+          return clusterApiUrl(network as 'devnet' | 'testnet' | 'mainnet-beta')
+        })()
         const withRebate = (() => {
           try {
             const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
@@ -646,7 +652,23 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         })()
         const connection = new Connection(withRebate);
         const signature = await sendTransaction(transaction, connection);
-        await connection.confirmTransaction(signature, 'confirmed');
+        const waitForSig = async () => {
+          const maxWaitMs = Number(process.env.NEXT_PUBLIC_WAGER_CONFIRM_TIMEOUT_MS || 90000)
+          const pollMs = 1500
+          const startedAt = Date.now()
+          while (Date.now() - startedAt < maxWaitMs) {
+            try {
+              const st = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true } as any)
+              const s0: any = (st as any)?.value?.[0]
+              if (s0?.err) throw new Error('Transaction failed')
+              const cs = String(s0?.confirmationStatus || '')
+              if (cs === 'confirmed' || cs === 'finalized') return true
+            } catch {}
+            await new Promise(r => setTimeout(r, pollMs))
+          }
+          return false
+        }
+        await waitForSig().catch(() => false)
 
         const confirmRes = await fetch('/api/wager/confirm', {
           method: 'POST',

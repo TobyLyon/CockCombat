@@ -107,11 +107,12 @@ export async function POST(request: Request) {
 
     // Solana path: return a serialized transfer transaction (player -> escrow)
     const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
-    const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
+    const base = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
     const rpcUrl = (() => {
       try {
         const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
-        if (network === 'mainnet-beta' && rebate) {
+        const isHelius = /helius/i.test(String(base || ''))
+        if (network === 'mainnet-beta' && rebate && isHelius) {
           const sep = base.includes('?') ? '&' : '?'
           return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
         }

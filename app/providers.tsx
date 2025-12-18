@@ -26,7 +26,14 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta';
-  const endpointBase = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network);
+  const endpointBase = (() => {
+    const configured = process.env.NEXT_PUBLIC_SOLANA_RPC_URL
+    if (configured && String(configured).trim()) return String(configured).trim()
+    // Solana public mainnet RPC has been returning 403 for websocket/subscription traffic.
+    // Use a public fallback that works without an API key.
+    if (network === 'mainnet-beta') return 'https://rpc.ankr.com/solana'
+    return clusterApiUrl(network)
+  })();
   // Optionally append Helius rebate-address on mainnet
   const endpoint = (() => {
     try {

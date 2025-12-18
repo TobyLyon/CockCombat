@@ -39,7 +39,12 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
         {
           try {
             const net = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
-            const base = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(net)
+            const base = (() => {
+              const configured = process.env.NEXT_PUBLIC_SOLANA_RPC_URL
+              if (configured && String(configured).trim()) return String(configured).trim()
+              if (net === 'mainnet-beta') return 'https://rpc.ankr.com/solana'
+              return clusterApiUrl(net)
+            })()
             const url = (() => {
               try {
                 const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
