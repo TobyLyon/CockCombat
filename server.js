@@ -694,11 +694,45 @@ preparePromise.then(() => {
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
+        // If the socket had a prior identity (e.g. guest_) and is now switching to a wallet,
+        // actively remove the old identity from roster/presence to prevent ghost entries.
+        const prevLower = String(connection.walletAddressLower || connection.walletAddress || '').toLowerCase();
+        const nextLower = String(normalized || '').toLowerCase();
+        const currentLobby = connection.currentLobby;
+
         connection.walletAddress = raw;
         connection.walletAddressLower = String(normalized || '').toLowerCase();
         console.log(`✅ Identity ${normalized} registered to socket ${socket.id}`);
         try { socket.emit('wallet_registered', { walletAddress: raw }); } catch {}
         try { socket.emit('identity_registered', { identity: raw }); } catch {}
+
+        // Remove old identity from current lobby presence + roster (best-effort)
+        try {
+          if (prevLower && nextLower && prevLower !== nextLower) {
+            if (currentLobby) {
+              try {
+                if (global.lobbyPresence?.has(currentLobby)) {
+                  global.lobbyPresence.get(currentLobby).delete(prevLower);
+                }
+              } catch {}
+              try { removeFromRoster(currentLobby, prevLower); } catch {}
+              try { emitRosterDiff(io, currentLobby, 'remove', { playerId: prevLower }); } catch {}
+            }
+
+            // Also purge from any other roster maps that may still contain the previous identity
+            try {
+              if (global.lobbyRoster && typeof global.lobbyRoster.entries === 'function') {
+                for (const [lobId, map] of global.lobbyRoster.entries()) {
+                  if (!map || typeof map.delete !== 'function') continue;
+                  if (map.has(prevLower)) {
+                    map.delete(prevLower);
+                    emitRosterDiff(io, lobId, 'remove', { playerId: prevLower });
+                  }
+                }
+              }
+            } catch {}
+          }
+        } catch {}
 
         // If this socket had already joined a lobby before registering wallet, refresh counts
         try {
