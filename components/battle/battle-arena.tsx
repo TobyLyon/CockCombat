@@ -622,14 +622,6 @@ export default function BattleArena() {
                             VIP
                           </div>
                         )}
-
-                        {/* Wallet Required Badge */}
-                        {isPaid && (
-                          <div className={`absolute top-2 left-2 bg-white/5 backdrop-blur-md text-white/75 px-1.5 py-0.5 rounded-full text-[9px] font-semibold flex items-center gap-1 border border-white/10 ${isPaidLocked ? 'opacity-70' : 'opacity-90'}`}>
-                            <Wallet className="h-2.5 w-2.5" />
-                            Wallet
-                          </div>
-                        )}
                         
                         {/* Coming Soon Overlay removed; we keep the button label instead */}
                         
@@ -673,6 +665,16 @@ export default function BattleArena() {
                             <div className="mt-1 text-[11px] text-white/70 text-right">{fillPercent}% filled</div>
                           </div>
                           {/* Removed AI autofill note for tutorial */}
+
+                          {/* Wallet Required Tag */}
+                          {isPaid && (
+                            <div className="mt-1 mb-2 flex justify-end">
+                              <div className={`inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-white/75 ${isPaidLocked ? 'opacity-70' : 'opacity-90'}`}>
+                                <Wallet className="h-2.5 w-2.5" />
+                                Wallet
+                              </div>
+                            </div>
+                          )}
                           
                         {/* Actions: Join and Spectate */}
                         {!lobby.isComingSoon && (
