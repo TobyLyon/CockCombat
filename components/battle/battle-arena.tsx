@@ -511,23 +511,30 @@ export default function BattleArena() {
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
       <Dialog open={walletRequiredOpen} onOpenChange={setWalletRequiredOpen}>
-        <DialogContent className="bg-[#1f1f1f] border-white/10 text-white max-w-md">
-          <DialogHeader>
+        <DialogContent className="bg-[#1f1f1f] border-white/10 text-white max-w-[420px]">
+          <DialogHeader className="space-y-2">
             <DialogTitle className="text-xl font-bold">Wallet required</DialogTitle>
-            <DialogDescription className="text-white/70">
+            <DialogDescription className="text-white/70 leading-relaxed">
               {walletRequiredAmount && walletRequiredAmount > 0
                 ? `Wagered matches (${walletRequiredAmount} SOL) require a connected wallet.`
                 : "Wagered matches require a connected wallet."}
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-2">
-            <WalletMultiButton />
+
+          <div className="pt-2 border-t border-white/10">
+            <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:items-center">
+              <Button
+                variant="outline"
+                className="border-white/20 w-full sm:w-auto"
+                onClick={() => setWalletRequiredOpen(false)}
+              >
+                Close
+              </Button>
+              <div className="w-full sm:w-auto">
+                <WalletMultiButton />
+              </div>
+            </DialogFooter>
           </div>
-          <DialogFooter className="mt-4">
-            <Button variant="outline" className="border-white/20" onClick={() => setWalletRequiredOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
       <main className="relative z-10 flex-1 flex flex-col max-w-full max-h-full overflow-auto">
