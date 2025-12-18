@@ -667,6 +667,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         })()
         const connection = new Connection(withRebate);
         const signature = await sendTransaction(transaction, connection);
+        const confirmPayload = { lobbyId: lobby.id, signature, playerPublicKey: publicKey.toString(), intentId };
+        const tryConfirm = async (url: string) => {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(confirmPayload)
+          });
+          return res;
+        };
         const waitForSig = async () => {
           const maxWaitMs = Number(process.env.NEXT_PUBLIC_WAGER_CONFIRM_TIMEOUT_MS || 90000)
           const pollMs = 1500
@@ -683,13 +692,26 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           }
           return false
         }
-        await waitForSig().catch(() => false)
 
-        const confirmRes = await fetch('/api/wager/confirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lobbyId: lobby.id, signature, playerPublicKey: publicKey.toString(), intentId })
-        });
+        const sigConfirmed = await waitForSig().catch(() => false)
+        if (!sigConfirmed) {
+          console.warn('[WAGER] Signature not confirmed within timeout; proceeding to server confirm with retries', { signature })
+        }
+
+        // Confirm on server (retry to avoid transient RPC propagation races)
+        let confirmRes = await tryConfirm('/api/wager/confirm');
+        if (!confirmRes.ok) {
+          await new Promise(r => setTimeout(r, 1800));
+          confirmRes = await tryConfirm('/api/wager/confirm');
+        }
+        if (!confirmRes.ok) {
+          await new Promise(r => setTimeout(r, 2600));
+          confirmRes = await tryConfirm('/api/wager/confirm');
+        }
+        if (!confirmRes.ok) {
+          const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
+          confirmRes = await tryConfirm(absUrl);
+        }
         if (!confirmRes.ok) {
           const err = await confirmRes.json().catch(() => ({} as any));
           throw new Error(err.error || 'Wager confirmation failed');
