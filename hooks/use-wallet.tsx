@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
 import { useWalletEnv } from "@/contexts/WalletEnvContext"
 
@@ -34,6 +34,28 @@ export function useWallet() {
   const simplifiedWallets = useMemo(() => {
     return (rawWallets || []).map((w: any) => ({ key: safeGet(() => w.adapter?.name, ''), adapter: { name: safeGet(() => w.adapter?.name, '') } }))
   }, [rawWallets])
+
+  const lastAddressRef = useRef<string>('')
+  useEffect(() => {
+    try {
+      const addr = (() => {
+        try {
+          if (!connected || !publicKey) return ''
+          const str = (typeof publicKey === 'string')
+            ? publicKey
+            : (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || ''
+          return String(str || '')
+        } catch {
+          return ''
+        }
+      })()
+      if (addr === lastAddressRef.current) return
+      lastAddressRef.current = addr
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('wallet_address_changed', { detail: addr }))
+      }
+    } catch {}
+  }, [connected, publicKey])
 
   return {
     publicKey,

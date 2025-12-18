@@ -669,8 +669,9 @@ preparePromise.then(() => {
 
     // Handle registration of identity (wallet or guest) to socket connection
     const handleRegisterIdentity = (walletAddress) => {
-      // Normalize to lowercase for consistent identity matching
-      let normalized = (walletAddress && typeof walletAddress === 'string') ? walletAddress.toLowerCase() : walletAddress;
+      // Preserve original (Solana base58 is case-sensitive) and track a lowercase variant for matching
+      let raw = (walletAddress && typeof walletAddress === 'string') ? String(walletAddress) : walletAddress;
+      let normalized = (raw && typeof raw === 'string') ? raw.toLowerCase() : raw;
       // For guest_* identities, allow a stable override from header to avoid duplicate guest ids
       try {
         if (normalized && typeof normalized === 'string' && normalized.startsWith('guest_')) {
@@ -693,10 +694,11 @@ preparePromise.then(() => {
       
       const connection = activeConnections.get(socket.id);
       if (connection) {
-        connection.walletAddress = normalized;
+        connection.walletAddress = raw;
+        connection.walletAddressLower = String(normalized || '').toLowerCase();
         console.log(`✅ Identity ${normalized} registered to socket ${socket.id}`);
-        try { socket.emit('wallet_registered', { walletAddress: normalized }); } catch {}
-        try { socket.emit('identity_registered', { identity: normalized }); } catch {}
+        try { socket.emit('wallet_registered', { walletAddress: raw }); } catch {}
+        try { socket.emit('identity_registered', { identity: raw }); } catch {}
 
         // If this socket had already joined a lobby before registering wallet, refresh counts
         try {
@@ -709,7 +711,8 @@ preparePromise.then(() => {
         // Guard: if there is an older socket with the same identity, clean it up to avoid ghost presence
         try {
           for (const [otherId, otherConn] of activeConnections.entries()) {
-            if (otherId !== socket.id && (otherConn.walletAddress || '').toLowerCase() === normalized) {
+            const otherLower = String(otherConn.walletAddressLower || otherConn.walletAddress || '').toLowerCase();
+            if (otherId !== socket.id && otherLower === normalized) {
               const oldLobby = otherConn.currentLobby;
               console.log(`🧹 Cleaning prior socket ${otherId} for identity ${normalized}${oldLobby ? ` (lobby ${oldLobby})` : ''}`);
               // Disconnect the old socket to prevent duplicate ghosts; disconnect handler will decide lobby removal
@@ -917,11 +920,6 @@ preparePromise.then(() => {
           }
         } catch {}
         
-        // After any join (including when a pre-countdown was cancelled),
-        // immediately re-evaluate readiness so a valid 5s countdown is re-scheduled
-        // when two+ ready players are still present in the lobby.
-        try { await checkLobbyReadyStatus(lobbyId, io); } catch {}
-
         // Update connection data for this lobby
         if (connection) {
           connection.lastLobbyActivity = Date.now();
@@ -939,15 +937,31 @@ preparePromise.then(() => {
           // Preserve previous ready state; secondary confirmation should not reset readiness
           connection.isReady = Boolean(connection.isReady);
           // Track presence
-          if (connection.walletAddress) {
+          if (connection.walletAddress || connection.walletAddressLower) {
             if (!global.lobbyPresence.has(lobbyId)) {
               global.lobbyPresence.set(lobbyId, new Set());
             }
             // Ensure wallet string is lowercase to avoid duplicate variants
-            const addr = String(connection.walletAddress).toLowerCase();
+            const addr = String(connection.walletAddressLower || connection.walletAddress || '').toLowerCase();
             global.lobbyPresence.get(lobbyId).add(addr);
           }
         }
+
+        // Ensure this websocket instance has the player in the in-memory lobby roster.
+        // This mitigates multi-instance load balancing where the browser's /api/lobbies POST
+        // may land on a different instance than the websocket connection.
+        try {
+          const connNow = activeConnections.get(socket.id);
+          const playerId = connNow && connNow.walletAddress ? String(connNow.walletAddress) : null;
+          if (playerId && lobbyId) {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+            await fetch(`${baseUrl}/api/lobbies`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lobbyId, playerId, chickenId: 'default-chicken' })
+            }).catch(() => null);
+          }
+        } catch {}
 
         // Broadcast updated counts (room + global) derived from active connections
         try {
@@ -1000,6 +1014,9 @@ preparePromise.then(() => {
           // Notify others with a diff
           emitRosterDiff(io, lobbyId, 'upsert', entry);
         } catch {}
+
+        // After presence + roster sync, re-evaluate readiness so countdown scheduling uses real humans.
+        try { await checkLobbyReadyStatus(lobbyId, io); } catch {}
       }
     });
 
@@ -1264,14 +1281,15 @@ preparePromise.then(() => {
         // Ensure wallet and lobby are linked immediately to avoid first-join races
         try {
           if (!connection.walletAddress && typeof playerId === 'string') {
-            connection.walletAddress = normalizedPlayerId;
+            connection.walletAddress = String(playerId);
+            connection.walletAddressLower = normalizedPlayerId;
           }
           if (!connection.currentLobby && typeof lobbyId === 'string') {
             connection.currentLobby = lobbyId;
           }
           if (connection.walletAddress && typeof lobbyId === 'string') {
             if (!global.lobbyPresence.has(lobbyId)) global.lobbyPresence.set(lobbyId, new Set());
-            global.lobbyPresence.get(lobbyId).add(String(connection.walletAddress).toLowerCase());
+            global.lobbyPresence.get(lobbyId).add(String(connection.walletAddressLower || connection.walletAddress || '').toLowerCase());
           }
         } catch {}
         

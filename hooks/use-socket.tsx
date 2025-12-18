@@ -49,17 +49,34 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
     const fallbackPath = '/socket.io';
 
+    const normalizeIdentity = (id: unknown): string | null => {
+      try {
+        const s = String(id || '').trim()
+        if (!s) return null
+        // Guest ids are case-insensitive
+        if (s.toLowerCase().startsWith('guest_')) return s.toLowerCase()
+        // EVM addresses are case-insensitive (we store lowercase everywhere)
+        if (/^0x[0-9a-fA-F]{40}$/.test(s)) return s.toLowerCase()
+        // Solana base58 is case-sensitive; preserve original
+        return s
+      } catch {
+        return null
+      }
+    }
+
     const resolveIdentity = (): string | null => {
       try {
         // Prefer current EVM wallet address when available (broadcast elsewhere)
         const evm = (typeof window !== 'undefined') ? (window as any).__cock_wallet__?.evmAddress : null
-        if (evm && typeof evm === 'string' && evm.trim()) return String(evm).toLowerCase()
+        const norm = normalizeIdentity(evm)
+        if (norm) return norm
       } catch {}
       // Fallback to stable guest id
       try {
         if (typeof window !== 'undefined') {
           const gid = localStorage.getItem('guest_id') || (window as any).__guestId
-          if (gid && typeof gid === 'string' && gid.trim()) return String(gid).toLowerCase()
+          const norm = normalizeIdentity(gid)
+          if (norm) return norm
         }
       } catch {}
       return null
@@ -103,8 +120,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         const onWalletAddrChanged = (e: any) => {
           try {
             const raw = (e && e.detail) ? String(e.detail) : null
-            const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
-            if (next) socketInstance.emit('register_identity', String(next).toLowerCase())
+            const next = (raw && raw.trim()) ? normalizeIdentity(raw) : resolveIdentity()
+            if (next) socketInstance.emit('register_identity', String(next))
           } catch {}
         }
         try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}
@@ -186,8 +203,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
             const onWalletAddrChanged = (e: any) => {
               try {
                 const raw = (e && e.detail) ? String(e.detail) : null
-                const next = (raw && raw.trim()) ? raw.toLowerCase() : resolveIdentity()
-                if (next) socketInstance.emit('register_identity', String(next).toLowerCase())
+                const next = (raw && raw.trim()) ? normalizeIdentity(raw) : resolveIdentity()
+                if (next) socketInstance.emit('register_identity', String(next))
               } catch {}
             }
             try { window.addEventListener('wallet_address_changed', onWalletAddrChanged as any) } catch {}

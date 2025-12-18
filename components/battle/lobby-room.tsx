@@ -636,7 +636,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const withRebate = (() => {
           try {
             const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
-            if (network === 'mainnet-beta' && rebate) {
+            const isHelius = /helius/i.test(String(base || ''))
+            if (network === 'mainnet-beta' && rebate && isHelius) {
               const sep = base.includes('?') ? '&' : '?'
               return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
             }
