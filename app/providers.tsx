@@ -31,7 +31,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   const endpoint = (() => {
     try {
       const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || '';
-      if (network === 'mainnet-beta' && rebate) {
+      const isHelius = /helius/i.test(String(endpointBase || ''));
+      if (network === 'mainnet-beta' && rebate && isHelius) {
         const sep = endpointBase.includes('?') ? '&' : '?';
         return `${endpointBase}${sep}rebate-address=${encodeURIComponent(rebate)}`;
       }

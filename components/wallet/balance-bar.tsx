@@ -43,7 +43,8 @@ export default function BalanceBar({ className = "", compact = false, pollInterv
             const url = (() => {
               try {
                 const rebate = process.env.NEXT_PUBLIC_HELIUS_REBATE_ADDRESS || ''
-                if (net === 'mainnet-beta' && rebate) {
+                const isHelius = /helius/i.test(String(base || ''))
+                if (net === 'mainnet-beta' && rebate && isHelius) {
                   const sep = base.includes('?') ? '&' : '?'
                   return `${base}${sep}rebate-address=${encodeURIComponent(rebate)}`
                 }
