@@ -625,9 +625,9 @@ export default function BattleArena() {
 
                         {/* Wallet Required Badge */}
                         {isPaid && (
-                          <div className={`absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border border-white/10 ${isPaidLocked ? 'opacity-80' : 'opacity-95'}`}>
-                            <Wallet className="h-3 w-3" />
-                            WALLET
+                          <div className={`absolute top-2 left-2 bg-white/5 backdrop-blur-md text-white/75 px-1.5 py-0.5 rounded-full text-[9px] font-semibold flex items-center gap-1 border border-white/10 ${isPaidLocked ? 'opacity-70' : 'opacity-90'}`}>
+                            <Wallet className="h-2.5 w-2.5" />
+                            Wallet
                           </div>
                         )}
                         
