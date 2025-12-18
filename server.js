@@ -2231,6 +2231,7 @@ preparePromise.then(() => {
               st.hp[chosen] = nextHp;
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId: chosen, hp: nextHp, isAlive }); } catch {}
+              try { io.to(targetRoom).emit('play_sound', { key: isAlive ? 'punch' : 'strong_punch', targetId: chosen, by: wallet }); } catch {}
               try { maybeResolveArenaMatchEnd(matchId, io); } catch {}
             }
           }
@@ -2308,11 +2309,12 @@ preparePromise.then(() => {
               store.hp[tKey] = nextHp;
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId, hp: nextHp, isAlive }); } catch {}
+              try { io.to(targetRoom).emit('play_sound', { key: isAlive ? 'punch' : 'strong_punch', targetId: tKey, by: wallet }); } catch {}
               try { maybeResolveArenaMatchEnd(matchId, io); } catch {}
             }
           }
         } catch {}
-        io.to(targetRoom).emit('player_damage', { targetId, amount, by: wallet, ts: Date.now() });
+        io.to(targetRoom).emit('player_damage', { targetId: String(targetId || '').toLowerCase(), amount, by: wallet, ts: Date.now() });
       } catch {}
     });
 

@@ -568,7 +568,7 @@ function SceneContent({
 
   // Track my own player id for damage overlay checks
   const selfIdRef = useRef<string | null>(null)
-  useEffect(() => { try { selfIdRef.current = playerChicken?.id || null } catch {} }, [playerChicken])
+  useEffect(() => { try { selfIdRef.current = playerChicken?.id ? String(playerChicken.id).toLowerCase() : null } catch {} }, [playerChicken])
 
   // Lightweight screen red flash when the local player is hit
   const [selfHitActive, setSelfHitActive] = useState(false)
@@ -630,7 +630,8 @@ function SceneContent({
     } catch {}
     const onPlayerState = (payload: any) => {
       try {
-        const id = String(payload?.playerId || '')
+        const idRaw = String(payload?.playerId || '')
+        const id = idRaw ? idRaw.toLowerCase() : ''
         if (!id) return
         if (!remoteHumansRef.current[id]) {
           remoteHumansRef.current[id] = { pos: new THREE.Vector3(), rotY: 0, isPecking: false, ts: 0 }
@@ -666,10 +667,9 @@ function SceneContent({
     const lastAppliedDamageRef: Record<string, number> = Object.create(null)
     const onRemotePlayerDamage = (payload: any) => {
       try {
-        const targetId = String(payload?.targetId || '')
-        const amount = Math.max(1, Math.min(3, Number(payload?.amount)||1))
+        const targetIdRaw = String(payload?.targetId || '')
+        const targetId = targetIdRaw ? targetIdRaw.toLowerCase() : ''
         if (!targetId || !onPlayerDamage) return
-        const byId = typeof payload?.by === 'string' ? payload.by : undefined
         // Client-side de-dupe by target
         const now = Date.now()
         if ((lastAppliedDamageRef[targetId]||0) && now - (lastAppliedDamageRef[targetId]||0) < 120) return
@@ -799,7 +799,7 @@ function SceneContent({
             const prev = lastHpRef.current[key]
             if (typeof prev === 'number') {
               if (hp < prev) {
-                try { (remoteHitUntilRef.current as any)[id] = Date.now() + 450 } catch {}
+                try { (remoteHitUntilRef.current as any)[key] = Date.now() + 450 } catch {}
               }
             }
             // Always record latest HP
@@ -1374,14 +1374,15 @@ function SceneContent({
         <ChickenInstances
           chickens={players.filter(p => p.isAlive && !p.isPlayer).map(p => {
             // For non-AI humans, blend towards latest networked transforms
-            if (!p.isAi && p.id && remoteHumansRef.current[p.id]) {
-              const rec = remoteHumansRef.current[p.id]
+            const pKey = p.id ? String(p.id).toLowerCase() : ''
+            if (!p.isAi && pKey && remoteHumansRef.current[pKey]) {
+              const rec = remoteHumansRef.current[pKey]
               const blended = {
                 ...p,
                 position: rec.pos.clone(),
                 rotation: new THREE.Euler(0, rec.rotY, 0),
                 isAi: false,
-                isJumping: Boolean((rec as any).isJumping) || ((remoteJumpUntilRef.current[p.id]||0) > Date.now()),
+                isJumping: Boolean((rec as any).isJumping) || ((remoteJumpUntilRef.current[pKey]||0) > Date.now()),
               } as PlayerStatus
               return blended
             }
@@ -1426,7 +1427,7 @@ function SceneContent({
               isPecking={selfIsPecking}
               isWalking={isWalking || Math.hypot(selfVelocity.current.x, selfVelocity.current.z) > 0.05}
               isJumping={selfIsJumping}
-              isHitFlashing={Boolean((playerChicken as any)?.isHitFlashing) || (((remoteHitUntilRef.current||{})[playerChicken.id]||0) > Date.now())}
+              isHitFlashing={Boolean((playerChicken as any)?.isHitFlashing) || (((remoteHitUntilRef.current||{})[String(playerChicken.id||'').toLowerCase()]||0) > Date.now())}
               disableBobbing={true}
               isPlayer={true}
               health={playerChicken.hp}
@@ -1643,11 +1644,11 @@ function ChickenInstances({
             playerRef.current.getWorldPosition(v)
             return v
           }
-          } catch {}
+        } catch {}
         try {
           const g = groupsRef.current[id]
           if (g) return g.position.clone()
-      } catch {}
+        } catch {}
         return null
       }
 
@@ -1663,7 +1664,8 @@ function ChickenInstances({
         if (!g) continue
 
         // For network humans, pull last known transform and smooth
-        const net = remoteHumans && chicken.id ? remoteHumans[chicken.id] : undefined
+        const netKey = chicken.id ? String(chicken.id).toLowerCase() : ''
+        const net = remoteHumans && netKey ? (remoteHumans as any)[netKey] : undefined
         const pos = (net && net.pos ? net.pos.clone() : g.position.clone())
         // Keep network-reported Y to show jumps; clamp only if absurd
         if (!isFinite(pos.y) || pos.y < -5 || pos.y > 50) pos.y = 0.85
@@ -1854,7 +1856,7 @@ function ChickenInstances({
                 isWalking={Math.hypot((groupsRef.current[chicken.id]?.userData?.vx||0), (groupsRef.current[chicken.id]?.userData?.vz||0)) > 0.05}
                 isPecking={(lastPeckRef.current[chicken.id] || 0) > (Date.now() - 300)}
                 isJumping={Boolean((chicken as any).isJumping)}
-                isHitFlashing={Boolean(chicken.isHitFlashing) || (((remoteHitUntil||{})[chicken.id]||0) > Date.now())}
+                isHitFlashing={Boolean(chicken.isHitFlashing) || (((remoteHitUntil||{})[String(chicken.id||'').toLowerCase()]||0) > Date.now())}
                 isDying={!chicken.isAlive} 
                 health={chicken.hp}
                 maxHealth={chicken.maxHp}

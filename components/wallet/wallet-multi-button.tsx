@@ -6,8 +6,9 @@ import { useUsername, getDisplayName } from "@/hooks/use-username"
 import { truncateAddress } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Copy, ChevronDown, LogOut, Wallet } from "lucide-react"
+import { Copy, ChevronDown, LogOut, Wallet, User } from "lucide-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { useRouter } from "next/navigation"
 
 export interface WalletMultiButtonProps {
   className?: string
@@ -15,6 +16,7 @@ export interface WalletMultiButtonProps {
 
 export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
   const { connected, publicKey, disconnect } = useWallet()
+  const router = useRouter()
   const modal = (() => { try { return useWalletModal() as any } catch { return { setVisible: () => {} } as any } })()
   const address = useMemo(() => {
     try {
@@ -54,6 +56,25 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[12rem] z-[100010]">
+        <DropdownMenuItem
+          onClick={() => {
+            try {
+              router.push('/profile')
+            } catch {}
+          }}
+        >
+          <User className="mr-2 h-4 w-4" /> My Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            try {
+              if (!address) return
+              router.push(`/u/${encodeURIComponent(address)}`)
+            } catch {}
+          }}
+        >
+          <User className="mr-2 h-4 w-4" /> Public Profile
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onCopy}>
           <Copy className="mr-2 h-4 w-4" /> Copy Address
         </DropdownMenuItem>
