@@ -248,11 +248,13 @@ async function handleWagerConfirmation(req: NextRequest) {
         } catch {}
         return base
       })()
-      const connection = new Connection(rpcUrl)
-      // Wait for confirmation (HTTP polling; avoids websocket failures)
+      const connection = new Connection(rpcUrl, { commitment: 'confirmed' } as any)
+      const maxWaitMs = parseInt(process.env.WAGER_CONFIRM_TIMEOUT_MS || '90000', 10)
+      const pollMs = 1500
+      let tx: any = null
+
+      // Poll status first, then fetch transaction (race-safe).
       try {
-        const maxWaitMs = parseInt(process.env.WAGER_CONFIRM_TIMEOUT_MS || '90000', 10)
-        const pollMs = 1500
         const startedAt = Date.now()
         while ((Date.now() - startedAt) < maxWaitMs) {
           try {
@@ -260,12 +262,23 @@ async function handleWagerConfirmation(req: NextRequest) {
             const s0: any = st?.value?.[0]
             if (s0?.err) break
             const cs = String(s0?.confirmationStatus || '')
-            if (cs === 'confirmed' || cs === 'finalized') break
+            if (cs === 'confirmed' || cs === 'finalized') {
+              try {
+                tx = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 } as any)
+              } catch {}
+              if (tx) break
+            }
           } catch {}
           await new Promise(r => setTimeout(r, pollMs))
         }
       } catch {}
-      const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 })
+
+      if (!tx) {
+        try {
+          tx = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 } as any)
+        } catch {}
+      }
+
       if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 400 })
 
       const amountLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
@@ -277,37 +290,37 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (!toExpected) {
         return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 })
       }
-      // Scan instructions for a matching SystemProgram transfer
-      const found = (() => {
-        try {
-          const meta = tx.meta
-          const message = tx.transaction.message
-          if (!meta || !message) return false
+
+      const sender = new PublicKey(playerPublicKey).toBase58()
+      let found = false
+      try {
+        const meta = tx.meta
+        const message = tx.transaction.message
+        if (meta && message) {
           const pre = meta.preBalances
           const post = meta.postBalances
           const acctKeys = message.getAccountKeys().staticAccountKeys
-          // Find first transfer that matches amount and recipient
           for (let i = 0; i < acctKeys.length; i++) {
             const before = pre[i]
             const after = post[i]
             const delta = (after - before)
-            if (delta === amountLamports) {
-              const recipient = acctKeys[i].toBase58()
-              if (recipient !== toExpected) continue
-              // Validate payer/source matches sender wallet
-              const sender = new PublicKey(playerPublicKey).toBase58()
-              // Source lost lamports
-              for (let j = 0; j < acctKeys.length; j++) {
-                if ((pre[j] - post[j]) >= amountLamports) {
-                  const from = acctKeys[j].toBase58()
-                  if (from === sender) return true
+            if (delta !== amountLamports) continue
+            const recipient = acctKeys[i].toBase58()
+            if (recipient !== toExpected) continue
+            for (let j = 0; j < acctKeys.length; j++) {
+              if ((pre[j] - post[j]) >= amountLamports) {
+                const from = acctKeys[j].toBase58()
+                if (from === sender) {
+                  found = true
+                  break
                 }
               }
             }
+            if (found) break
           }
-          return false
-        } catch { return false }
-      })()
+        }
+      } catch {}
+
       if (!found) {
         return NextResponse.json({ error: 'Wager transfer not found or mismatched' }, { status: 400 })
       }
