@@ -143,8 +143,10 @@ export async function POST(req: NextRequest) {
 
     // Block wagered matches for now
     try {
-      const isPaid = (lobby.amount || 0) > 0;
-      if (isPaid) {
+      const amt = Number(lobby.amount || 0);
+      const isPaid = amt > 0;
+      const isAllowedPaidTier = amt === 0.01 || amt === 0.05;
+      if (isPaid && !isAllowedPaidTier) {
         return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
       }
     } catch {}

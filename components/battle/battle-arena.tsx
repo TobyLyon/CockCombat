@@ -562,7 +562,9 @@ export default function BattleArena() {
                       const live = liveCounts[lobby.id]
                       const playerCount = live ? Math.max(0, Number(live.liveHumans) || 0) : 0
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
-                      const isPaid = (lobby.amount || 0) > 0
+                      const amt = Number(lobby.amount || 0)
+                      const isPaid = amt > 0
+                      const isPaidLocked = isPaid && !(amt === 0.01 || amt === 0.05)
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
                       const isTutorialLobby = false
                       return (
@@ -578,7 +580,7 @@ export default function BattleArena() {
                           ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
                         min-h-[280px]
                         `}
-                        onClick={() => !isJoining && !isLocked && !isPaid && handleJoinLobby(lobby)}
+                        onClick={() => !isJoining && !isLocked && !isPaidLocked && handleJoinLobby(lobby)}
                       >
                         {/* Subtle gradient overlay on hover */}
                         <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${lobby.highRoller ? 'from-red-400/10 to-red-700/10' : 'from-white/8 to-white/0'}`} />
@@ -639,11 +641,11 @@ export default function BattleArena() {
                           <div className="mt-auto grid grid-cols-1 gap-2">
                             <Button
                               className={`w-full font-bold py-2.5 px-3 lg:px-4 rounded-lg transition-all duration-300 border text-sm md:text-base flex items-center justify-center gap-2
-                                ${isLocked || isPaid ? 'bg-white/5 text-white/50 border-white/10 cursor-not-allowed' : 'bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner'}`}
-                              onClick={(e) => { e.stopPropagation(); if (!isJoining && !isLocked && !isPaid) handleJoinLobby(lobby); }}
-                              disabled={isJoining === lobby.id || isLocked || isPaid}
+                                ${isLocked || isPaidLocked ? 'bg-white/5 text-white/50 border-white/10 cursor-not-allowed' : 'bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner'}`}
+                              onClick={(e) => { e.stopPropagation(); if (!isJoining && !isLocked && !isPaidLocked) handleJoinLobby(lobby); }}
+                              disabled={isJoining === lobby.id || isLocked || isPaidLocked}
                             >
-                              {isPaid
+                              {isPaidLocked
                                   ? 'COMING SOON'
                                   : isJoining === lobby.id 
                                     ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
