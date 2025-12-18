@@ -282,11 +282,19 @@ function SceneContent({
       try {
         const startAt = (window as any)?.__last_round_start_at
         if (typeof startAt === 'number' && startAt > Date.now()) {
-          const adj = startAt + serverOffsetRef.current
-          roundStartAtMsRef.current = adj
-          freezeUntilRef.current = adj
-          invulnerableUntilRef.current = startAt + 1000
-          setSyncedCountdown(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+          const off = (() => {
+            try {
+              const wOff = Number((window as any)?.__server_time_offset_ms || 0)
+              if (Number.isFinite(wOff) && wOff !== 0) return wOff
+            } catch {}
+            return serverOffsetRef.current
+          })()
+          // Convert server epoch -> client epoch using offset (serverNow - clientNow)
+          const clientStartAt = startAt - off
+          roundStartAtMsRef.current = clientStartAt
+          freezeUntilRef.current = clientStartAt
+          invulnerableUntilRef.current = clientStartAt + 1000
+          setSyncedCountdown(Math.max(0, Math.ceil((clientStartAt - Date.now()) / 1000)))
         }
       } catch {}
     }
@@ -693,10 +701,10 @@ function SceneContent({
         }
         const startAt = Number((payload as any)?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
-          const adj = startAt + serverOffsetRef.current
-          roundStartAtMsRef.current = adj
-          freezeUntilRef.current = adj
-          invulnerableUntilRef.current = startAt + 1000
+          const clientStartAt = startAt - serverOffsetRef.current
+          roundStartAtMsRef.current = clientStartAt
+          freezeUntilRef.current = clientStartAt
+          invulnerableUntilRef.current = clientStartAt + 1000
         }
         // Reset HP tracking on new round to avoid stale flashes
         try { lastHpRef.current = Object.create(null) } catch {}
@@ -711,10 +719,10 @@ function SceneContent({
         }
         const startAt = Number((payload as any)?.roundStartAtEpochMs) || 0
         if (startAt > 0) {
-          const adj = startAt + serverOffsetRef.current
-          roundStartAtMsRef.current = adj
-          freezeUntilRef.current = adj
-          invulnerableUntilRef.current = startAt + 1000
+          const clientStartAt = startAt - serverOffsetRef.current
+          roundStartAtMsRef.current = clientStartAt
+          freezeUntilRef.current = clientStartAt
+          invulnerableUntilRef.current = clientStartAt + 1000
         }
       } catch {}
     }
@@ -728,12 +736,10 @@ function SceneContent({
         setSyncedCountdown(Math.max(0, c))
         // If we never received a startAt epoch, estimate it from the countdown
         if (!roundStartAtMsRef.current || roundStartAtMsRef.current < Date.now()) {
-          const estimate = Date.now() + Math.max(0, c) * 1000
-          const adj = estimate + serverOffsetRef.current
-          roundStartAtMsRef.current = adj
-          freezeUntilRef.current = adj
-          invulnerableUntilRef.current = estimate + 1000
-          try { (window as any).__last_round_start_at = estimate } catch {}
+          const estimateClientStartAt = Date.now() + Math.max(0, c) * 1000
+          roundStartAtMsRef.current = estimateClientStartAt
+          freezeUntilRef.current = estimateClientStartAt
+          invulnerableUntilRef.current = estimateClientStartAt + 1000
         }
       } catch {}
     }
