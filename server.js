@@ -232,9 +232,19 @@ preparePromise.then(() => {
     path: '/api/socketio',
     addTrailingSlash: false,
     cors: (() => {
-      const allow = [process.env.NEXT_PUBLIC_APP_URL, process.env.RENDER_EXTERNAL_URL, 'http://localhost:3000']
+      const allow = [process.env.NEXT_PUBLIC_APP_URL, process.env.RENDER_EXTERNAL_URL, 'http://localhost:3000', 'https://www.cockcombat.xyz']
         .filter(Boolean);
-      return { origin: allow, methods: ['GET','POST'], credentials: true };
+      const origin = (o, cb) => {
+        try {
+          if (!o) return cb(null, true);
+          if (allow.includes(o)) return cb(null, true);
+          const u = new URL(o);
+          const h = String(u.hostname || '').toLowerCase();
+          if (h === 'www.cockcombat.xyz' || h.endsWith('.cockcombat.xyz')) return cb(null, true);
+        } catch {}
+        return cb(new Error('Not allowed by CORS'), false);
+      };
+      return { origin, methods: ['GET','POST'], credentials: true };
     })(),
     // Performance optimizations
     pingTimeout: 60000,        // 60 seconds before considering connection dead

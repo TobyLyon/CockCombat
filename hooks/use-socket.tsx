@@ -25,13 +25,25 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     // Initialize Socket.io connection with custom server
     console.log('🔌 Initializing Socket.io connection...');
     
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+    const socketUrl = (() => {
+      const explicit = process.env.NEXT_PUBLIC_SOCKET_URL
+      if (explicit && explicit.trim()) return explicit.trim()
+      try {
+        if (typeof window !== 'undefined') {
+          const host = window.location.hostname
+          if (host === 'www.cockcombat.xyz' || host.endsWith('.cockcombat.xyz')) {
+            return 'https://cockcombat.onrender.com'
+          }
+        }
+      } catch {}
+      return undefined
+    })();
     const isProd = process.env.NODE_ENV === 'production';
     // Allow env override of transports; default to ws-only in prod and polling+ws in dev
     const rawTransports = process.env.NEXT_PUBLIC_SOCKET_TRANSPORTS;
     const transports = (rawTransports && rawTransports.trim())
       ? rawTransports.split(',').map(s => s.trim()).filter(Boolean)
-      : (isProd ? ['websocket'] : ['polling', 'websocket']);
+      : (isProd ? ['polling', 'websocket'] : ['polling', 'websocket']);
 
     // Attempt connection with configured path; if it errors with 404, retry with default '/socket.io'
     const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
