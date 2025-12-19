@@ -201,7 +201,9 @@ export default function NavBar() {
         {isMounted && <BalanceBar compact className="hidden sm:flex" />}
 
         {/* Wallet */}
-        {isMounted && <WalletMultiButton className="shrink-0" />}
+        {isMounted && (
+          <WalletMultiButton className="h-8 px-2 text-[11px] min-w-0 max-w-[9.5rem] sm:h-10 sm:px-4 sm:text-sm sm:max-w-none" />
+        )}
       </div>
     </header>
   )

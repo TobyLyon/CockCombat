@@ -41,8 +41,9 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
 
   if (!connected) {
     return (
-      <Button className={className} onClick={onConnect}>
-        <Wallet className="mr-2 h-4 w-4" /> Connect Wallet
+      <Button className={`min-w-0 ${className}`} onClick={onConnect}>
+        <Wallet className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+        <span className="min-w-0 truncate">Connect</span>
       </Button>
     )
   }
@@ -50,9 +51,10 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className={className}>
-          <Wallet className="mr-2 h-4 w-4" /> {display}
-          <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
+        <Button className={`min-w-0 ${className}`}>
+          <Wallet className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+          <span className="min-w-0 truncate">{display}</span>
+          <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-70 sm:ml-2 sm:h-4 sm:w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[12rem] z-[100010]">
