@@ -269,7 +269,10 @@ export default function PixelGameInterface() {
   }, [])
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-b from-[#87CEEB] via-[#B0D4E3] to-[#E8F4F8] flex flex-col">
+    <div
+      className="w-full overflow-hidden relative bg-gradient-to-b from-[#87CEEB] via-[#B0D4E3] to-[#E8F4F8] flex flex-col"
+      style={{ height: 'calc(100vh - var(--cc-nav-h, 56px))' }}
+    >
       {/* Epic Title */}
       <div className="absolute top-4 sm:top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
         <div className="relative inline-block">
@@ -363,7 +366,7 @@ export default function PixelGameInterface() {
                   </div>
 
       {/* Mobile-only action buttons (kept above footer for clean spacing) */}
-      <div className="absolute left-1/2 -translate-x-1/2 z-30 sm:hidden flex items-center justify-center gap-2 pointer-events-auto bottom-[calc(env(safe-area-inset-bottom)+9.5rem)]">
+      <div className="absolute left-1/2 -translate-x-1/2 z-30 sm:hidden flex items-center justify-center gap-2 pointer-events-auto bottom-[calc(env(safe-area-inset-bottom)+7.25rem)]">
         {/* Wallet connect button (chain aware) */}
         <WalletMultiButton className="h-8 px-3 text-xs" />
 
@@ -391,8 +394,8 @@ export default function PixelGameInterface() {
       </div>
 
       {/* Mobile-only socials and token block */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] max-w-md sm:hidden pointer-events-auto pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
-        <div className="rounded-lg border border-white/10 bg-white/10 backdrop-blur-sm p-3 shadow">
+      <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+0.25rem)] left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] max-w-md sm:hidden pointer-events-auto pb-0">
+        <div className="rounded-lg border border-white/10 bg-white/10 backdrop-blur-sm p-2.5 shadow">
           <div className="flex items-center gap-2 flex-nowrap">
             <button
               onClick={() => { handleCopyTokenAddress(); playSound("click") }}
