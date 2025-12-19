@@ -19,14 +19,14 @@ export function useWalletAuth() {
     }
   }, [connected])
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (): Promise<string | null> => {
     if (!connected || !publicKey) {
       toast.error("Please connect your wallet first.")
-      return false
+      return null
     }
     if (!signMessage) {
       toast.error("Your wallet does not support message signing.")
-      return false
+      return null
     }
     
     setLoading(true)
@@ -70,13 +70,13 @@ export function useWalletAuth() {
 
       setSessionId(verifyJson.sessionId)
       setAuthenticated(true)
-      return true
+      return verifyJson.sessionId || null
     } catch (error) {
       console.error('Authentication error', error)
       toast.error('Authentication failed.', {
         description: error instanceof Error ? error.message : 'An unexpected error occurred.'
       })
-      return false
+      return null
     } finally {
       setLoading(false)
     }
@@ -94,12 +94,12 @@ export function useWalletAuth() {
         }).catch(() => null)
       }
     } finally {
-    setAuthenticated(false)
+      setAuthenticated(false)
       setSessionId(null)
-    await new Promise(resolve => setTimeout(resolve, 300))
-    setLoading(false)
-  }
+      await new Promise(resolve => setTimeout(resolve, 300))
+      setLoading(false)
+    }
   }, [sessionId, publicKey])
 
-  return { authenticated, loading, signIn, signOut }
-} 
+  return { authenticated, loading, sessionId, signIn, signOut }
+}

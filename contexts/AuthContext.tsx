@@ -6,7 +6,8 @@ import { useWalletAuth as useWalletAuthHook } from '@/hooks/use-wallet-auth';
 interface AuthContextType {
   authenticated: boolean;
   loading: boolean;
-  signIn: () => Promise<boolean>;
+  sessionId: string | null;
+  signIn: () => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 

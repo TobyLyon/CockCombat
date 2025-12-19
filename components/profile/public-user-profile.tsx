@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Loader2 } from "lucide-react"
+import { ExternalLink, Loader2 } from "lucide-react"
 
 type ProfileRow = {
   wallet_address: string
@@ -88,9 +88,9 @@ function parseLamports(v: number | string | null | undefined): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function getSolanaExplorerTxUrl(sig: string): string {
+function getSolscanTxUrl(sig: string): string {
   const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet"
-  const base = `https://explorer.solana.com/tx/${encodeURIComponent(sig)}`
+  const base = `https://solscan.io/tx/${encodeURIComponent(sig)}`
   if (network === "mainnet-beta" || network === "mainnet") return base
   return `${base}?cluster=${encodeURIComponent(network)}`
 }
@@ -111,10 +111,10 @@ function StatCard({
           ? "border-green-600/40 bg-green-900/20"
           : highlight === "negative"
             ? "border-red-600/40 bg-red-900/20"
-            : "border-purple-700/50 bg-purple-800/40"
+            : "border-white/10 bg-white/5"
       }`}
     >
-      <div className="text-sm text-purple-300">{title}</div>
+      <div className="text-sm text-white/60">{title}</div>
       <div className="text-2xl font-bold">{value}</div>
     </div>
   )
@@ -179,7 +179,7 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-yellow-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-white/70" />
       </div>
     )
   }
@@ -188,7 +188,7 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
     return (
       <div className="text-center py-10">
         <p className="text-xl mb-2">Failed to load profile</p>
-        <p className="text-sm text-purple-300">{error}</p>
+        <p className="text-sm text-white/60">{error}</p>
       </div>
     )
   }
@@ -199,7 +199,7 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
   const payments = data?.ledger?.payments || []
 
   return (
-    <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-700/40 backdrop-blur-sm">
+    <div className="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-md">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div className="flex items-center gap-4">
           <Avatar className="h-14 w-14 ring-2 ring-white/20">
@@ -211,8 +211,8 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
           </Avatar>
           <div>
             <h2 className="text-2xl font-bold">{profile?.username || "Player"}</h2>
-            <p className="text-xs text-purple-300">Wallet: {shortWallet(walletAddress)}</p>
-            {profile?.bio && <p className="text-xs text-purple-200/90 mt-1 max-w-prose">{profile.bio}</p>}
+            <p className="text-xs text-white/60">Wallet: {shortWallet(walletAddress)}</p>
+            {profile?.bio && <p className="text-xs text-white/70 mt-1 max-w-prose">{profile.bio}</p>}
           </div>
         </div>
       </div>
@@ -229,20 +229,20 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
       </div>
 
       <Tabs defaultValue="matches" className="mb-2">
-        <TabsList className="bg-purple-800/40 border border-purple-700/50">
-          <TabsTrigger value="matches" className="data-[state=active]:bg-purple-700">
+        <TabsList className="bg-white/5 border border-white/10">
+          <TabsTrigger value="matches" className="data-[state=active]:bg-white/10">
             Match History
           </TabsTrigger>
-          <TabsTrigger value="deposits" className="data-[state=active]:bg-purple-700">
+          <TabsTrigger value="deposits" className="data-[state=active]:bg-white/10">
             Wagers
           </TabsTrigger>
-          <TabsTrigger value="payments" className="data-[state=active]:bg-purple-700">
+          <TabsTrigger value="payments" className="data-[state=active]:bg-white/10">
             Payouts & Refunds
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="matches" className="pt-4">
-          <div className="bg-purple-800/30 rounded-lg divide-y divide-purple-700/40">
+          <div className="bg-white/5 rounded-lg divide-y divide-white/10">
             {matches.map((m) => {
               const winner = String(m.winner_wallet || "")
               const isWin = winner && (winner === walletAddress || winner.toLowerCase() === walletAddress.toLowerCase())
@@ -254,47 +254,58 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
                     <div className={`w-3 h-3 rounded-full ${isWin ? "bg-green-500" : "bg-red-500"}`}></div>
                     <div>
                       <div className="font-medium">Match {String(m.id).slice(0, 8)}…</div>
-                      <div className="text-sm text-purple-300">{endedAt || startedAt}</div>
+                      <div className="text-sm text-white/60">{endedAt || startedAt}</div>
                     </div>
                   </div>
-                  <div className={isWin ? "text-yellow-400 font-bold" : "text-purple-300"}>
+                  <div className={isWin ? "text-green-400 font-semibold" : "text-white/60"}>
                     {isWin ? "Win" : "Loss"}
                   </div>
                 </div>
               )
             })}
-            {matches.length === 0 && <div className="p-3 text-sm text-purple-300">No matches recorded.</div>}
+            {matches.length === 0 && <div className="p-3 text-sm text-white/60">No matches recorded.</div>}
           </div>
         </TabsContent>
 
         <TabsContent value="deposits" className="pt-4">
-          <Card className="bg-purple-800/40 border-purple-700/50">
+          <Card className="bg-white/5 border-white/10">
             <CardContent className="p-4">
-              <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+              <div className="bg-white/5 rounded-lg divide-y divide-white/10">
                 {deposits.map((d) => {
                   const lamports = parseLamports(d.expected_lamports)
                   const sol = lamportsToSol(lamports)
                   const t = d.created_at ? new Date(d.created_at).toLocaleString() : ""
+                  const sig = String(d.deposit_signature || '').trim()
                   return (
                     <div key={d.id} className="p-3 flex items-center justify-between text-sm">
                       <div>
-                        <div className="text-purple-200">{d.status}</div>
-                        <div className="text-xs text-purple-300">{t}</div>
+                        <div className="text-white/80">{d.status}</div>
+                        <div className="text-xs text-white/60">{t}</div>
+                        {sig && (
+                          <a
+                            className="text-xs text-white/60 underline inline-flex items-center gap-1"
+                            href={getSolscanTxUrl(sig)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Solscan <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
                       </div>
-                      <div className="text-yellow-400">{sol.toFixed(4)} SOL</div>
+                      <div className="text-white/80">{sol.toFixed(4)} SOL</div>
                     </div>
                   )
                 })}
-                {deposits.length === 0 && <div className="p-3 text-sm text-purple-300">No wagers yet.</div>}
+                {deposits.length === 0 && <div className="p-3 text-sm text-white/60">No wagers yet.</div>}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="payments" className="pt-4">
-          <Card className="bg-purple-800/40 border-purple-700/50">
+          <Card className="bg-white/5 border-white/10">
             <CardContent className="p-4">
-              <div className="bg-purple-900/30 rounded-lg divide-y divide-purple-700/40">
+              <div className="bg-white/5 rounded-lg divide-y divide-white/10">
                 {payments.map((p) => {
                   const lamports = Math.max(
                     0,
@@ -302,31 +313,31 @@ export default function PublicUserProfile({ walletAddress }: { walletAddress: st
                   )
                   const sol = lamportsToSol(lamports)
                   const t = p.created_at ? new Date(p.created_at).toLocaleString() : ""
-                  const sig = p.tx_hash
+                  const sig = String(p.tx_hash || '').trim()
                   return (
                     <div key={p.op_id} className="p-3 flex items-center justify-between text-sm">
                       <div>
-                        <div className="text-purple-200">{p.type}</div>
-                        <div className="text-xs text-purple-300">{t}</div>
-                        <div className="text-xs text-purple-400">{p.state}</div>
+                        <div className="text-white/80">{p.type}</div>
+                        <div className="text-xs text-white/60">{t}</div>
+                        <div className="text-xs text-white/50">{p.state}</div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className={p.type === "refund" ? "text-green-400" : "text-yellow-400"}>{sol.toFixed(4)} SOL</div>
+                        <div className={p.type === "refund" ? "text-green-400" : "text-white/80"}>{sol.toFixed(4)} SOL</div>
                         {sig && (
                           <a
-                            className="text-xs text-purple-200 underline"
-                            href={getSolanaExplorerTxUrl(sig)}
+                            className="text-xs text-white/60 underline inline-flex items-center gap-1"
+                            href={getSolscanTxUrl(sig)}
                             target="_blank"
                             rel="noreferrer"
                           >
-                            View
+                            Solscan <ExternalLink className="h-3 w-3" />
                           </a>
                         )}
                       </div>
                     </div>
                   )
                 })}
-                {payments.length === 0 && <div className="p-3 text-sm text-purple-300">No payouts/refunds recorded yet.</div>}
+                {payments.length === 0 && <div className="p-3 text-sm text-white/60">No payouts/refunds recorded yet.</div>}
               </div>
             </CardContent>
           </Card>

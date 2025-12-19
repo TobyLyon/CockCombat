@@ -102,7 +102,10 @@ export type Transaction = {
   amount: number
   timestamp: string
   related_entity_id?: string
+  match_result_id?: string
   description?: string
+  status?: string
+  blockchain_signature?: string
 }
 
 export type Achievement = {

@@ -38,18 +38,19 @@ async function handleProfileCreation(req: NextRequest) {
     const { username, walletAddress, sessionId } = parsed.data;
 
     // Require authentication (signature verification)
-    if (sessionId) {
-      const isValidSession = await authService.validateSession(sessionId, walletAddress);
-      if (!isValidSession) {
-        return NextResponse.json({
-          error: 'Invalid or expired session',
-          message: 'Please sign in again',
-        }, { status: 401 });
-      }
-    } else {
-      // Allow profile creation without session for backwards compatibility,
-      // but this should eventually be required
-      console.warn(`⚠️  Profile creation without session for ${walletAddress}`);
+    if (!sessionId) {
+      return NextResponse.json({
+        error: 'Authentication required',
+        message: 'Please sign in again',
+      }, { status: 401 });
+    }
+
+    const isValidSession = await authService.validateSession(sessionId, walletAddress);
+    if (!isValidSession) {
+      return NextResponse.json({
+        error: 'Invalid or expired session',
+        message: 'Please sign in again',
+      }, { status: 401 });
     }
 
     // Check if username is unique

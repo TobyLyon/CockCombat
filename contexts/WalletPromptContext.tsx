@@ -48,8 +48,8 @@ export function WalletPromptProvider({ children }: { children: ReactNode }) {
           setVisible(true);
         }
       } else if (!authenticated) {
-        const success = await signIn();
-        if (success && onConnectAction.current) {
+        const sid = await signIn();
+        if (sid && onConnectAction.current) {
           onConnectAction.current();
           onConnectAction.current = null;
         }

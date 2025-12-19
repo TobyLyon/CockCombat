@@ -63,17 +63,7 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
             } catch {}
           }}
         >
-          <User className="mr-2 h-4 w-4" /> My Profile
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            try {
-              if (!address) return
-              router.push(`/u/${encodeURIComponent(address)}`)
-            } catch {}
-          }}
-        >
-          <User className="mr-2 h-4 w-4" /> Public Profile
+          <User className="mr-2 h-4 w-4" /> Profile
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onCopy}>
           <Copy className="mr-2 h-4 w-4" /> Copy Address

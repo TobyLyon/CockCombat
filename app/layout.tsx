@@ -59,7 +59,7 @@ export default function RootLayout({
       <head>
         {/* Add any custom head tags here */}
       </head>
-      <body>
+      <body className="min-h-screen h-screen overflow-hidden">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -68,8 +68,10 @@ export default function RootLayout({
         >
           <Providers>
             <GameStateProvider>
-              <NavBar />
-              <main>{children}</main>
+              <div className="min-h-screen h-screen flex flex-col">
+                <NavBar />
+                <main className="flex-1 overflow-y-auto">{children}</main>
+              </div>
             </GameStateProvider>
           </Providers>
         </ThemeProvider>

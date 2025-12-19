@@ -14,6 +14,7 @@ import { useState } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface ProfileSetupModalProps {
   isOpen: boolean
@@ -27,6 +28,7 @@ export function ProfileSetupModal({
   onProfileCreated,
 }: ProfileSetupModalProps) {
   const { publicKey } = useWallet()
+  const { sessionId, signIn } = useAuth()
   const [username, setUsername] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -48,6 +50,12 @@ export function ProfileSetupModal({
 
     setIsLoading(true)
     try {
+      const sid = sessionId || (await signIn())
+      if (!sid) {
+        toast.error('Please sign in to create a profile')
+        return
+      }
+
       const response = await fetch("/api/profile/create", {
         method: "POST",
         headers: {
@@ -56,6 +64,7 @@ export function ProfileSetupModal({
         body: JSON.stringify({
           username: trimmed,
           walletAddress: publicKey.toBase58(),
+          sessionId: sid,
         }),
       })
 

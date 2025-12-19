@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ProfileService } from '@/lib/profile-service';
 import { z } from 'zod';
 import { getWriteClient } from '@/lib/supabase';
+import { authService } from '@/lib/auth-service';
 
 /**
  * Get profile by wallet address
@@ -57,7 +58,23 @@ export async function PATCH(
       );
     }
     
-    const updates = await request.json();
+    const updates = await request.json().catch(() => ({}));
+    const sessionId = typeof (updates as any)?.sessionId === 'string' ? String((updates as any).sessionId).trim() : '';
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'Authentication required', message: 'Please sign in again' },
+        { status: 401 }
+      );
+    }
+
+    const isValidSession = await authService.validateSession(sessionId, walletAddress);
+    if (!isValidSession) {
+      return NextResponse.json(
+        { error: 'Invalid or expired session', message: 'Please sign in again' },
+        { status: 401 }
+      );
+    }
     
     // Validate updates - only allow certain fields to be updated
     const allowedFields = ['last_login', 'profile_picture', 'bio', 'username'];
