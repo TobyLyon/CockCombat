@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useUsername, getDisplayName } from "@/hooks/use-username"
 import { truncateAddress } from "@/lib/utils"
@@ -17,13 +17,13 @@ export interface WalletMultiButtonProps {
 export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
   const { connected, publicKey, disconnect } = useWallet()
   const router = useRouter()
-  const modal = (() => { try { return useWalletModal() as any } catch { return { setVisible: () => {} } as any } })()
+  const { setVisible } = useWalletModal()
   const address = useMemo(() => {
     try {
       if (!publicKey) return ""
       const str = (typeof publicKey === 'string')
         ? publicKey
-        : (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || ""
+        : (publicKey as { toBase58?: () => string; toString?: () => string })?.toBase58?.() || (publicKey as { toString?: () => string })?.toString?.() || ""
       return String(str)
     } catch { return "" }
   }, [publicKey])
@@ -32,8 +32,8 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
   const display = useMemo(() => getDisplayName(username, address) || truncateAddress(address), [username, address])
 
   const onConnect = useCallback(() => {
-    try { modal?.setVisible?.(true) } catch {}
-  }, [modal])
+    try { setVisible(true) } catch {}
+  }, [setVisible])
 
   const onCopy = useCallback(async () => {
     try { await navigator.clipboard.writeText(address) } catch {}
@@ -81,7 +81,7 @@ export function WalletMultiButton({ className = "" }: WalletMultiButtonProps) {
         <DropdownMenuItem onClick={onConnect}>
           <Wallet className="mr-2 h-4 w-4" /> Switch Wallet
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => { try { (disconnect as any)?.() } catch {} }}>
+        <DropdownMenuItem onClick={() => { try { disconnect?.() } catch {} }}>
           <LogOut className="mr-2 h-4 w-4" /> Disconnect
         </DropdownMenuItem>
       </DropdownMenuContent>

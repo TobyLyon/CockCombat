@@ -7,7 +7,7 @@ import { useWallet } from "../../hooks/use-wallet"
 // Solana modal removed in EVM-only build
 import { isBsc } from "../../lib/chain"
 import { Button } from "../ui/button"
-import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye, Wallet } from "lucide-react"
+import { Volume2, VolumeX, Home, ArrowLeft, Swords, Flame, Users, Loader2, ShieldCheck, Trophy, ChevronRight, Eye, Wallet, Info } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 const EnhancedArenaScene = dynamic(() => import("./enhanced-arena-scene"), { ssr: false })
@@ -394,13 +394,29 @@ export default function BattleArena() {
               const tx = String(refund.txHash || '').trim();
               const msg = String(refund.message || refund.error || '').trim();
               if (refund.attempted && refund.ok && tx) {
-                toast.success(`Refund sent: ${tx.slice(0, 8)}...${tx.slice(-8)}`, { duration: 5000 });
+                toast.success("Refund sent", {
+                  description: `Tx: ${tx.slice(0, 8)}...${tx.slice(-8)} • Info: Full details are in your Profile dashboard.`,
+                  duration: 5500,
+                  icon: <Info className="h-4 w-4 text-white/80" />,
+                });
               } else if (refund.attempted && refund.ok) {
-                toast.success(msg || 'Refund processed', { duration: 4000 });
+                toast.success(msg || 'Refund processed', {
+                  description: "Info: Full details are in your Profile dashboard.",
+                  duration: 4500,
+                  icon: <Info className="h-4 w-4 text-white/80" />,
+                });
               } else if (refund.attempted && !refund.ok) {
-                toast.error(msg || 'Refund failed', { duration: 5000 });
+                toast.error(msg || 'Refund failed', {
+                  description: "Info: You can view status and history in your Profile dashboard.",
+                  duration: 5500,
+                  icon: <Info className="h-4 w-4 text-white/80" />,
+                });
               } else if (msg) {
-                toast.message(msg, { duration: 3500 });
+                toast.message(msg, {
+                  description: "Info: Full details are in your Profile dashboard.",
+                  duration: 4000,
+                  icon: <Info className="h-4 w-4 text-white/80" />,
+                });
               }
             }
           } catch {}

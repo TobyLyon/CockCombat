@@ -9,7 +9,7 @@
     "dev": "node server.js",
     "build": "NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production next build",
     "start": "NODE_ENV=production node server.js",
-    "lint": "next lint",
+    "lint": "next lint --max-warnings 9999",
     "test:integration": "node scripts/integration.test.js",
     "index:code": "node scripts/index-codebase.js"
   },

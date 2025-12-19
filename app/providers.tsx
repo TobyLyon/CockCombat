@@ -5,6 +5,7 @@ import { ProfileProvider } from "../contexts/ProfileContext";
 import { SocketProvider } from "../hooks/use-socket";
 import { WalletPromptProvider } from "../contexts/WalletPromptContext";
 import { isBsc } from "../lib/chain";
+import { Toaster } from "sonner";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletEnvProvider } from "../contexts/WalletEnvContext";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
@@ -69,6 +70,20 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                   <SocketProvider>
                     <AudioProvider>
                       {children}
+                      <Toaster
+                        position="top-right"
+                        closeButton
+                        toastOptions={{
+                          classNames: {
+                            toast:
+                              "bg-white/10 text-white border border-white/15 backdrop-blur-md shadow-xl",
+                            title: "text-white",
+                            description: "text-white/80",
+                            actionButton: "bg-white/15 text-white hover:bg-white/20",
+                            closeButton: "bg-white/10 text-white/80 hover:bg-white/15",
+                          },
+                        }}
+                      />
                     </AudioProvider>
                   </SocketProvider>
                 </ProfileProvider>

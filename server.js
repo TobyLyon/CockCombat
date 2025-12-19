@@ -3135,11 +3135,13 @@ preparePromise.then(() => {
         // Check if we have minimum players and all are ready
         const isRankedLobby = !!(lobby && (lobby.amount || 0) > 0);
         const minPlayers = isRankedLobby ? 4 : 2;
-        // Free lobbies (amount==0): accept socket/API isReady; Ranked: require wager OR socket
+        // Readiness semantics:
+        // - Ranked (amount>0): ready requires BOTH wager confirmation AND explicit ready toggle
+        // - Free (amount==0): ready uses isReady
         const readyPlayers = eligiblePlayers.filter(p => {
           if ((lobby.amount || 0) > 0 && !p.isAi) {
             const hasWageredFlag = !!(p && p.hasWagered);
-            return Boolean(p.isReady) || hasWageredFlag;
+            return Boolean(p.isReady) && hasWageredFlag;
           }
           return p.isReady;
         });
@@ -3188,12 +3190,9 @@ preparePromise.then(() => {
                 try { const snap = await buildLobbySnapshot(lobbyId); if (snap) io.to(lobbyId).emit('lobby_updated', { ...snap, version: version2 }); } catch {}
                 console.log(`⏸️ Ranked lobby ${lobbyId} waiting for wagers: allWagered=${allWagered}`);
               } else {
-                // If all present humans are wagered, treat lobby as ready based on wager authority
-                // This bypasses transient UI readiness lag on any single device
-                allReady = humans.length >= minPlayers;
-                if (allReady) {
-                  console.log(`✅ Ranked lobby ${lobbyId} all humans have wagers; proceeding with countdown`);
-                }
+                // Do NOT override allReady based on wagers alone.
+                // Wagers are necessary but not sufficient; readiness must remain explicit.
+                console.log(`✅ Ranked lobby ${lobbyId} all present humans have wagers (readiness still explicit)`);
               }
             }
           } catch (e) {
@@ -3262,10 +3261,7 @@ preparePromise.then(() => {
                     if (!isTutorial) {
                       if (!p.isAi) {
                         const hasWagered = Boolean(p.hasWagered);
-                        if (hasWagered) {
-                          // Mark as ready
-                          try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId, isReady: true }) }).catch(() => {}); } catch {}
-                        } else {
+                        if (!hasWagered) {
                           // Remove unpaid human from lobby to avoid bugs during start
                           try { await fetch(`${baseUrlLocal}/api/lobbies`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lobbyId, playerId }) }).catch(() => {}); } catch {}
                         }

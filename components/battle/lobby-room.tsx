@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useSocket } from "@/hooks/use-socket"
 import { useWallet } from "@/hooks/use-wallet"
 import { isBsc } from "@/lib/chain"
-import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2 } from "lucide-react"
+import { Users, Clock, Crown, ArrowLeft, Check, X, Loader2, Info } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Lobby } from "@/lib/lobbies"
 import { Connection, Transaction } from "@solana/web3.js"
@@ -610,6 +610,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const accts: string[] = await eth.request({ method: 'eth_requestAccounts' });
         const from = (accts && accts[0]) ? accts[0] : publicKey.toString();
         const txParams: Record<string, string> = { from, to, value };
+
         let gasToUse = gas;
         let gasPriceToUse = gasPrice;
         if (!gasToUse) {
@@ -676,6 +677,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           });
           return res;
         };
+
         const waitForSig = async () => {
           const maxWaitMs = Number(process.env.NEXT_PUBLIC_WAGER_CONFIRM_TIMEOUT_MS || 90000)
           const pollMs = 1500
@@ -718,7 +720,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         }
       }
 
-      toast.success("Wager submitted successfully!");
+      toast.success("Wager submitted", {
+        description: "Info: Full wager details will appear in your Profile dashboard after the game.",
+        duration: 4500,
+        icon: <Info className="h-4 w-4 text-white/80" />,
+      });
       setHasWagered(true);
       setIsReady(true);
       // Ensure server connection readiness is updated for countdown logic
@@ -736,10 +742,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  // Tutorial: 1; Free: 2; Ranked: 4 humans
   const minRequired = lobby.amount === 0 ? 2 : 4
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const humanPlayersJoined = players.filter(p => !p.isAi).length
+
   const allPlayersReady = (humanPlayersJoined >= minRequired) && players.every(p => p.isReady || p.isAi)
   const currentPlayer = (() => { try { const id = getCurrentPlayerId(); return players.find(p => p.playerId === String(id || '').toLowerCase()) } catch { return undefined } })()
 
