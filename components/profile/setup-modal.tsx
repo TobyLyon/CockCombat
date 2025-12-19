@@ -52,7 +52,6 @@ export function ProfileSetupModal({
     try {
       const sid = sessionId || (await signIn())
       if (!sid) {
-        toast.error('Please sign in to create a profile')
         return
       }
 

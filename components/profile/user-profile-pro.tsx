@@ -207,7 +207,6 @@ export default function UserProfilePro() {
     try {
       const sid = sessionId || (await signIn())
       if (!sid) {
-        toast.error('Please sign in to update your profile')
         return
       }
 

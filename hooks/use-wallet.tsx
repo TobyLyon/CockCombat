@@ -67,8 +67,8 @@ export function useWallet() {
     select: (select || (() => {})) as AnyFn,
     chooseAccount: undefined,
     sendTransaction: (sendTransaction || (() => Promise.reject(new Error('sendTransaction unavailable')))) as AnyFn,
-    signTransaction: (signTransaction || (() => Promise.reject(new Error('signTransaction unavailable')))) as AnyFn,
-    signMessage: (signMessage || (() => Promise.reject(new Error('signMessage unavailable')))) as AnyFn,
-    signAllTransactions: (signAllTransactions || (() => Promise.reject(new Error('signAllTransactions unavailable')))) as AnyFn,
+    signTransaction: signTransaction,
+    signMessage: signMessage,
+    signAllTransactions: signAllTransactions,
   }
 }
