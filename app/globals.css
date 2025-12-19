@@ -370,6 +370,13 @@ body.arena-active {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* Dynamic viewport height for mobile browsers */
@@ -377,6 +384,10 @@ body.arena-active {
   .h-screen, .min-h-screen {
     height: 100dvh !important;
     min-height: 100dvh !important;
+  }
+
+  html, body {
+    max-height: 100dvh;
   }
 }
 

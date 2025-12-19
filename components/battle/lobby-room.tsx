@@ -40,6 +40,8 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [players, setPlayers] = useState<LobbyPlayer[]>([])
   const playersRef = useRef<LobbyPlayer[]>([])
   const [isReady, setIsReady] = useState(false)
+  const [isTogglingReady, setIsTogglingReady] = useState(false)
+  const pendingReadyRef = useRef<{ value: boolean; expiresAt: number } | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
   // Client no longer maintains its own lobby snapshot; rely on server events only
   const [isProcessingWager, setIsProcessingWager] = useState(false)
@@ -50,7 +52,6 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [bottomPadding, setBottomPadding] = useState<number>(56)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
-  const httpPollRef = useRef<number | null>(null)
   // Track that we've transitioned to the queue after the first check
   const transitionedToQueueRef = useRef<boolean>(false)
 
@@ -180,7 +181,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         cleanup()
       };
     }
-  }, [socket, isConnected, lobby.id]);
+  }, [socket, isConnected, lobby.id])
 
   // Defensive UI: if no identifier could be resolved, block actions and prompt to init guest session
   const missingIdentity = (() => { try { return !getCurrentPlayerId() } catch { return true } })()
@@ -192,7 +193,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         const bottomH = bottomActionsRef.current?.offsetHeight || 56
         const scrollTop = scrollRef.current?.getBoundingClientRect().top || 0
         const avail = window.innerHeight - scrollTop - bottomH - 8
-        setBottomPadding(Math.max(bottomH + 12, 96))
+        setBottomPadding(Math.max(bottomH + 12, 12))
         setScrollMaxHeight(Math.max(260, avail))
       } catch {}
     }
@@ -278,6 +279,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         } catch {}
         if (me && pid === meNorm) {
           setIsReady(Boolean(data.isReady));
+          try {
+            const p = pendingReadyRef.current
+            if (p && Date.now() <= p.expiresAt) pendingReadyRef.current = null
+          } catch {}
         }
         // Apply immediate badge update for the affected player while waiting for full snapshot
         setPlayers(prev => prev.map(p => p.playerId === pid ? { ...p, isReady: Boolean(data.isReady) } : p))
@@ -303,6 +308,15 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const onRosterFull = (payload: any) => {
       try {
         if (!payload || payload.lobbyId !== lobby.id) return
+        try {
+          const me = getCurrentPlayerId()
+          const meNorm = me ? String(me).toLowerCase() : ''
+          const p = pendingReadyRef.current
+          if (meNorm && p && Date.now() <= p.expiresAt) {
+            const mine = (payload.players || []).find((x: any) => String(x?.playerId || '').toLowerCase() === meNorm)
+            if (mine) mine.isReady = p.value
+          }
+        } catch {}
         const players: LobbyPlayer[] = (payload.players || []).map((p: any) => ({
           playerId: String(p.playerId || '').toLowerCase(),
           username: p.username || (String(p.playerId||'').slice(0,8)+'...'),
@@ -335,6 +349,14 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
         if (!payload || payload.lobbyId !== lobby.id) return
         const { action, player } = payload
         const pid = String(player?.playerId || '').toLowerCase()
+        try {
+          const me = getCurrentPlayerId()
+          const meNorm = me ? String(me).toLowerCase() : ''
+          const p = pendingReadyRef.current
+          if (meNorm && pid === meNorm && p && Date.now() <= p.expiresAt) {
+            if (typeof player === 'object' && player) player.isReady = p.value
+          }
+        } catch {}
         // Audible ping when another player becomes ready via diff
         try {
           const me = getCurrentPlayerId()
@@ -352,6 +374,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           if (me && pid === String(me).toLowerCase()) {
             setHasWagered(Boolean(player?.hasWagered))
             setIsReady(Boolean(player?.isReady))
+            try {
+              const pr = pendingReadyRef.current
+              if (pr && Date.now() <= pr.expiresAt) pendingReadyRef.current = null
+            } catch {}
           }
         } catch {}
         setPlayers(prev => {
@@ -405,6 +431,17 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           isReady: p.isAi ? true : Boolean(p.isReady),
           isAi: !!p.isAi,
         }))
+
+        try {
+          const me = getCurrentPlayerId()
+          const meNorm = me ? String(me).toLowerCase() : ''
+          const p = pendingReadyRef.current
+          if (meNorm && p && Date.now() <= p.expiresAt) {
+            const mine = mapped.find(x => x.playerId === meNorm)
+            if (mine) mine.isReady = p.value
+          }
+        } catch {}
+
         // Merge into existing by id to keep any entries not present due to transient filters
         setPlayers(prev => {
           const byId = new Map(prev.map(p => [p.playerId, p]))
@@ -471,6 +508,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       if (!id) return
       const meNorm = String(id).toLowerCase()
       const mine = players.find(p => p.playerId === meNorm)
+      const pending = pendingReadyRef.current
+      if (pending && Date.now() <= pending.expiresAt) {
+        setIsReady(Boolean(pending.value))
+        return
+      }
       setIsReady(Boolean(mine?.isReady))
     } catch {}
   }, [players])
@@ -512,6 +554,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
 
   const handleReadyToggle = async () => {
     if (!socket) return;
+    if (isTogglingReady) return
     const id = (() => { const raw = getCurrentPlayerId(); return raw ? String(raw).toLowerCase() : raw; })();
     if (!id) return;
 
@@ -531,8 +574,10 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
 
     // Desired ready state; server remains authoritative (no optimistic flip)
-    const newReadyState = !isReady;
+    const prevReadyState = isReady
+    const newReadyState = !prevReadyState;
     console.log(`🎯 Requesting ready state ${newReadyState} for player ${id}`);
+    
 
     // Play an immediate attention ping locally when toggling to ready.
     // Use a zero-delay to ensure the window-level click listener in AudioProvider
@@ -541,21 +586,28 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       try { setTimeout(() => { try { playSound('ping') } catch {} }, 0) } catch {}
     }
 
-    // Try socket first; if not connected, fallback to HTTP PUT
-    if (isConnected) {
-      socket.emit('player_ready', {
-        lobbyId: lobby.id,
-        playerId: id,
-        isReady: newReadyState
-      });
-    } else {
+    setIsTogglingReady(true)
+    setIsReady(newReadyState)
+    try { pendingReadyRef.current = { value: newReadyState, expiresAt: Date.now() + 2500 } } catch {}
+    try {
+      setPlayers(prev => prev.map(p => p.playerId === id ? { ...p, isReady: newReadyState } : p))
+
+      const sentViaSocket = Boolean(socket && isConnected)
       try {
-        await fetch('/api/lobbies', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lobbyId: lobby.id, playerId: id, isReady: newReadyState })
-        })
+        if (sentViaSocket) socket.emit('player_ready', { lobbyId: lobby.id, playerId: id, isReady: newReadyState })
       } catch {}
+
+      if (!sentViaSocket) {
+        try {
+          await fetch('/api/lobbies', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lobbyId: lobby.id, playerId: id, isReady: newReadyState })
+          })
+        } catch {}
+      }
+    } finally {
+      setIsTogglingReady(false)
     }
   }
 
@@ -869,7 +921,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Players List - Scrollable (pad for bottom bar) */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0" style={{ paddingBottom: Math.max(bottomPadding, 96), maxHeight: scrollMaxHeight }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-1.5 pointer-events-auto min-h-0" style={{ paddingBottom: Math.max(bottomPadding, 12), maxHeight: scrollMaxHeight }}>
         <div className="space-y-1.5">
           {players.map((player, index) => (
             <motion.div
@@ -950,7 +1002,11 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       </div>
 
       {/* Bottom Actions - Fixed to bottom to remain visible */}
-      <div ref={bottomActionsRef} className="flex-shrink-0 sticky bottom-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50">
+      <div
+        ref={bottomActionsRef}
+        className="flex-shrink-0 sticky bottom-0 z-10 space-y-1 p-2 bg-gray-900/95 border-t border-gray-700/50"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
+      >
         {
           <div className="px-2 py-0.5 bg-yellow-900/20 border border-yellow-600/30 rounded-md">
             <p className="text-[9px] text-yellow-400 text-center">Min. 2 players for ranked</p>
@@ -962,7 +1018,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
-          disabled={isProcessingWager || missingIdentity}
+          disabled={isProcessingWager || missingIdentity || isTogglingReady}
           className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
             isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'

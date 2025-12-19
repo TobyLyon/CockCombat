@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     // Get house cut percentage from env or use default
-    const houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04');
+    const houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.05');
 
     console.log(`💰 Processing payout for match ${matchId || 'unknown'}`);
     console.log(`   Winner: ${winnerAddress}`);
@@ -307,7 +307,7 @@ export async function POST(request: Request) {
 
 // Server-only entrypoint to execute payout logic without HTTP
 export async function processPayoutServerOnly(args: { winnerAddress: string; prizePool: number; matchId?: string | null; matchSessionId?: string | null; houseWalletAddress?: string; houseCutPercentage?: number; matchResult?: any; escrowWalletId?: string }) {
-  const { winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.04'), matchResult, escrowWalletId } = args;
+  const { winnerAddress, prizePool, matchId, matchSessionId, houseWalletAddress, houseCutPercentage = parseFloat(process.env.HOUSE_CUT_PERCENTAGE || '0.05'), matchResult, escrowWalletId } = args;
   if (isBsc()) throw new Error('Unsupported chain');
   if (!houseWalletAddress && !process.env.NEXT_PUBLIC_ADMIN_WALLET) throw new Error('House wallet not configured');
   const house = houseWalletAddress || process.env.NEXT_PUBLIC_ADMIN_WALLET!;

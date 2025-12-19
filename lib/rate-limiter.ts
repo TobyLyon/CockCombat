@@ -16,12 +16,14 @@ interface RateLimitConfig {
   windowMs: number;
   identifier?: (req: NextRequest) => string;
   skipSuccessfulRequests?: boolean;
+  failClosed?: boolean;
 }
 
 interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   resetAt: Date;
+  reason?: 'rate_limited' | 'unavailable';
 }
 
 class RateLimiter {
@@ -77,7 +79,11 @@ class RateLimiter {
 
     // Check database (if available)
     if (!this.supabase) {
-      // No database, use in-memory only
+      // No database
+      if (config.failClosed) {
+        return { allowed: false, remaining: 0, resetAt, reason: 'unavailable' };
+      }
+      // Use in-memory only
       this.inMemoryStore.set(key, { count: 1, resetAt: now + config.windowMs });
       return { allowed: true, remaining: config.maxRequests - 1, resetAt };
     }
@@ -93,12 +99,18 @@ class RateLimiter {
 
       if (error && error.code !== 'PGRST116' && error.code !== '42P01') {
         console.error('Rate limit check error:', error);
+        if (config.failClosed) {
+          return { allowed: false, remaining: 0, resetAt, reason: 'unavailable' };
+        }
         // Fail open (allow request) if database is down
         return { allowed: true, remaining: config.maxRequests - 1, resetAt };
       }
       
       // Table doesn't exist, fail open
       if (error && error.code === '42P01') {
+        if (config.failClosed) {
+          return { allowed: false, remaining: 0, resetAt, reason: 'unavailable' };
+        }
         this.inMemoryStore.set(key, { count: 1, resetAt: now + config.windowMs });
         return { allowed: true, remaining: config.maxRequests - 1, resetAt };
       }
@@ -113,6 +125,7 @@ class RateLimiter {
             allowed: false,
             remaining: 0,
             resetAt: new Date(existing.window_start),
+            reason: 'rate_limited',
           };
         }
 
@@ -162,6 +175,9 @@ class RateLimiter {
       }
     } catch (error) {
       console.error('Rate limiter error:', error);
+      if (config.failClosed) {
+        return { allowed: false, remaining: 0, resetAt, reason: 'unavailable' };
+      }
       // Fail open if there's an error
       return { allowed: true, remaining: config.maxRequests - 1, resetAt };
     }
@@ -222,22 +238,20 @@ export async function withRateLimit(
   const result = await rateLimiter.checkLimit(identifier, endpoint, config);
 
   if (!result.allowed) {
-    return NextResponse.json(
-      {
-        error: 'Too many requests',
-        message: 'Rate limit exceeded. Please try again later.',
-        resetAt: result.resetAt.toISOString(),
+    const isUnavailable = result.reason === 'unavailable'
+    const status = isUnavailable ? 503 : 429
+    const payload = isUnavailable
+      ? { error: 'Service unavailable', message: 'Rate limiter unavailable. Please try again shortly.' }
+      : { error: 'Too many requests', message: 'Rate limit exceeded. Please try again later.', resetAt: result.resetAt.toISOString() }
+    return NextResponse.json(payload, {
+      status,
+      headers: {
+        'X-RateLimit-Limit': config.maxRequests.toString(),
+        'X-RateLimit-Remaining': '0',
+        'X-RateLimit-Reset': result.resetAt.getTime().toString(),
+        'Retry-After': Math.ceil((result.resetAt.getTime() - Date.now()) / 1000).toString(),
       },
-      {
-        status: 429,
-        headers: {
-          'X-RateLimit-Limit': config.maxRequests.toString(),
-          'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': result.resetAt.getTime().toString(),
-          'Retry-After': Math.ceil((result.resetAt.getTime() - Date.now()) / 1000).toString(),
-        },
-      }
-    );
+    });
   }
 
   // Add rate limit headers to response
@@ -258,14 +272,14 @@ export default rateLimiter;
  */
 export const RATE_LIMITS = {
   // Very strict for authentication
-  AUTH: { maxRequests: 5, windowMs: 15 * 60 * 1000 }, // 5 per 15 min
+  AUTH: { maxRequests: 5, windowMs: 15 * 60 * 1000, failClosed: String(process.env.NODE_ENV || '').toLowerCase() === 'production' }, // 5 per 15 min
   
   // Moderate for profile operations
   PROFILE: { maxRequests: 20, windowMs: 60 * 1000 }, // 20 per minute
   
   // Strict for financial operations
-  WAGER: { maxRequests: 10, windowMs: 60 * 1000 }, // 10 per minute
-  PAYOUT: { maxRequests: 5, windowMs: 60 * 1000 }, // 5 per minute
+  WAGER: { maxRequests: 10, windowMs: 60 * 1000, failClosed: String(process.env.NODE_ENV || '').toLowerCase() === 'production' }, // 10 per minute
+  PAYOUT: { maxRequests: 5, windowMs: 60 * 1000, failClosed: String(process.env.NODE_ENV || '').toLowerCase() === 'production' }, // 5 per minute
   
   // Moderate for lobby operations
   LOBBY: { maxRequests: 30, windowMs: 60 * 1000 }, // 30 per minute

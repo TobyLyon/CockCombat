@@ -26,7 +26,19 @@ async function getSocketInstance() {
 
 // Username cache to reduce database queries
 const usernameCache = new Map<string, { username: string; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+ function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
+   try {
+     const raw = String(process.env.PAID_LOBBIES_UNLOCK_AT || process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
+     if (!raw) return { unlocked: true, unlockAtMs: null }
+     const ms = Number(raw)
+     if (!isFinite(ms) || ms <= 0) return { unlocked: true, unlockAtMs: null }
+     return { unlocked: Date.now() >= ms, unlockAtMs: ms }
+   } catch {
+     return { unlocked: true, unlockAtMs: null }
+   }
+ }
 
  function paidMatchesDiagnostics(): { enabled: boolean; checks: Record<string, boolean> } {
    try {
@@ -37,10 +49,11 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
      const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
      const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
      const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
-     const enabled = Boolean(enableFlag && hasSupabase && hasSettlement && hasRefund && hasHouse)
-     return { enabled, checks: { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse } }
+     const unlock = paidLobbiesUnlocked()
+     const enabled = Boolean(enableFlag && hasSupabase && hasSettlement && hasRefund && hasHouse && unlock.unlocked)
+     return { enabled, checks: { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse, paidUnlocked: unlock.unlocked } }
    } catch {
-     return { enabled: false, checks: { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false } }
+     return { enabled: false, checks: { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false, paidUnlocked: false } }
    }
  }
 

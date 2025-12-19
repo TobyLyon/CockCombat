@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useIsomorphicLayoutEffect } from './use-viewport-height'
 import * as THREE from "three"
 
 export function usePlayerControls() {
@@ -133,7 +132,7 @@ export function usePlayerControls() {
       const dx = t.clientX - leftOrigin.current.x
       const dy = t.clientY - leftOrigin.current.y
       // Map to forward/back (dy) and turn (dx)
-      const dir = new (require('three').Vector3)(0, 0, 0)
+      const dir = new THREE.Vector3(0, 0, 0)
       const dead = 8
       if (Math.abs(dy) > dead) dir.z = dy > 0 ? 1 : -1
       setMoveDirection(dir)
@@ -147,7 +146,7 @@ export function usePlayerControls() {
     try {
       if (leftTouchId.current !== null) {
         const ended = Array.from(e.changedTouches).some(tt => tt.identifier === leftTouchId.current)
-        if (ended) { leftTouchId.current = null; leftOrigin.current = null; setMoveDirection(new (require('three').Vector3)(0,0,0)) }
+        if (ended) { leftTouchId.current = null; leftOrigin.current = null; setMoveDirection(new THREE.Vector3(0, 0, 0)) }
       }
       if (rightTouchId.current !== null) {
         const ended = Array.from(e.changedTouches).some(tt => tt.identifier === rightTouchId.current)

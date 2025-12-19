@@ -71,7 +71,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                     <AudioProvider>
                       {children}
                       <Toaster
-                        position="top-right"
+                        position="top-left"
+                        offset={{
+                          top: "calc(var(--cc-nav-h, 56px) + 8px)",
+                          left: 12,
+                        }}
                         closeButton
                         toastOptions={{
                           classNames: {
@@ -80,7 +84,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                             title: "text-white",
                             description: "text-white/80",
                             actionButton: "bg-white/15 text-white hover:bg-white/20",
-                            closeButton: "bg-white/10 text-white/80 hover:bg-white/15",
+                            closeButton:
+                              "bg-white text-black hover:bg-white/90 border border-white/40",
                           },
                         }}
                       />

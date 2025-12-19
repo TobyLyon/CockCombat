@@ -1,13 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getChain } from '@/lib/chain'
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter'
 
 export const runtime = 'nodejs'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request) {
-  try {
+export async function POST(request: NextRequest) {
+  return withRateLimit(request, RATE_LIMITS.PAYOUT, async () => {
+    try {
     const providedAuth = request.headers.get('x-server-auth') || request.headers.get('authorization')
     const serverSecret = process.env.PAYOUT_SERVER_SECRET
     if (!serverSecret || !providedAuth || providedAuth.replace(/^Bearer\s+/i, '').trim() !== serverSecret) {
@@ -86,48 +88,73 @@ export async function POST(request: Request) {
       try {
         const winnerWallet = String(mr?.winner_wallet || '')
         const escrowWalletId = String(mr?.escrow_wallet_id || '') as any
-        const prizeSol = Number(mr?.total_prize_pool || 0)
         if (!matchId || !escrowWalletId) {
           throw new Error('Invalid match record for settlement')
         }
 
-        const shouldPayout = Boolean(winnerWallet && winnerWallet !== 'null' && prizeSol > 0)
-
-        const ledgerRefundTransfers = await (async () => {
+        const ledger = await (async () => {
           try {
             const { data: rows } = await supabase
               .from('wager_deposits')
-              .select('player_wallet, expected_lamports, status')
+              .select('player_wallet, expected_lamports, status, escrow_wallet_id')
               .eq('match_result_id', matchId)
               .eq('status', 'confirmed')
               .limit(50)
             const byWallet = new Map<string, bigint>()
+            const escrowIds = new Set<string>()
+            let totalLamports = BigInt(0)
             for (const r of Array.isArray(rows) ? rows : []) {
               const w = String((r as any)?.player_wallet || '')
               const lamportsRaw = (r as any)?.expected_lamports
+              const escrowId = String((r as any)?.escrow_wallet_id || '')
+              if (escrowId) escrowIds.add(escrowId)
               if (!w || lamportsRaw === null || lamportsRaw === undefined) continue
-              let lamports = 0n
+              let lamports = BigInt(0)
               try {
                 lamports = BigInt(String(lamportsRaw))
               } catch {
                 continue
               }
-              if (lamports <= 0n) continue
-              byWallet.set(w, (byWallet.get(w) || 0n) + lamports)
+              if (lamports <= BigInt(0)) continue
+              byWallet.set(w, (byWallet.get(w) || BigInt(0)) + lamports)
+              totalLamports += lamports
             }
 
-            const out: Array<{ to: string; lamports: number }> = []
+            const refundTransfers: Array<{ to: string; lamports: number }> = []
             for (const [w, lamports] of byWallet.entries()) {
               if (lamports > BigInt(Number.MAX_SAFE_INTEGER)) {
                 throw new Error('Refund amount too large')
               }
-              out.push({ to: w, lamports: Number(lamports) })
+              refundTransfers.push({ to: w, lamports: Number(lamports) })
             }
-            return out
+
+            return { refundTransfers, totalLamports, escrowIds, wallets: Array.from(byWallet.keys()) }
           } catch {
-            return [] as Array<{ to: string; lamports: number }>
+            return {
+              refundTransfers: [] as Array<{ to: string; lamports: number }>,
+              totalLamports: BigInt(0),
+              escrowIds: new Set<string>(),
+              wallets: [] as string[],
+            }
           }
         })()
+
+        // Safety: enforce escrow consistency between match_results and wager_deposits.
+        try {
+          if (ledger.escrowIds && ledger.escrowIds.size > 0 && !ledger.escrowIds.has(String(escrowWalletId))) {
+            throw new Error('Escrow mismatch between match_results and wager_deposits')
+          }
+        } catch (e: any) {
+          throw e
+        }
+
+        const winnerOk = Boolean(
+          winnerWallet &&
+            winnerWallet !== 'null' &&
+            ledger.wallets.some((w) => String(w).toLowerCase() === String(winnerWallet).toLowerCase())
+        )
+
+        const shouldPayout = Boolean(winnerOk && ledger.totalLamports > BigInt(0))
 
         const participants = (() => {
           try {
@@ -142,7 +169,7 @@ export async function POST(request: Request) {
         })()
 
         const refundTransfers = (() => {
-          if (ledgerRefundTransfers.length > 0) return ledgerRefundTransfers
+          if (ledger.refundTransfers.length > 0) return ledger.refundTransfers
           const byWallet = new Map<string, number>()
           for (const p of Array.isArray(participants) ? participants : []) {
             const w = String((p as any)?.wallet || '')
@@ -161,7 +188,10 @@ export async function POST(request: Request) {
         let outcome: 'settled' | 'refunded' | 'canceled' = 'canceled'
 
         if (shouldPayout) {
-          const totalLamports = Math.round(prizeSol * 1_000_000_000)
+          if (ledger.totalLamports > BigInt(String(Number.MAX_SAFE_INTEGER))) {
+            throw new Error('Prize pool too large')
+          }
+          const totalLamports = Number(ledger.totalLamports)
           const houseLamports = Math.floor(totalLamports * houseCutPercentage)
           const winnerLamports = Math.max(0, totalLamports - houseLamports)
 
@@ -252,10 +282,11 @@ export async function POST(request: Request) {
               .eq('transaction_type', 'win')
               .limit(1)
             if (!Array.isArray(existingWin) || existingWin.length === 0) {
+              const poolSol = Number(ledger.totalLamports) / 1_000_000_000
               await supabase.from('transactions').insert({
                 wallet_address: winnerWallet,
                 transaction_type: 'win',
-                amount: prizeSol * (1 - houseCutPercentage),
+                amount: poolSol * (1 - houseCutPercentage),
                 related_entity_id: matchId,
                 description: 'Match winnings',
               })
@@ -270,10 +301,11 @@ export async function POST(request: Request) {
               .eq('transaction_type', 'house_cut')
               .limit(1)
             if (!Array.isArray(existingHouse) || existingHouse.length === 0) {
+              const poolSol = Number(ledger.totalLamports) / 1_000_000_000
               await supabase.from('transactions').insert({
                 wallet_address: houseWallet,
                 transaction_type: 'house_cut',
-                amount: prizeSol * houseCutPercentage,
+                amount: poolSol * houseCutPercentage,
                 related_entity_id: matchId,
                 description: 'House cut',
               })
@@ -295,8 +327,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true, claimed: rows.length, settled, failed })
-  } catch (e: any) {
-    const msg = e?.message ? String(e.message) : String(e)
-    return NextResponse.json({ error: 'Settlement runner failed', details: msg }, { status: 500 })
-  }
+    } catch (e: any) {
+      const msg = e?.message ? String(e.message) : String(e)
+      return NextResponse.json({ error: 'Settlement runner failed', details: msg }, { status: 500 })
+    }
+  })
 }

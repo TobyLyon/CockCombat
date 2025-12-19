@@ -30,10 +30,16 @@ const ControlPanel: React.FC<ControlPanelProps> = () => {
       {/* Mobile touch overlays: analog stick + two buttons */}
       <div className="md:hidden pointer-events-none select-none">
         {/* Left: analog stick */}
-        <div className="fixed bottom-4 left-4 w-28 h-28 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm" />
-        <div className="fixed bottom-9 left-9 w-18 h-18 rounded-full bg-white/20 border border-white/30" style={{ width: '72px', height: '72px' }} />
+        <div
+          className="fixed w-28 h-28 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)', left: 'calc(env(safe-area-inset-left, 0px) + 16px)' }}
+        />
+        <div
+          className="fixed w-18 h-18 rounded-full bg-white/20 border border-white/30"
+          style={{ width: '72px', height: '72px', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 36px)', left: 'calc(env(safe-area-inset-left, 0px) + 36px)' }}
+        />
         {/* Right: two buttons */}
-        <div className="fixed bottom-6 right-7 flex flex-col items-end gap-3">
+        <div className="fixed flex flex-col items-end gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', right: 'calc(env(safe-area-inset-right, 0px) + 28px)' }}>
           <div className="w-12 h-12 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm" />
           <div className="w-14 h-14 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm" />
         </div>

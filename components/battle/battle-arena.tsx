@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from "next/navigation"
 import { WalletMultiButton } from "../wallet/wallet-multi-button"
 import { useWallet } from "../../hooks/use-wallet"
@@ -452,6 +452,36 @@ export default function BattleArena() {
     });
   }, [lobbies]);
 
+  const paidUnlockAtMs = (() => {
+    try {
+      const raw = String(process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
+      const ms = Number(raw)
+      if (!raw || !isFinite(ms) || ms <= 0) return null
+      return ms
+    } catch { return null }
+  })()
+
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const formatCountdown = (msRemaining: number) => {
+    try {
+      const total = Math.max(0, Math.floor(msRemaining / 1000))
+      const s = total % 60
+      const m = Math.floor(total / 60) % 60
+      const h = Math.floor(total / 3600) % 24
+      const d = Math.floor(total / 86400)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      if (d > 0) return `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`
+      return `${pad(h)}:${pad(m)}:${pad(s)}`
+    } catch {
+      return ''
+    }
+  }
+
   const handleJoinLobby = async (lobby: Lobby) => {
     // For any FREE matches (amount === 0), allow guest join when no wallet
     const joiningAsGuest = (!publicKey && lobby.amount === 0);
@@ -635,7 +665,9 @@ export default function BattleArena() {
                       const isPaid = amt > 0
                       const lamports = Math.round(amt * 1_000_000_000)
                       const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000
-                      const isPaidLocked = isPaid && !isAllowedPaidTier
+                      const paidLockedByTime = Boolean(isPaid && paidUnlockAtMs && nowMs < paidUnlockAtMs)
+                      const isPaidLocked = isPaid && (!isAllowedPaidTier || paidLockedByTime)
+                      const countdownText = paidLockedByTime && paidUnlockAtMs ? formatCountdown(paidUnlockAtMs - nowMs) : null
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
                       const isTutorialLobby = false
                       return (
@@ -727,7 +759,7 @@ export default function BattleArena() {
                               disabled={isJoining === lobby.id || isLocked || isPaidLocked}
                             >
                               {isPaidLocked
-                                  ? 'COMING SOON'
+                                  ? (countdownText ? `UNLOCKS IN ${countdownText}` : 'COMING SOON')
                                   : isJoining === lobby.id 
                                     ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
                                     : joinedLobby?.id === lobby.id

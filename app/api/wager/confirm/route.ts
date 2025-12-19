@@ -10,10 +10,24 @@ import { ethers } from 'ethers';
 import { Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey } from '@solana/web3.js';
 import { createClient } from '@supabase/supabase-js';
 
+function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
+  try {
+    const raw = String(process.env.PAID_LOBBIES_UNLOCK_AT || process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
+    if (!raw) return { unlocked: true, unlockAtMs: null }
+    const ms = Number(raw)
+    if (!isFinite(ms) || ms <= 0) return { unlocked: true, unlockAtMs: null }
+    return { unlocked: Date.now() >= ms, unlockAtMs: ms }
+  } catch {
+    return { unlocked: true, unlockAtMs: null }
+  }
+}
+
 function paidMatchesEnabled(): boolean {
   try {
     const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
     if (!enabled) return false
+    const unlock = paidLobbiesUnlocked();
+    if (!unlock.unlocked) return false
     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
@@ -27,14 +41,15 @@ function paidMatchesEnabled(): boolean {
 function paidMatchesDiagnostics(): Record<string, boolean> {
   try {
     const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    const unlock = paidLobbiesUnlocked();
     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
     const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
-    return { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse }
+    return { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse, paidUnlocked: unlock.unlocked }
   } catch {
-    return { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false }
+    return { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false, paidUnlocked: false }
   }
 }
 
@@ -77,6 +92,20 @@ async function handleWagerConfirmation(req: NextRequest) {
       return NextResponse.json({ error: 'Wagered matches are disabled', checks: paidMatchesDiagnostics() }, { status: 403 })
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const canDb = Boolean(supabaseUrl && supabaseServiceKey)
+    const supabase = canDb ? createClient(supabaseUrl!, supabaseServiceKey!) : null
+
+    const isPaid = Number(lobby.amount || 0) > 0
+    // For real-money Solana, require intentId so confirmation is DB-ledger authoritative.
+    if (isPaid && !intentId) {
+      return NextResponse.json({ error: 'Missing wager intent' }, { status: 400 })
+    }
+    if (isPaid && !supabase && process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
+    }
+
     const normalizeForMatch = (id: unknown) => {
       try {
         const s = String(id || '').trim()
@@ -107,27 +136,22 @@ async function handleWagerConfirmation(req: NextRequest) {
       if (isPaid) {
         // Prefer intent-based membership (DB-backed) when available
         try {
-          if (intentId) {
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-            const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (supabaseUrl && supabaseServiceKey) {
-              const supabase = createClient(supabaseUrl, supabaseServiceKey);
-              const { data } = await supabase
-                .from('wager_deposits')
-                .select('intent_id,lobby_id,player_wallet,status')
-                .eq('intent_id', intentId)
-                .maybeSingle();
+          if (supabase && intentId) {
+            const { data } = await supabase
+              .from('wager_deposits')
+              .select('intent_id,lobby_id,player_wallet,status')
+              .eq('intent_id', intentId)
+              .maybeSingle();
 
-              const ok = Boolean(
-                data &&
-                String((data as any).lobby_id || '') === String(lobbyId) &&
-                (
-                  String((data as any).player_wallet || '') === who.raw ||
-                  String((data as any).player_wallet || '').toLowerCase() === who.lower
-                )
+            const ok = Boolean(
+              data &&
+              String((data as any).lobby_id || '') === String(lobbyId) &&
+              (
+                String((data as any).player_wallet || '') === who.raw ||
+                String((data as any).player_wallet || '').toLowerCase() === who.lower
               )
-              if (ok) canInsert = true
-            }
+            )
+            if (ok) canInsert = true
           }
         } catch {}
 
@@ -157,9 +181,48 @@ async function handleWagerConfirmation(req: NextRequest) {
       }
     }
 
-    // Verify the transaction moved the exact wager to the escrow wallet
-    // Replay protection (database-backed)
+    // Verify the transaction moved the exact wager to the escrow wallet.
+    // We treat wager_deposits as the source of truth for:
+    // - expected amount
+    // - escrow wallet
+    // Also support idempotent retries when the intent is already confirmed.
 
+    const intentRow = await (async () => {
+      try {
+        if (!supabase || !intentId) return null
+        const { data } = await supabase
+          .from('wager_deposits')
+          .select('intent_id,lobby_id,player_wallet,escrow_wallet_id,expected_lamports,deposit_signature,status')
+          .eq('intent_id', intentId)
+          .maybeSingle()
+        return data as any
+      } catch {
+        return null
+      }
+    })()
+
+    if (isPaid) {
+      if (!intentRow) {
+        return NextResponse.json({ error: 'Wager intent not found' }, { status: 404 })
+      }
+      if (String(intentRow.lobby_id || '') !== String(lobbyId || '')) {
+        return NextResponse.json({ error: 'Wager intent mismatch' }, { status: 400 })
+      }
+      const intentWallet = String(intentRow.player_wallet || '')
+      if (!intentWallet || intentWallet.toLowerCase() !== String(playerPublicKey || '').toLowerCase()) {
+        return NextResponse.json({ error: 'Wager intent wallet mismatch' }, { status: 400 })
+      }
+      // If already confirmed with the same signature, treat this as an idempotent retry.
+      if (String(intentRow.status || '') === 'confirmed' && String(intentRow.deposit_signature || '') === String(signature || '')) {
+        player.hasWagered = true
+        try { (player as any).__lastWagerSig = signature } catch {}
+        player.isReady = true
+        try { player.playerId = String(playerPublicKey) } catch {}
+        return NextResponse.json({ message: 'Wager already confirmed', lobby })
+      }
+    }
+
+    // Replay protection (database-backed)
     let isUsed = false;
     try {
       isUsed = await authService.isSignatureUsed(signature);
@@ -172,20 +235,9 @@ async function handleWagerConfirmation(req: NextRequest) {
         'Wager signature replay attempt',
         playerPublicKey,
         req.headers.get('x-forwarded-for') || undefined,
-        { signature, lobbyId }
+        { signature, lobbyId, intentId: intentId || null }
       );
       return NextResponse.json({ error: 'Signature already confirmed' }, { status: 409 });
-    }
-
-    const shouldRequireIntent = (() => {
-      try {
-        return Number(lobby.amount || 0) > 0 && Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
-      } catch {
-        return false
-      }
-    })();
-    if (shouldRequireIntent && !intentId) {
-      return NextResponse.json({ error: 'Missing wager intent' }, { status: 400 });
     }
 
     if (isBsc()) {
@@ -266,7 +318,7 @@ async function handleWagerConfirmation(req: NextRequest) {
         }
       } catch {}
     } else {
-      // Solana: signature refers to a confirmed transfer to lobby escrow for exact lamports
+      // Solana: signature refers to a confirmed transfer to escrow for exact lamports
       const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'devnet' | 'testnet' | 'mainnet-beta'
       const base = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network)
       const rpcUrl = (() => {
@@ -313,14 +365,30 @@ async function handleWagerConfirmation(req: NextRequest) {
 
       if (!tx) return NextResponse.json({ error: 'Transaction not found' }, { status: 400 })
 
-      const amountLamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
+      const amountLamports = (() => {
+        try {
+          if (isPaid && intentRow && intentRow.expected_lamports !== null && intentRow.expected_lamports !== undefined) {
+            return Number(BigInt(String(intentRow.expected_lamports)))
+          }
+        } catch {}
+        return Math.round(lobby.amount * LAMPORTS_PER_SOL)
+      })()
+
+      const escrowWalletId = (() => {
+        try {
+          if (isPaid && intentRow && intentRow.escrow_wallet_id) return String(intentRow.escrow_wallet_id)
+        } catch {}
+        return String(lobby.escrowWalletId || '')
+      })()
+
       const toExpected = (() => {
-        const id = lobby.escrowWalletId
+        const id = escrowWalletId
         const key = id ? `ESCROW_WALLET_${id}_PUBLIC_KEY` : ''
         return (key && process.env[key]) ? process.env[key] : null
       })()
+
       if (!toExpected) {
-        return NextResponse.json({ error: 'Lobby escrow wallet not assigned' }, { status: 500 })
+        return NextResponse.json({ error: 'Escrow wallet not assigned' }, { status: 500 })
       }
 
       const sender = new PublicKey(playerPublicKey).toBase58()
@@ -359,10 +427,7 @@ async function handleWagerConfirmation(req: NextRequest) {
 
       try {
         if (intentId) {
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-          if (supabaseUrl && supabaseServiceKey) {
-            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          if (supabase) {
             await supabase
               .from('wager_deposits')
               .update({

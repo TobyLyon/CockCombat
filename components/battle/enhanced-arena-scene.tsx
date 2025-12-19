@@ -1907,10 +1907,10 @@ export default React.memo(function EnhancedArenaScene({
   const safePlayerRotation = playerRotation || new THREE.Euler(0, 0, 0);
   
   return (
-    <div className="w-full h-full overflow-hidden">
+    <div className="w-full h-full overflow-hidden" style={{ touchAction: 'none' }}>
       <KeyboardControls map={controlsMap}>
       <Canvas 
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
           shadows={typeof window !== 'undefined' ? window.innerWidth >= 768 : true}
           camera={{ 
             fov: 75, 
@@ -1930,6 +1930,7 @@ export default React.memo(function EnhancedArenaScene({
           onCreated={({ gl }) => {
             try {
               const canvas = gl.domElement as HTMLCanvasElement;
+              try { (canvas.style as any).touchAction = 'none' } catch {}
               const onLost = (e: Event) => { e.preventDefault?.(); console.warn('⚠️ WebGL context lost in EnhancedArena, preventing default'); };
               const onRestored = () => { console.info('✅ WebGL context restored in EnhancedArena'); };
               canvas.addEventListener('webglcontextlost', onLost as any, { passive: false } as any);

@@ -2,6 +2,7 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
+const crypto = require('crypto');
 
 // Validate environment variables on startup (prefer JS helper, fall back to no-op)
 try {
@@ -491,6 +492,8 @@ preparePromise.then(() => {
       const lobby = lobbies.find(l => l && l.id === lobbyId);
       if (!lobby) return null;
 
+      const cap = Math.max(1, Math.min(8, Number(lobby.capacity || 8) || 8));
+
       // Presence set for fast lookup
       const present = new Set();
       try {
@@ -545,6 +548,7 @@ preparePromise.then(() => {
       try {
         const existing = new Set(result.map(r => String(r.playerId || '').toLowerCase()));
         for (const addrRaw of present.values()) {
+          if (result.length >= cap) break;
           const addr = String(addrRaw || '').toLowerCase();
           if (!addr || existing.has(addr)) continue;
           let name = await getUsernameForWallet(addr).catch(() => null);
@@ -569,6 +573,9 @@ preparePromise.then(() => {
           });
         }
       } catch {}
+
+      // Final safety cap
+      try { if (result.length > cap) result.length = cap; } catch {}
 
       return {
         id: lobbyId,
@@ -596,6 +603,15 @@ preparePromise.then(() => {
     const key = String(wallet || '').toLowerCase();
     const current = map.get(key) || { playerId: wallet, username: (wallet ? String(wallet).slice(0,8)+'...' : 'Player'), chickenName: 'Default', isAi: false, hasWagered: false, isReady: false };
     const entry = { ...current, ...patch, playerId: String(wallet) };
+
+    // Capacity guard: never allow roster map to grow beyond lobby capacity for new identities
+    try {
+      const lobby = lobbies.find(l => l && l.id === lobbyId);
+      const cap = Math.max(1, Math.min(8, Number(lobby?.capacity || 8) || 8));
+      if (!map.has(key) && map.size >= cap) {
+        return current;
+      }
+    } catch {}
     // Rank readiness policy: for paid lobbies, ready requires hasWagered AND explicit isReady
     try {
       const lobby = lobbies.find(l => l && l.id === lobbyId);
@@ -621,6 +637,16 @@ preparePromise.then(() => {
 
   // Server-authoritative arena match end resolution.
   // Settles paid matches based on authoritative HP state only (clients are untrusted).
+  function auditHashChain(prev, entry) {
+    try {
+      const p = prev ? String(prev) : '';
+      const json = JSON.stringify(entry || {});
+      return crypto.createHash('sha256').update(`${p}|${json}`).digest('hex');
+    } catch {
+      return prev;
+    }
+  }
+
   function maybeResolveArenaMatchEnd(matchSessionId, io) {
     try {
       if (!matchSessionId) return;
@@ -651,6 +677,15 @@ preparePromise.then(() => {
       let matchId = meta?.matchResultId || null;
       const canonicalMap = (meta && meta.walletCanonicalByKey) ? meta.walletCanonicalByKey : null;
       const winnerWallet = (canonicalMap && canonicalMap[winnerLower]) ? canonicalMap[winnerLower] : winnerLower;
+
+      // Append end marker to audit transcript (best-effort)
+      try {
+        const a = store && store.audit ? store.audit : null;
+        if (a) {
+          a.hash = auditHashChain(a.hash, { t: 'end', ms: String(matchSessionId), w: String(winnerWallet), ts: Date.now() });
+          a.events = Number(a.events || 0) + 1;
+        }
+      } catch {}
 
       // Free/tutorial: no settlement; just broadcast end to let clients exit.
       if (!(amount > 0 && humansCount > 0)) {
@@ -687,6 +722,14 @@ preparePromise.then(() => {
               const { createClient } = require('@supabase/supabase-js');
               const supabase = createClient(supabaseUrl, supabaseServiceKey);
               try {
+                const audit = (store && store.audit) ? store.audit : null;
+                const seedCommit = String((store && store.arenaSeedCommit) || (meta && meta.arenaSeedCommit) || '')
+                const gameData = {
+                  matchSessionId,
+                  arenaSeedCommit: seedCommit || null,
+                  transcriptHash: audit && audit.hash ? String(audit.hash) : null,
+                  transcriptEvents: audit && audit.events !== undefined ? Number(audit.events || 0) : null,
+                };
                 if (!matchId) {
                   matchId = await getOrCreateMatchResultIdBySession({
                     supabase,
@@ -699,13 +742,14 @@ preparePromise.then(() => {
                       status: 'completed',
                       total_prize_pool: amount * humansCount,
                       participants: humans.map((w) => ({ wallet: w, wager_amount: amount })),
-                      game_data: { matchSessionId },
+                      game_data: gameData,
                       payout_processed: false,
                     },
                     updateRow: {
                       winner_wallet: winnerWallet,
                       match_ended_at: new Date().toISOString(),
                       status: 'completed',
+                      game_data: gameData,
                     },
                   });
                   try { if (matchId && meta) meta.matchResultId = matchId; } catch {}
@@ -716,6 +760,7 @@ preparePromise.then(() => {
                       winner_wallet: winnerWallet,
                       match_ended_at: new Date().toISOString(),
                       status: 'completed',
+                      game_data: gameData,
                     })
                     .eq('id', matchId);
                 }
@@ -1052,6 +1097,19 @@ preparePromise.then(() => {
           console.log(`🏟️ Client ${socket.id} already in lobby room: ${lobbyId}`);
           return;
         }
+
+        // Prevent lobby overfill: if lobby is already full and this identity isn't already in it, block.
+        try {
+          const connNow = activeConnections.get(socket.id);
+          const pid = String((connNow && (connNow.walletAddressLower || connNow.walletAddress)) || '').toLowerCase();
+          const lob = lobbies.find(l => l && l.id === lobbyId);
+          const cap = Math.max(1, Math.min(8, Number(lob?.capacity || 8) || 8));
+          const already = !!(lob && Array.isArray(lob.players) && pid && lob.players.some(p => String(p?.playerId || '').toLowerCase() === pid));
+          if (lob && !already && Array.isArray(lob.players) && lob.players.length >= cap) {
+            try { socket.emit('join_blocked', { lobbyId, reason: 'lobby_full' }); } catch {}
+            return;
+          }
+        } catch {}
         
         console.log(`🏟️ Client ${socket.id} joining lobby room: ${lobbyId}`);
         socket.join(lobbyId);
@@ -1584,6 +1642,7 @@ preparePromise.then(() => {
         const lobby = lobbies.find(l => l.id === lobbyId);
         
         if (lobby) {
+          const cap = Math.max(1, Math.min(8, Number(lobby.capacity || 8) || 8));
           // Merge API lobby players with socket ready status
           let lobbyPlayers = [];
           for (const player of lobby.players) {
@@ -1613,12 +1672,17 @@ preparePromise.then(() => {
             });
           }
 
+          // Stable sort + cap
+          try { lobbyPlayers.sort((a,b)=> (a.isAi!==b.isAi? (a.isAi?1:-1) : String(a.playerId||'').localeCompare(String(b.playerId||'')))); } catch {}
+          try { if (lobbyPlayers.length > cap) lobbyPlayers.length = cap; } catch {}
+
           // Presence-based fallback if API is empty
           try {
             const presence = global.lobbyPresence?.get(lobbyId) || new Set();
             if (lobbyPlayers.length === 0 && presence.size > 0) {
               lobbyPlayers = [];
               for (const addr of presence.values()) {
+                if (lobbyPlayers.length >= cap) break;
                 let ready = false;
                 for (const [, c] of activeConnections.entries()) {
                   if (c.currentLobby === lobbyId && String(c.walletAddress || '').toLowerCase() === String(addr).toLowerCase()) { ready = !!c.isReady; break }
@@ -2316,7 +2380,92 @@ preparePromise.then(() => {
             const store = global.matchStateBySession.get(matchId);
             if (store && store.pos) {
               const k = String(wallet || '').toLowerCase();
-              store.pos[k] = { x: Number(pos[0])||0, y: Number(pos[1])||0.85, z: Number(pos[2])||0, rotY: isFinite(rotY)?rotY:0, ts: Date.now() };
+              const nowTs = Date.now();
+              const next = { x: Number(pos[0])||0, y: Number(pos[1])||0.85, z: Number(pos[2])||0, rotY: isFinite(rotY)?rotY:0, ts: nowTs };
+
+              // Integrity: detect obvious teleports/speed hacks (shadow mode by default).
+              // Enforcement is gated behind ENFORCE_MATCH_INTEGRITY and only applies to paid matches.
+              try {
+                if (!store.__integrity) store.__integrity = Object.create(null);
+                if (!store.__integrity.last) store.__integrity.last = Object.create(null);
+                if (!store.__integrity.strikes) store.__integrity.strikes = Object.create(null);
+                if (!store.__integrity.lastStrikeAt) store.__integrity.lastStrikeAt = Object.create(null);
+
+                const prev = store.__integrity.last[k] || store.pos[k] || null;
+                const prevTs = prev && typeof prev.ts === 'number' ? prev.ts : 0;
+                const dtMs = prevTs ? Math.max(1, nowTs - prevTs) : 0;
+
+                // Only evaluate when we have a reasonably recent prior sample.
+                let suspicious = false;
+                if (dtMs > 0 && dtMs <= 5000) {
+                  const dx = (next.x - Number(prev.x || 0));
+                  const dz = (next.z - Number(prev.z || 0));
+                  const dy = (next.y - Number(prev.y || 0.85));
+                  const dist = Math.hypot(dx, dz);
+                  const speed = dist / (dtMs / 1000);
+                  const vSpeed = Math.abs(dy) / (dtMs / 1000);
+
+                  // Hard sanity: NaN/Infinity or absurd verticals.
+                  if (!isFinite(next.x) || !isFinite(next.y) || !isFinite(next.z) || !isFinite(speed) || !isFinite(vSpeed)) {
+                    suspicious = true;
+                  }
+
+                  // Conservative "obvious" thresholds (should not trip normal play):
+                  // - Large instantaneous teleports
+                  // - Extremely high horizontal speed across short dt
+                  // - Large vertical snap
+                  if (!suspicious) {
+                    if ((dist > 35) || (dist > 20 && dtMs < 1000) || (dist > 8 && dtMs < 250 && speed > 25) || (Math.abs(dy) > 6 && dtMs < 300) || (vSpeed > 40 && dtMs < 300)) {
+                      suspicious = true;
+                    }
+                  }
+                }
+
+                if (suspicious) {
+                  const lastStrikeAt = Number(store.__integrity.lastStrikeAt[k] || 0);
+                  const curStrikes = Number(store.__integrity.strikes[k] || 0);
+                  // Decay strikes over time to avoid punishing brief hiccups.
+                  const decayed = (lastStrikeAt && (nowTs - lastStrikeAt) > 10000) ? Math.max(0, curStrikes - 1) : curStrikes;
+                  const nextStrikes = decayed + 1;
+                  store.__integrity.strikes[k] = nextStrikes;
+                  store.__integrity.lastStrikeAt[k] = nowTs;
+
+                  // Determine if this is a paid match (only then consider enforcement).
+                  const enforce = String(process.env.ENFORCE_MATCH_INTEGRITY || '').toLowerCase() === 'true';
+                  let isPaid = false;
+                  try {
+                    const lid = store.lobbyId;
+                    const lob = lid ? lobbies.find(l => l && l.id === lid) : null;
+                    isPaid = Boolean(lob && (lob.amount || 0) > 0 && lob.matchType !== 'tutorial');
+                  } catch {}
+
+                  // Shadow log always, but keep it low-noise.
+                  try {
+                    if (nextStrikes === 1 || nextStrikes === 3 || nextStrikes === 6) {
+                      console.warn('[INTEGRITY][MOVE]', { matchSessionId: matchId, wallet: k, strikes: nextStrikes, dtMs, next });
+                    }
+                  } catch {}
+
+                  // Enforcement: ignore suspicious updates after multiple strikes.
+                  const strikeLimit = (() => {
+                    try {
+                      const v = parseInt(String(process.env.INTEGRITY_STRIKE_LIMIT || ''), 10)
+                      if (!isFinite(v) || v <= 0) return 3
+                      return Math.max(3, Math.min(10, v))
+                    } catch {
+                      return 3
+                    }
+                  })()
+                  if (enforce && isPaid && nextStrikes >= strikeLimit) {
+                    return;
+                  }
+                }
+
+                // Update last seen (even if not suspicious) so we can compute deltas.
+                store.__integrity.last[k] = next;
+              } catch {}
+
+              store.pos[k] = next;
             }
           }
         } catch {}
@@ -2422,6 +2571,12 @@ preparePromise.then(() => {
               const curHp = Math.max(0, Math.min(3, Number(st.hp[chosen] ?? 3)));
               const nextHp = Math.max(0, Math.min(3, curHp - amount));
               st.hp[chosen] = nextHp;
+              try {
+                if (st.audit) {
+                  st.audit.hash = auditHashChain(st.audit.hash, { t: 'hit', ms: matchId, by: wallet, to: chosen, amt: amount, hp: nextHp, ts: now });
+                  st.audit.events = Number(st.audit.events || 0) + 1;
+                }
+              } catch {}
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId: chosen, hp: nextHp, isAlive }); } catch {}
               try { io.to(targetRoom).emit('play_sound', { key: isAlive ? 'punch' : 'strong_punch', targetId: chosen, by: wallet }); } catch {}
@@ -2500,6 +2655,12 @@ preparePromise.then(() => {
               const curHp = Math.max(0, Math.min(3, Number(store.hp[tKey] ?? 3)));
               const nextHp = Math.max(0, Math.min(3, curHp - amount));
               store.hp[tKey] = nextHp;
+              try {
+                if (store.audit) {
+                  store.audit.hash = auditHashChain(store.audit.hash, { t: 'hit_tutorial', ms: matchId, by: String(wallet || '').toLowerCase(), to: tKey, amt: amount, hp: nextHp, ts: Date.now() });
+                  store.audit.events = Number(store.audit.events || 0) + 1;
+                }
+              } catch {}
               const isAlive = nextHp > 0;
               try { io.to(targetRoom).emit('state_update', { matchSessionId: matchId, targetId, hp: nextHp, isAlive }); } catch {}
               try { io.to(targetRoom).emit('play_sound', { key: isAlive ? 'punch' : 'strong_punch', targetId: tKey, by: wallet }); } catch {}
@@ -3861,8 +4022,11 @@ preparePromise.then(() => {
         }
       } catch {}
 
-      const matchSessionId = `ms-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-      const arenaSeed = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const matchSessionId = `ms-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+      const arenaSeed = crypto.randomBytes(32).toString('hex');
+      const arenaSeedCommit = (() => {
+        try { return crypto.createHash('sha256').update(arenaSeed).digest('hex'); } catch { return null; }
+      })();
       // Longer deadline for tutorial and free (amount==0) lobbies to avoid premature cancels on asset acks
       let ackDeadlineMs = 4000;
       try {
@@ -3877,6 +4041,7 @@ preparePromise.then(() => {
         lobbyId,
         expectedRoster,
         arenaSeed,
+        arenaSeedCommit,
         createdAt: Date.now(),
         ackDeadlineMs,
         presenceAcks: new Map(), // wallet -> ts
@@ -3905,7 +4070,7 @@ preparePromise.then(() => {
                 status: 'in_progress',
                 total_prize_pool: Number(lobbyMeta?.amount || 0) * humans.length,
                 participants,
-                game_data: { matchSessionId },
+                game_data: { matchSessionId, arenaSeedCommit: arenaSeedCommit || null },
                 payout_processed: false,
               },
               updateRow: {
@@ -3913,6 +4078,7 @@ preparePromise.then(() => {
                 escrow_wallet_id: escrowIdVal || null,
                 status: 'in_progress',
                 payout_processed: false,
+                game_data: { matchSessionId, arenaSeedCommit: arenaSeedCommit || null },
               },
             });
             try {
@@ -3930,8 +4096,9 @@ preparePromise.then(() => {
                 if (!global.recentMatchMetaBySession) global.recentMatchMetaBySession = new Map();
                 if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
                 const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount: Number(lobbyMeta?.amount || 0), escrow: escrowIdVal, matchResultId: mrId, walletCanonicalByKey };
+                try { meta.arenaSeedCommit = arenaSeedCommit || null; } catch {}
                 global.recentMatchMetaBySession.set(matchSessionId, meta);
-                humans.forEach(w => global.recentMatchMetaByWallet.set(String(w).toLowerCase(), meta));
+                humans.forEach((w) => global.recentMatchMetaByWallet.set(String(w).toLowerCase(), meta));
               }
             } catch {}
           }
@@ -3946,6 +4113,7 @@ preparePromise.then(() => {
         matchSessionId,
         expectedRoster,
         arenaSeed,
+        arenaSeedCommit,
         serverNow: Date.now(),
         ackDeadlineMs,
         minHumans: isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4),
@@ -4062,7 +4230,12 @@ preparePromise.then(() => {
         // Initialize authoritative state store for resync
         try {
           if (!global.matchStateBySession) global.matchStateBySession = new Map();
-      const state = { lobbyId, hp: Object.create(null), pos: Object.create(null), startedAt: roundStartAtEpochMs, createdAt: Date.now() };
+      const state = { lobbyId, hp: Object.create(null), pos: Object.create(null), startedAt: roundStartAtEpochMs, createdAt: Date.now(), arenaSeedCommit: session.arenaSeedCommit || null, audit: { hash: null, events: 0 } };
+          try {
+            // Seed audit hash chain with roster + timing so later we can prove the server's event stream.
+            state.audit.hash = auditHashChain('', { t: 'start', ms: matchSessionId, lobbyId, roundStartAtEpochMs, arenaSeedCommit: session.arenaSeedCommit || null, roster: (finalRoster || []).map(r => String(r.wallet || '').toLowerCase()).sort() });
+            state.audit.events = 1;
+          } catch {}
           for (const r of (finalRoster || [])) {
             const k = String(r.wallet || '').toLowerCase();
             if (k) state.hp[k] = 3;
@@ -4083,6 +4256,7 @@ preparePromise.then(() => {
           if (!global.recentMatchMetaByWallet) global.recentMatchMetaByWallet = new Map();
           const prevMeta = (global.recentMatchMetaBySession && global.recentMatchMetaBySession.get && global.recentMatchMetaBySession.get(matchSessionId)) || null;
           const meta = { lobbyId, matchSessionId, humans, humansCount: humans.length, amount, escrow, startAt: roundStartAtEpochMs, roundStartedAt: Date.now(), matchResultId: (prevMeta && prevMeta.matchResultId) ? prevMeta.matchResultId : null, walletCanonicalByKey: (prevMeta && prevMeta.walletCanonicalByKey) ? prevMeta.walletCanonicalByKey : ((session && session.walletCanonicalByKey) ? session.walletCanonicalByKey : Object.create(null)) };
+          try { meta.arenaSeedCommit = (session && session.arenaSeedCommit) ? session.arenaSeedCommit : ((prevMeta && prevMeta.arenaSeedCommit) ? prevMeta.arenaSeedCommit : null); } catch {}
           try { global.recentMatchMetaBySession.set(matchSessionId, meta); } catch {}
           try { humans.forEach(w => { global.recentMatchMetaByWallet.set(w, meta); }); } catch {}
         } catch {}

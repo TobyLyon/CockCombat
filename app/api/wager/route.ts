@@ -1,18 +1,34 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { lobbies, type Lobby } from '@/lib/lobbies';
 import { z } from 'zod';
 import { isBsc } from '@/lib/chain';
 import { evmEscrowService } from '@/lib/evm-escrow-service';
 import { getEvmProvider } from '@/lib/evm-config';
+
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
 import escrowService from '@/lib/escrow-service';
 import { createClient } from '@supabase/supabase-js';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
+
+function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
+  try {
+    const raw = String(process.env.PAID_LOBBIES_UNLOCK_AT || process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
+    if (!raw) return { unlocked: true, unlockAtMs: null }
+    const ms = Number(raw)
+    if (!isFinite(ms) || ms <= 0) return { unlocked: true, unlockAtMs: null }
+    return { unlocked: Date.now() >= ms, unlockAtMs: ms }
+  } catch {
+    return { unlocked: true, unlockAtMs: null }
+  }
+}
 
 function paidMatchesEnabled(): boolean {
   try {
     const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
     if (!enabled) return false
+    const unlock = paidLobbiesUnlocked();
+    if (!unlock.unlocked) return false
     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
@@ -26,20 +42,22 @@ function paidMatchesEnabled(): boolean {
 function paidMatchesDiagnostics(): Record<string, boolean> {
   try {
     const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    const unlock = paidLobbiesUnlocked();
     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
     const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
-    return { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse }
+    return { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse, paidUnlocked: unlock.unlocked }
   } catch {
-    return { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false }
+    return { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false, paidUnlocked: false }
   }
 }
 
 // This function creates and returns a transaction for a wager
-export async function POST(request: Request) {
-  try {
+export async function POST(request: NextRequest) {
+  return withRateLimit(request, RATE_LIMITS.WAGER, async () => {
+    try {
 
     const BodySchema = z.object({
       lobbyId: z.string().min(3),
@@ -212,12 +230,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports, transaction: serialized, lobbyId, intentId })
 
-  } catch (error) {
-    console.error("❌ Error creating wager transaction:", error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({
-      error: "Failed to create wager transaction",
-      details: errorMessage,
-    }, { status: 500 });
-  }
-} 
+    } catch (error) {
+      console.error("❌ Error creating wager transaction:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return NextResponse.json({
+        error: "Failed to create wager transaction",
+        details: errorMessage,
+      }, { status: 500 });
+    }
+  })
+}
