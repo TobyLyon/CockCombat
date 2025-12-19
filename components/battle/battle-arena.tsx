@@ -50,6 +50,7 @@ export default function BattleArena() {
   const isMountedRef = useRef(true);
   const [guestId, setGuestId] = useState<string | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
   // Chat state
   const [xConnected, setXConnected] = useState<boolean>(false)
   const [chatOpen, setChatOpen] = useState<boolean>(false)
@@ -236,10 +237,17 @@ export default function BattleArena() {
         const mm = window.matchMedia && window.matchMedia('(orientation: portrait)');
         if (mm && typeof mm.matches === 'boolean') {
           setIsPortrait(mm.matches);
-          return;
         }
       } catch (_) {}
-      setIsPortrait(window.innerHeight > window.innerWidth);
+      try {
+        setIsPortrait(window.innerHeight > window.innerWidth);
+      } catch {}
+      try {
+        const mobileMm = window.matchMedia && window.matchMedia('(max-width: 768px)');
+        if (mobileMm && typeof mobileMm.matches === 'boolean') {
+          setIsMobileDevice(mobileMm.matches);
+        }
+      } catch {}
     };
     updateOrientation();
     const onResize = () => updateOrientation();
@@ -844,28 +852,36 @@ export default function BattleArena() {
 
         {gameState === "battle" && (
           <div className="flex-1 w-full h-full relative overflow-hidden">
-            {/* Rotate notice on mobile portrait */}
-            {isPortrait && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-black/60 text-white text-xs px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm">
-                For the best experience, rotate your device to landscape
-              </div>
-            )}
-            <BattleHUD 
-              playerHP={playerHP} 
-              chickensLeft={chickensLeft} 
-              players={players}
-            />
-
-            <div className="absolute inset-0 w-full h-full">
-              <EnhancedArenaScene 
-                gameState={gameState}
-                playerChicken={playerChicken}
-                onExit={exitBattle}
-                onPlayerDamage={handlePlayerDamage}
-                onDrumstickCollected={handleDrumstickCollected}
-                playSound={playSound}
+            <div
+              className="absolute inset-0"
+              style={
+                isMobileDevice && isPortrait
+                  ? {
+                      width: '100vh',
+                      height: '100vw',
+                      transform: 'rotate(90deg) translateY(-100%)',
+                      transformOrigin: 'top left',
+                    }
+                  : { width: '100%', height: '100%' }
+              }
+            >
+              <BattleHUD 
+                playerHP={playerHP} 
+                chickensLeft={chickensLeft} 
                 players={players}
               />
+
+              <div className="absolute inset-0 w-full h-full">
+                <EnhancedArenaScene 
+                  gameState={gameState}
+                  playerChicken={playerChicken}
+                  onExit={exitBattle}
+                  onPlayerDamage={handlePlayerDamage}
+                  onDrumstickCollected={handleDrumstickCollected}
+                  playSound={playSound}
+                  players={players}
+                />
+              </div>
             </div>
 
             {/* Defeated overlay with spectate controls */}

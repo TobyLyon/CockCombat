@@ -1,16 +1,46 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useCallback } from 'react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Swords, ArrowUpFromLine } from 'lucide-react';
 
 interface ControlPanelProps {
   // Optional props later for dynamic controls?
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = () => {
-  const isMobile = useMemo(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia && window.matchMedia('(max-width: 768px)').matches
+  const dispatchKey = useCallback((type: 'keydown' | 'keyup', code: string, key: string) => {
+    try {
+      const ev = new KeyboardEvent(type, {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      })
+      window.dispatchEvent(ev)
+      document.dispatchEvent(ev)
+    } catch {}
   }, [])
+
+  const bindHold = useCallback((code: string, key: string) => {
+    return {
+      onPointerDown: (e: any) => {
+        try { e.preventDefault?.() } catch {}
+        dispatchKey('keydown', code, key)
+      },
+      onPointerUp: (e: any) => {
+        try { e.preventDefault?.() } catch {}
+        dispatchKey('keyup', code, key)
+      },
+      onPointerCancel: (e: any) => {
+        try { e.preventDefault?.() } catch {}
+        dispatchKey('keyup', code, key)
+      },
+      onPointerLeave: (e: any) => {
+        try { e.preventDefault?.() } catch {}
+        dispatchKey('keyup', code, key)
+      },
+    }
+  }, [dispatchKey])
 
   return (
     <>
@@ -28,20 +58,86 @@ const ControlPanel: React.FC<ControlPanelProps> = () => {
       </div>
 
       {/* Mobile touch overlays: analog stick + two buttons */}
-      <div className="md:hidden pointer-events-none select-none">
-        {/* Left: analog stick */}
+      <div className="md:hidden select-none pointer-events-none" style={{ touchAction: 'none' }}>
+        {/* Left: movement (D-pad) */}
         <div
-          className="fixed w-28 h-28 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)', left: 'calc(env(safe-area-inset-left, 0px) + 16px)' }}
-        />
+          className="fixed grid grid-cols-3 grid-rows-3 gap-2 pointer-events-auto"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)', left: 'calc(env(safe-area-inset-left, 0px) + 14px)' }}
+        >
+          <div />
+          <button
+            type="button"
+            aria-label="Move up"
+            className="w-12 h-12 rounded-xl bg-black/55 border border-white/15 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('ArrowUp', 'ArrowUp')}
+          >
+            <ArrowUp className="h-5 w-5" />
+            <span className="text-[10px] leading-none mt-0.5">Up</span>
+          </button>
+          <div />
+
+          <button
+            type="button"
+            aria-label="Move left"
+            className="w-12 h-12 rounded-xl bg-black/55 border border-white/15 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('ArrowLeft', 'ArrowLeft')}
+          >
+            <ArrowLeft className="h-5 w-5" />
+            <span className="text-[10px] leading-none mt-0.5">Left</span>
+          </button>
+          <div />
+          <button
+            type="button"
+            aria-label="Move right"
+            className="w-12 h-12 rounded-xl bg-black/55 border border-white/15 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('ArrowRight', 'ArrowRight')}
+          >
+            <ArrowRight className="h-5 w-5" />
+            <span className="text-[10px] leading-none mt-0.5">Right</span>
+          </button>
+
+          <div />
+          <button
+            type="button"
+            aria-label="Move down"
+            className="w-12 h-12 rounded-xl bg-black/55 border border-white/15 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('ArrowDown', 'ArrowDown')}
+          >
+            <ArrowDown className="h-5 w-5" />
+            <span className="text-[10px] leading-none mt-0.5">Down</span>
+          </button>
+          <div />
+        </div>
+
+        {/* Right: action buttons */}
         <div
-          className="fixed w-18 h-18 rounded-full bg-white/20 border border-white/30"
-          style={{ width: '72px', height: '72px', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 36px)', left: 'calc(env(safe-area-inset-left, 0px) + 36px)' }}
-        />
-        {/* Right: two buttons */}
-        <div className="fixed flex flex-col items-end gap-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', right: 'calc(env(safe-area-inset-right, 0px) + 28px)' }}>
-          <div className="w-12 h-12 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm" />
-          <div className="w-14 h-14 rounded-full bg-white/15 border border-white/30 backdrop-blur-sm" />
+          className="fixed flex flex-col items-end gap-3 pointer-events-auto"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)', right: 'calc(env(safe-area-inset-right, 0px) + 18px)' }}
+        >
+          <button
+            type="button"
+            aria-label="Jump"
+            className="w-14 h-14 rounded-full bg-black/55 border border-white/15 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('Space', ' ')}
+          >
+            <ArrowUpFromLine className="h-6 w-6" />
+            <span className="text-[10px] leading-none mt-0.5">Jump</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Peck attack"
+            className="w-16 h-16 rounded-full bg-red-600/70 border border-red-400/40 backdrop-blur-md text-white flex flex-col items-center justify-center"
+            style={{ touchAction: 'none' }}
+            {...bindHold('ShiftLeft', 'Shift')}
+          >
+            <Swords className="h-6 w-6" />
+            <span className="text-[10px] leading-none mt-0.5">Peck</span>
+          </button>
         </div>
       </div>
     </>
