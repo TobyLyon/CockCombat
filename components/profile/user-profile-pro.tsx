@@ -18,6 +18,32 @@ import { Loader2, Pencil, Upload, ExternalLink } from "lucide-react"
 import { getEvmExplorerUrl } from "@/lib/evm-config"
 import { useAuth } from "@/contexts/AuthContext"
 
+type WagerDepositRow = {
+  id: string
+  intent_id?: string
+  match_result_id?: string | null
+  match_session_id?: string | null
+  lobby_id: string
+  player_wallet: string
+  expected_lamports: number | string
+  deposit_signature: string | null
+  status: string
+  created_at: string
+}
+
+type PaymentRow = {
+  op_id: string
+  type: string
+  amount_wei: string
+  wallet_lamports?: number
+  tx_hash: string | null
+  state: string
+  match_result_id?: string | null
+  match_session_id?: string | null
+  metadata: any
+  created_at: string
+}
+
 export default function UserProfilePro() {
   const { connected, publicKey } = useWallet()
   const { sessionId, signIn } = useAuth()
@@ -32,6 +58,8 @@ export default function UserProfilePro() {
   const username = useUsername(walletAddress)
   const [matches, setMatches] = useState<Match[]>([])
   const [txs, setTxs] = useState<Transaction[]>([])
+  const [ledgerDeposits, setLedgerDeposits] = useState<WagerDepositRow[]>([])
+  const [ledgerPayments, setLedgerPayments] = useState<PaymentRow[]>([])
 
   const [editOpen, setEditOpen] = useState(false)
   const [editName, setEditName] = useState("")
@@ -73,12 +101,21 @@ export default function UserProfilePro() {
     return ''
   }
 
+  const lamportsToSol = (lamports: number) => lamports / 1_000_000_000
+
+  const parseLamports = (v: number | string | null | undefined): number => {
+    if (v === null || v === undefined) return 0
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+    const n = Number(v)
+    return Number.isFinite(n) ? n : 0
+  }
+
   useEffect(() => {
     const load = async () => {
       if (!connected || !walletAddress) return
       setLoading(true)
       try {
-        const [profileRes, matchRes, txRes] = await Promise.all([
+        const [profileRes, matchRes, txRes, ledgerRes] = await Promise.all([
           fetch(`/api/profile/${encodeURIComponent(walletAddress)}`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -91,6 +128,10 @@ export default function UserProfilePro() {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
           }),
+          fetch(
+            `/api/public/profile/${encodeURIComponent(walletAddress)}?limitMatches=25&limitDeposits=50&limitPayments=100`,
+            { method: 'GET' }
+          ),
         ])
 
         if (profileRes.status === 404) {
@@ -123,6 +164,17 @@ export default function UserProfilePro() {
           setTxs(Array.isArray(th) ? th : [])
         } else {
           setTxs([])
+        }
+
+        if (ledgerRes.ok) {
+          const ledgerJson = await ledgerRes.json().catch(() => null)
+          const deposits = ledgerJson?.ledger?.deposits
+          const payments = ledgerJson?.ledger?.payments
+          setLedgerDeposits(Array.isArray(deposits) ? deposits : [])
+          setLedgerPayments(Array.isArray(payments) ? payments : [])
+        } else {
+          setLedgerDeposits([])
+          setLedgerPayments([])
         }
       } catch (e:any) {
         toast.error(e?.message || 'Failed to load profile')
@@ -258,6 +310,7 @@ export default function UserProfilePro() {
           <TabsTrigger value="overview" className="data-[state=active]:bg-white/10">Overview</TabsTrigger>
           <TabsTrigger value="history" className="data-[state=active]:bg-white/10">Match History</TabsTrigger>
           <TabsTrigger value="transactions" className="data-[state=active]:bg-white/10">Transactions</TabsTrigger>
+          <TabsTrigger value="ledger" className="data-[state=active]:bg-white/10">Ledger</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="pt-4">
@@ -361,6 +414,89 @@ export default function UserProfilePro() {
                   })}
                   {matches.filter(m => m.winner_wallet === walletAddress && (m as any)?.metadata?.payout_tx).length === 0 && (
                     <div className="p-3 text-sm text-white/60">No on-chain payouts recorded yet.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="ledger" className="pt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-white/80 mb-3">Wagers & Intents</h3>
+                <div className="bg-white/5 rounded-lg divide-y divide-white/10">
+                  {ledgerDeposits.map((d) => {
+                    const lamports = parseLamports(d.expected_lamports)
+                    const sol = lamportsToSol(lamports)
+                    const t = d.created_at ? new Date(d.created_at).toLocaleString() : ""
+                    const sig = String(d.deposit_signature || '').trim()
+                    return (
+                      <div key={d.id} className="p-3 flex items-center justify-between text-sm">
+                        <div className="min-w-0">
+                          <div className="text-white/80 truncate">{d.status || 'wager'}</div>
+                          <div className="text-xs text-white/60">{t}</div>
+                          {sig && (
+                            <a
+                              className="text-xs text-white/60 underline inline-flex items-center gap-1"
+                              href={txUrl(sig)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Explorer <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                        <div className="text-white/80">{sol.toFixed(4)} SOL</div>
+                      </div>
+                    )
+                  })}
+                  {ledgerDeposits.length === 0 && (
+                    <div className="p-3 text-sm text-white/60">No wagers/intents recorded yet.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/5 border-white/10">
+              <CardContent className="p-4">
+                <h3 className="text-sm text-white/80 mb-3">Payouts & Refunds</h3>
+                <div className="bg-white/5 rounded-lg divide-y divide-white/10">
+                  {ledgerPayments.map((p) => {
+                    const lamports = Math.max(
+                      0,
+                      Math.floor(Number((p as any)?.wallet_lamports ?? p.amount_wei) || 0)
+                    )
+                    const sol = lamportsToSol(lamports)
+                    const t = p.created_at ? new Date(p.created_at).toLocaleString() : ""
+                    const hash = String(p.tx_hash || '').trim()
+                    const isRefund = String(p.type || '') === 'refund'
+                    return (
+                      <div key={p.op_id} className="p-3 flex items-center justify-between text-sm">
+                        <div className="min-w-0">
+                          <div className="text-white/80 truncate">{p.type}</div>
+                          <div className="text-xs text-white/60">{t}</div>
+                          <div className="text-xs text-white/50 truncate">{p.state}</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className={isRefund ? 'text-green-400' : 'text-white/80'}>{sol.toFixed(4)} SOL</div>
+                          {hash && (
+                            <a
+                              className="text-xs text-white/60 underline inline-flex items-center gap-1"
+                              href={txUrl(hash)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Explorer <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {ledgerPayments.length === 0 && (
+                    <div className="p-3 text-sm text-white/60">No payouts/refunds recorded yet.</div>
                   )}
                 </div>
               </CardContent>
