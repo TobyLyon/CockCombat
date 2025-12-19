@@ -20,7 +20,9 @@ export function useWallet() {
   }
 
   const publicKey = safeGet(() => base.publicKey, undefined)
-  const connected = safeGet(() => base.connected, false)
+  // Some in-app wallet browsers can briefly report connected=false while publicKey is already available.
+  // Treat presence of publicKey as effectively connected to avoid false "connect wallet" gating.
+  const connected = Boolean(publicKey) || safeGet(() => base.connected, false)
   const connecting = safeGet(() => base.connecting, false)
   const disconnect = safeGet(() => base.disconnect, undefined) as AnyFn | undefined
   const wallet = safeGet(() => base.wallet, undefined)
