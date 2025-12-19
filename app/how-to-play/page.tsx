@@ -314,9 +314,7 @@ export default function HowToPlayPage() {
                 title: 'Win Conditions', 
                 icon: '🏆',
                 items: [
-                  { key: 'Last Alive', desc: 'Survive longest' },
-                  { key: 'Most Hits', desc: 'Peck more rivals' },
-                  { key: 'Tiebreaker', desc: 'Last hit wins' },
+                  { key: 'Last Chicken Standing', desc: 'Win by being the last chicken alive.' },
                 ]
               },
               { 

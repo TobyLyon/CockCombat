@@ -13,7 +13,7 @@ import { useAudio } from "@/contexts/AudioContext"
 import { useWallet } from "@/hooks/use-wallet"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Copy, Check } from "lucide-react"
 // Removed WalletModal usage in EVM-only build
 
 // Animated chicken in background
@@ -36,10 +36,22 @@ export default function PixelGameInterface() {
   const { profile, needsSetup, setNeedsSetup, refreshProfile } = useProfile()
   const [isNavigating, setIsNavigating] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const TOKEN_MINT = "8YFsrVXEt9ZBsPhxqcKYRZgUWh6d9kkZw3jpJPGnpump"
   const isMobile = useMemo(() => {
     if (typeof window === "undefined") return false
     return window.matchMedia && window.matchMedia('(max-width: 768px)').matches
   }, [])
+
+  const handleCopyTokenAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(TOKEN_MINT)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch (_err) {
+      // ignore copy errors
+    }
+  }
   
   // Background chickens (sprite placeholders kept for sky-level ambience)
   const [backgroundChickens, setBackgroundChickens] = useState<AnimatedChicken[]>([])
@@ -95,7 +107,12 @@ export default function PixelGameInterface() {
     
     try {
       // Navigate directly to lobbies - no wallet check needed for viewing
-      toast.success("Entering the arena...", { duration: 1000 })
+      const toastLabel = (() => {
+        if (path === "/arena") return "Entering the arena..."
+        if (path === "/how-to-play") return "Opening How To Play..."
+        return "Navigating..."
+      })()
+      toast.success(toastLabel, { duration: 1000 })
       router.push(path)
     } catch (error) {
       console.error("Navigation error:", error)
@@ -253,9 +270,9 @@ export default function PixelGameInterface() {
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-b from-[#87CEEB] via-[#B0D4E3] to-[#E8F4F8] flex flex-col">
       {/* Epic Title */}
-      <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
+      <div className="absolute top-4 sm:top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
         <div className="relative inline-block">
-          <h1 className="text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font leading-none">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font leading-none">
             <span className="block">COCK</span>
             <span className="block">COMBAT</span>
           </h1>
@@ -263,7 +280,7 @@ export default function PixelGameInterface() {
             BETA
           </span>
         </div>
-        <p className="text-lg md:text-xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
+        <p className="text-base sm:text-lg md:text-xl font-bold text-yellow-300 drop-shadow-lg [text-shadow:_3px_3px_0_rgb(0_0_0_/_80%)] pixel-font">
           Battle Royale on Solana
         </p>
         </div>
@@ -310,14 +327,14 @@ export default function PixelGameInterface() {
       </div>
 
       {/* Center - Mouse-following chicken in foreground */}
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-        <div className="w-[300px] h-[300px] md:w-[400px] md:h-[400px]">
+      <div className="absolute top-[46%] sm:top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+        <div className="w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] md:w-[400px] md:h-[400px]">
               <PixelChickenViewer />
             </div>
           </div>
 
       {/* Minimal UI - Bottom Center: three buttons side-by-side */}
-      <div className="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center justify-center gap-2 sm:gap-4 bottom-20 sm:bottom-48">
+      <div className="absolute left-1/2 transform -translate-x-1/2 z-30 hidden sm:flex items-center justify-center gap-2 sm:gap-4 bottom-20 sm:bottom-48">
         {/* Wallet connect button (chain aware) */}
         <WalletMultiButton className="h-8 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm" />
         
@@ -345,20 +362,57 @@ export default function PixelGameInterface() {
                   </div>
 
       {/* Mobile-only socials and token block */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] max-w-md sm:hidden pointer-events-auto">
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] max-w-md sm:hidden pointer-events-auto pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+        {/* Minimal UI - Bottom Center: three buttons side-by-side */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          {/* Wallet connect button (chain aware) */}
+          <WalletMultiButton className="h-8 px-3 text-xs" />
+          
+          {/* Lobbies button */}
+            <Button
+              className="h-8 px-3 text-xs font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white active:scale-[0.985] touch-manipulation select-none"
+              onClick={() => handleNavigation("/arena")}
+              onPointerDown={(e) => { try { (e.currentTarget as any).style.transform = 'scale(0.985)' } catch {} }}
+              onPointerUp={(e) => { try { (e.currentTarget as any).style.transform = '' } catch {} }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/arena') }}
+              disabled={isNavigating}
+            >
+              {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
+            </Button>
+
+          {/* How To Play button */}
+          <Button
+            className="h-8 px-3 text-xs font-bold rounded-lg bg-yellow-400 hover:bg-yellow-500 text-white border-2 border-yellow-500 shadow-lg active:scale-[0.985] touch-manipulation select-none"
+            onClick={() => handleNavigation("/how-to-play")}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
+            disabled={isNavigating}
+          >
+            How to Play
+          </Button>
+        </div>
+
         <div className="rounded-lg border border-white/10 bg-white/10 backdrop-blur-sm p-3 shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-mono tracking-tight text-purple-100 truncate max-w-[56%]" aria-label="Token contract address">
-              Token: V6CRprMS...Qpump
-            </span>
-            <div className="flex items-center gap-2">
-              <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/></svg>
-              </a>
-              <a href="https://discord.gg/Tj2vBPgbFP" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="p-2 rounded-md border border-white/10 bg-white/5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.317 4.369a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 00-5.487 0 12.317 12.317 0 00-.617-1.249.077.077 0 00-.079-.037 19.736 19.736 0 00-4.885 1.515.07.07 0 00-.032.027C.533 9.045-.32 13.58.099 18.07a.082.082 0 00.031.056 19.9 19.9 0 006.014 3.06.08.08 0 00.087-.029c.463-.63.875-1.295 1.226-1.993a.076.076 0 00-.041-.104 12.795 12.795 0 01-1.806-.86.077.077 0 01-.008-.128c.122-.091.244-.186.361-.28a.074.074 0 01.078-.01c3.78 1.727 7.86 1.727 11.6 0a.074.074 0 01.079.009c.118.095.24.19.362.281a.077.077 0 01-.006.127 12.584 12.584 0 01-1.807.86.076.076 0 00-.04.105c.36.698.772 1.363 1.225 1.992a.08.08 0 00.087.03 19.876 19.876 0 006.015-3.06.08.08 0 00.031-.055c.5-5.177-.838-9.673-3.548-13.675a.061.061 0 00-.031-.028zM8.02 15.33c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.94 2.366-2.11 2.366zm7.975 0c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.93 2.366-2.11 2.366z" fill="#5865F2"/></svg>
-              </a>
-            </div>
+          <button
+            onClick={() => { handleCopyTokenAddress(); playSound("click") }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-full border transition-colors duration-150 border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10 focus:outline-none"
+            aria-label="Copy token contract address"
+            title={TOKEN_MINT}
+            type="button"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-green-400" />
+            ) : (
+              <Copy className="h-3.5 w-3.5 text-yellow-300" />
+            )}
+            <span className="text-xs font-mono tracking-wide break-all leading-tight text-white">{copied ? 'Copied!' : `Token: ${TOKEN_MINT}`}</span>
+          </button>
+          <div className="flex items-center justify-end gap-2 mt-2">
+            <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/></svg>
+            </a>
+            <a href="https://discord.gg/Tj2vBPgbFP" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="p-2 rounded-md border border-white/10 bg-white/5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.317 4.369a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 00-5.487 0 12.317 12.317 0 00-.617-1.249.077.077 0 00-.079-.037 19.736 19.736 0 00-4.885 1.515.07.07 0 00-.032.027C.533 9.045-.32 13.58.099 18.07a.082.082 0 00.031.056 19.9 19.9 0 006.014 3.06.08.08 0 00.087-.029c.463-.63.875-1.295 1.226-1.993a.076.076 0 00-.041-.104 12.795 12.795 0 01-1.806-.86.077.077 0 01-.008-.128c.122-.091.244-.186.361-.28a.074.074 0 01.078-.01c3.78 1.727 7.86 1.727 11.6 0a.074.074 0 01.079.009c.118.095.24.19.362.281a.077.077 0 01-.006.127 12.584 12.584 0 01-1.807.86.076.076 0 00-.04.105c.36.698.772 1.363 1.225 1.992a.08.08 0 00.087.03 19.876 19.876 0 006.015-3.06.08.08 0 00.031-.055c.5-5.177-.838-9.673-3.548-13.675a.061.061 0 00-.031-.028zM8.02 15.33c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.94 2.366-2.11 2.366zm7.975 0c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.93 2.366-2.11 2.366z" fill="#5865F2"/></svg>
+            </a>
           </div>
         </div>
       </div>

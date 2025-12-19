@@ -132,7 +132,7 @@ export default function GameLandingPage() {
           <div className="rounded-lg border border-white/10 bg-white/5 p-3 shadow">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-mono tracking-tight text-purple-100 truncate max-w-[56%]" aria-label="Token contract address">
-                Token: V6CRprMS...Qpump
+                Token: 8YFsrVXE...npump
               </span>
               <div className="flex items-center gap-2">
                 <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
