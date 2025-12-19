@@ -38,6 +38,7 @@ export default function PixelGameInterface() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const TOKEN_MINT = "8YFsrVXEt9ZBsPhxqcKYRZgUWh6d9kkZw3jpJPGnpump"
+  const TOKEN_PREVIEW = "8YFsrVXE...npump"
   const isMobile = useMemo(() => {
     if (typeof window === "undefined") return false
     return window.matchMedia && window.matchMedia('(max-width: 768px)').matches
@@ -361,36 +362,36 @@ export default function PixelGameInterface() {
         </Button>
                   </div>
 
+      {/* Mobile-only action buttons (kept above footer for clean spacing) */}
+      <div className="absolute left-1/2 -translate-x-1/2 z-30 sm:hidden flex items-center justify-center gap-2 pointer-events-auto bottom-[calc(env(safe-area-inset-bottom)+9.5rem)]">
+        {/* Wallet connect button (chain aware) */}
+        <WalletMultiButton className="h-8 px-3 text-xs" />
+
+        {/* Lobbies button */}
+        <Button
+          className="h-8 px-3 text-xs font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white active:scale-[0.985] touch-manipulation select-none"
+          onClick={() => handleNavigation("/arena")}
+          onPointerDown={(e) => { try { (e.currentTarget as any).style.transform = 'scale(0.985)' } catch {} }}
+          onPointerUp={(e) => { try { (e.currentTarget as any).style.transform = '' } catch {} }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/arena') }}
+          disabled={isNavigating}
+        >
+          {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
+        </Button>
+
+        {/* How To Play button */}
+        <Button
+          className="h-8 px-3 text-xs font-bold rounded-lg bg-yellow-400 hover:bg-yellow-500 text-white border-2 border-yellow-500 shadow-lg active:scale-[0.985] touch-manipulation select-none"
+          onClick={() => handleNavigation("/how-to-play")}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
+          disabled={isNavigating}
+        >
+          How to Play
+        </Button>
+      </div>
+
       {/* Mobile-only socials and token block */}
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] max-w-md sm:hidden pointer-events-auto pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
-        {/* Minimal UI - Bottom Center: three buttons side-by-side */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          {/* Wallet connect button (chain aware) */}
-          <WalletMultiButton className="h-8 px-3 text-xs" />
-          
-          {/* Lobbies button */}
-            <Button
-              className="h-8 px-3 text-xs font-bold rounded-lg bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white active:scale-[0.985] touch-manipulation select-none"
-              onClick={() => handleNavigation("/arena")}
-              onPointerDown={(e) => { try { (e.currentTarget as any).style.transform = 'scale(0.985)' } catch {} }}
-              onPointerUp={(e) => { try { (e.currentTarget as any).style.transform = '' } catch {} }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/arena') }}
-              disabled={isNavigating}
-            >
-              {isNavigating ? (<><Loader2 className="animate-spin mr-2" /> Loading...</>) : 'Lobbies'}
-            </Button>
-
-          {/* How To Play button */}
-          <Button
-            className="h-8 px-3 text-xs font-bold rounded-lg bg-yellow-400 hover:bg-yellow-500 text-white border-2 border-yellow-500 shadow-lg active:scale-[0.985] touch-manipulation select-none"
-            onClick={() => handleNavigation("/how-to-play")}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/how-to-play') }}
-            disabled={isNavigating}
-          >
-            How to Play
-          </Button>
-        </div>
-
         <div className="rounded-lg border border-white/10 bg-white/10 backdrop-blur-sm p-3 shadow">
           <button
             onClick={() => { handleCopyTokenAddress(); playSound("click") }}
@@ -404,7 +405,7 @@ export default function PixelGameInterface() {
             ) : (
               <Copy className="h-3.5 w-3.5 text-yellow-300" />
             )}
-            <span className="text-xs font-mono tracking-wide break-all leading-tight text-white">{copied ? 'Copied!' : `Token: ${TOKEN_MINT}`}</span>
+            <span className="min-w-0 flex-1 text-xs font-mono tracking-wide truncate whitespace-nowrap leading-tight text-white">{copied ? 'Copied!' : `Token: ${TOKEN_PREVIEW}`}</span>
           </button>
           <div className="flex items-center justify-end gap-2 mt-2">
             <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
