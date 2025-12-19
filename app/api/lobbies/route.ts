@@ -26,40 +26,32 @@ async function getSocketInstance() {
 
 // Username cache to reduce database queries
 const usernameCache = new Map<string, { username: string; timestamp: number }>();
- const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
- function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
-   try {
-     const raw = String(process.env.PAID_LOBBIES_UNLOCK_AT || process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
-     if (!raw) return { unlocked: true, unlockAtMs: null }
-     const ms = Number(raw)
-     if (!isFinite(ms) || ms <= 0) return { unlocked: true, unlockAtMs: null }
-     return { unlocked: Date.now() >= ms, unlockAtMs: ms }
-   } catch {
-     return { unlocked: true, unlockAtMs: null }
-   }
- }
+function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
+  return { unlocked: true, unlockAtMs: null }
+}
 
- function paidMatchesDiagnostics(): { enabled: boolean; checks: Record<string, boolean> } {
-   try {
-     const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
-     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
-     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
-     const hasSupabase = Boolean(hasSupabaseUrl && hasServiceRole)
-     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
-     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
-     const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
-     const unlock = paidLobbiesUnlocked()
-     const enabled = Boolean(enableFlag && hasSupabase && hasSettlement && hasRefund && hasHouse && unlock.unlocked)
-     return { enabled, checks: { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse, paidUnlocked: unlock.unlocked } }
-   } catch {
-     return { enabled: false, checks: { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false, paidUnlocked: false } }
-   }
- }
+function paidMatchesDiagnostics(): { enabled: boolean; checks: Record<string, boolean> } {
+  try {
+    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || 'true').toLowerCase() !== 'false'
+    const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const hasSupabase = Boolean(hasSupabaseUrl && hasServiceRole)
+    const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
+    const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
+    const hasHouse = Boolean(process.env.NEXT_PUBLIC_ADMIN_WALLET)
+    const unlock = paidLobbiesUnlocked()
+    const enabled = Boolean(enableFlag && hasSupabase && hasSettlement && hasRefund && hasHouse && unlock.unlocked)
+    return { enabled, checks: { enableFlag, hasSupabaseUrl, hasServiceRole, hasSettlement, hasRefund, hasHouse, paidUnlocked: unlock.unlocked } }
+  } catch {
+    return { enabled: false, checks: { enableFlag: false, hasSupabaseUrl: false, hasServiceRole: false, hasSettlement: false, hasRefund: false, hasHouse: false, paidUnlocked: false } }
+  }
+}
 
- function paidMatchesEnabled(): boolean {
-   return paidMatchesDiagnostics().enabled
- }
+function paidMatchesEnabled(): boolean {
+  return paidMatchesDiagnostics().enabled
+}
 
 // Helper function to get profile username with caching
 async function getPlayerUsername(playerId: string): Promise<string> {
@@ -179,14 +171,9 @@ export async function POST(req: NextRequest) {
     try {
       const amt = Number(lobby.amount || 0);
       const isPaid = amt > 0;
-      const lamports = Math.round(amt * 1_000_000_000);
-      const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000;
       if (isPaid && !paidMatchesEnabled()) {
         const diag = paidMatchesDiagnostics()
         return NextResponse.json({ error: 'Wagered matches are disabled', checks: diag.checks }, { status: 403 });
-      }
-      if (isPaid && !isAllowedPaidTier) {
-        return NextResponse.json({ error: 'Wagered matches are not available yet' }, { status: 403 });
       }
     } catch {}
 

@@ -12,23 +12,13 @@ import { createClient } from '@supabase/supabase-js';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 
 function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null } {
-  try {
-    const raw = String(process.env.PAID_LOBBIES_UNLOCK_AT || process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
-    if (!raw) return { unlocked: true, unlockAtMs: null }
-    const ms = Number(raw)
-    if (!isFinite(ms) || ms <= 0) return { unlocked: true, unlockAtMs: null }
-    return { unlocked: Date.now() >= ms, unlockAtMs: ms }
-  } catch {
-    return { unlocked: true, unlockAtMs: null }
-  }
+  return { unlocked: true, unlockAtMs: null }
 }
 
 function paidMatchesEnabled(): boolean {
   try {
-    const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    const enabled = String(process.env.ENABLE_PAID_MATCHES || 'true').toLowerCase() !== 'false'
     if (!enabled) return false
-    const unlock = paidLobbiesUnlocked();
-    if (!unlock.unlocked) return false
     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
     const hasRefund = Boolean(process.env.REFUND_SERVER_TOKEN)
@@ -41,7 +31,7 @@ function paidMatchesEnabled(): boolean {
 
 function paidMatchesDiagnostics(): Record<string, boolean> {
   try {
-    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
+    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || 'true').toLowerCase() !== 'false'
     const unlock = paidLobbiesUnlocked();
     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)

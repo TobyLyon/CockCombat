@@ -21,34 +21,6 @@ export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onM
   const [localError, setLocalError] = useState(null)
   const [wagerAmount, setWagerAmount] = useState(currentWagerAmount)
 
-  const paidUnlockAtMs = (() => {
-    try {
-      const raw = String(process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
-      const ms = Number(raw)
-      if (!raw || !isFinite(ms) || ms <= 0) return null
-      return ms
-    } catch { return null }
-  })()
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [])
-  const formatCountdown = (msRemaining: number) => {
-    try {
-      const total = Math.max(0, Math.floor(msRemaining / 1000))
-      const s = total % 60
-      const m = Math.floor(total / 60) % 60
-      const h = Math.floor(total / 3600) % 24
-      const d = Math.floor(total / 86400)
-      const pad = (n: number) => String(n).padStart(2, '0')
-      if (d > 0) return `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`
-      return `${pad(h)}:${pad(m)}:${pad(s)}`
-    } catch {
-      return ''
-    }
-  }
-
   // Format queue time
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60)
@@ -143,10 +115,7 @@ export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onM
                 <div className="space-y-2">
                   {lobbies.filter(l => l.matchType === 'ranked').map(lobby => (
                     (() => {
-                      const isPaid = Number((lobby as any)?.amount || 0) > 0
-                      const lockedByTime = Boolean(isPaid && paidUnlockAtMs && nowMs < paidUnlockAtMs)
-                      const disabled = Boolean(lobby.isComingSoon || lockedByTime)
-                      const countdown = lockedByTime && paidUnlockAtMs ? formatCountdown(paidUnlockAtMs - nowMs) : null
+                      const disabled = Boolean((lobby as any).isComingSoon)
                       return (
                     <Button
                       key={lobby.id}
@@ -155,7 +124,7 @@ export default function MatchmakingModal({ isOpen, onClose, selectedChicken, onM
                       className="w-full justify-between"
                     >
                       <span>Join {lobby.amount} {lobby.currency} Lobby</span>
-                      {disabled && <span className="text-xs opacity-70">{countdown ? `Unlocks in ${countdown}` : 'Coming Soon'}</span>}
+                      {disabled && <span className="text-xs opacity-70">Coming Soon</span>}
               </Button>
                       )
                     })())}

@@ -44,7 +44,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
   const { publicKey } = useWallet()
   const walletAddr = (() => { try { return (publicKey as any)?.toBase58?.() || (publicKey as any)?.toString?.() || '' } catch { return '' } })()
   const displayName = useUsername(walletAddr || "")
-  
+
   // Load existing messages from Supabase when matchId changes
   useEffect(() => {
     const loadHistory = async () => {
@@ -103,7 +103,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         setCountsByLobby(prev => {
           const next = { ...prev, [id]: { humans, total } }
           try {
-            const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.total) || 0), 0)
+            const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.humans) || 0), 0)
             setSpectatorCount(sum)
           } catch {}
           return next
@@ -120,7 +120,7 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         }
         setCountsByLobby(next)
         try {
-          const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.total) || 0), 0)
+          const sum = Object.values(next).reduce((acc, v) => acc + (Number(v?.humans) || 0), 0)
           setSpectatorCount(sum)
         } catch {}
       } catch {}
@@ -194,44 +194,46 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       <div className="flex items-center justify-between px-3 py-1.5 bg-black/30 backdrop-blur-sm border-b border-yellow-500/20">
         <div className="flex items-center gap-1.5 text-[10px] text-yellow-300/80 font-semibold leading-none">
           <Users className="h-3.5 w-3.5" />
-          <span className="truncate">{spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}</span>
+          <span className="truncate">{spectatorCount} {spectatorCount === 1 ? 'online' : 'online'}</span>
         </div>
         <Badge variant="outline" className="bg-green-600/30 text-green-300 border-green-500/40 text-[10px] leading-none pixel-font px-1.5 py-0.5 backdrop-blur-sm">
           LIVE
         </Badge>
       </div>
 
-      <ScrollArea className="flex-1 p-3">
-        <div className="flex flex-col gap-3">
-          {messages.map((message) => (
-            <div key={message.id} className="flex gap-2">
-              <Avatar className="h-7 w-7 ring-2 ring-yellow-500/20">
-                <AvatarImage src={message.user.avatar} />
-                <AvatarFallback className="bg-yellow-900/40 text-yellow-300 text-[10px] font-bold">{message.user.name.substring(0, 2)}</AvatarFallback>
-              </Avatar>
-              
-              <div className="flex flex-col flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-bold text-[11px] leading-none text-yellow-400 truncate max-w-[40%]">{message.user.name}</span>
-                  <span className="text-[10px] text-gray-400 truncate max-w-[40%]">
-                    {message.user.address}
-                  </span>
-                  <span className="text-[10px] text-gray-500 whitespace-nowrap">
-                    {typeof message.timestamp === 'string' 
-                      ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
-                      : formatDistanceToNow(message.timestamp, { addSuffix: true })}
-                  </span>
-                  
-                  {/* suppress system/prediction badges */}
-                </div>
+      <ScrollArea className="flex-1">
+        <div className="p-3">
+          <div className="flex flex-col gap-3">
+            {messages.map((message) => (
+              <div key={message.id} className="flex gap-2">
+                <Avatar className="h-7 w-7 ring-2 ring-yellow-500/20">
+                  <AvatarImage src={message.user.avatar} className="object-contain p-[1px]" />
+                  <AvatarFallback className="bg-yellow-900/40 text-yellow-300 text-[10px] font-bold">{message.user.name.substring(0, 2)}</AvatarFallback>
+                </Avatar>
                 
-                <p className={`text-[12px] mt-0.5 text-white/90 break-words leading-snug`}>
-                  {message.message}
-                </p>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-[11px] leading-none text-yellow-400 truncate max-w-[40%]">{message.user.name}</span>
+                    <span className="text-[10px] text-gray-400 truncate max-w-[40%]">
+                      {message.user.address}
+                    </span>
+                    <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                      {typeof message.timestamp === 'string' 
+                        ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
+                        : formatDistanceToNow(message.timestamp, { addSuffix: true })}
+                    </span>
+                    
+                    {/* suppress system/prediction badges */}
+                  </div>
+                  
+                  <p className={`text-[12px] mt-0.5 text-white/90 break-words leading-snug`}>
+                    {message.message}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
-          <div ref={scrollRef} />
+            ))}
+            <div ref={scrollRef} />
+          </div>
         </div>
       </ScrollArea>
       

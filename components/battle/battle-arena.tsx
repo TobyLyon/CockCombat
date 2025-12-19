@@ -125,13 +125,14 @@ export default function BattleArena() {
     }
     socket.on?.('queue_begin', capture)
     socket.on?.('arena_lock_roster', capture)
-    socket.on?.('round_start', capture)
     return () => {
       socket.off?.('queue_begin', capture)
       socket.off?.('arena_lock_roster', capture)
-      socket.off?.('round_start', capture)
     }
   }, [socket])
+
+  const chatRoomId = 'chat-global'
+
   // Live counts overlay
   const [liveCounts, setLiveCounts] = useState<Record<string, { liveHumans: number; liveTotal: number }>>({})
   
@@ -452,36 +453,6 @@ export default function BattleArena() {
     });
   }, [lobbies]);
 
-  const paidUnlockAtMs = (() => {
-    try {
-      const raw = String(process.env.NEXT_PUBLIC_PAID_LOBBIES_UNLOCK_AT || '').trim()
-      const ms = Number(raw)
-      if (!raw || !isFinite(ms) || ms <= 0) return null
-      return ms
-    } catch { return null }
-  })()
-
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [])
-
-  const formatCountdown = (msRemaining: number) => {
-    try {
-      const total = Math.max(0, Math.floor(msRemaining / 1000))
-      const s = total % 60
-      const m = Math.floor(total / 60) % 60
-      const h = Math.floor(total / 3600) % 24
-      const d = Math.floor(total / 86400)
-      const pad = (n: number) => String(n).padStart(2, '0')
-      if (d > 0) return `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`
-      return `${pad(h)}:${pad(m)}:${pad(s)}`
-    } catch {
-      return ''
-    }
-  }
-
   const handleJoinLobby = async (lobby: Lobby) => {
     // For any FREE matches (amount === 0), allow guest join when no wallet
     const joiningAsGuest = (!publicKey && lobby.amount === 0);
@@ -663,11 +634,6 @@ export default function BattleArena() {
                       const isLocked = lobby.status !== 'open' || playerCount >= lobby.capacity
                       const amt = Number(lobby.amount || 0)
                       const isPaid = amt > 0
-                      const lamports = Math.round(amt * 1_000_000_000)
-                      const isAllowedPaidTier = lamports === 10_000_000 || lamports === 50_000_000
-                      const paidLockedByTime = Boolean(isPaid && paidUnlockAtMs && nowMs < paidUnlockAtMs)
-                      const isPaidLocked = isPaid && (!isAllowedPaidTier || paidLockedByTime)
-                      const countdownText = paidLockedByTime && paidUnlockAtMs ? formatCountdown(paidUnlockAtMs - nowMs) : null
                       const fillPercent = Math.min(100, Math.round((playerCount / (lobby.capacity || 8)) * 100))
                       const isTutorialLobby = false
                       return (
@@ -683,7 +649,7 @@ export default function BattleArena() {
                           ${joinedLobby?.id === lobby.id ? 'ring-2 ring-white/70 border-white/30' : 'hover:border-white/20'}
                         min-h-[280px]
                         `}
-                        onClick={() => !isJoining && !isLocked && !isPaidLocked && handleJoinLobby(lobby)}
+                        onClick={() => !isJoining && !isLocked && handleJoinLobby(lobby)}
                       >
                         {/* Subtle gradient overlay on hover */}
                         <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${lobby.highRoller ? 'from-red-400/10 to-red-700/10' : 'from-white/8 to-white/0'}`} />
@@ -742,7 +708,7 @@ export default function BattleArena() {
                           {/* Wallet Required Tag */}
                           {isPaid && (
                             <div className="mt-1 mb-2 flex justify-end">
-                              <div className={`inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-white/75 ${isPaidLocked ? 'opacity-70' : 'opacity-90'}`}>
+                              <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-white/75 opacity-90">
                                 <Wallet className="h-2.5 w-2.5" />
                                 Wallet
                               </div>
@@ -754,17 +720,15 @@ export default function BattleArena() {
                           <div className="mt-auto grid grid-cols-1 gap-2">
                             <Button
                               className={`w-full font-bold py-2.5 px-3 lg:px-4 rounded-lg transition-all duration-300 border text-sm md:text-base flex items-center justify-center gap-2
-                                ${isLocked || isPaidLocked ? 'bg-white/5 text-white/50 border-white/10 cursor-not-allowed' : 'bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner'}`}
-                              onClick={(e) => { e.stopPropagation(); if (!isJoining && !isLocked && !isPaidLocked) handleJoinLobby(lobby); }}
-                              disabled={isJoining === lobby.id || isLocked || isPaidLocked}
+                                ${isLocked ? 'bg-white/5 text-white/50 border-white/10 cursor-not-allowed' : 'bg-white/10 hover:bg-white/15 text-white border-white/20 shadow-inner'}`}
+                              onClick={(e) => { e.stopPropagation(); if (!isJoining && !isLocked) handleJoinLobby(lobby); }}
+                              disabled={isJoining === lobby.id || isLocked}
                             >
-                              {isPaidLocked
-                                  ? (countdownText ? `UNLOCKS IN ${countdownText}` : 'COMING SOON')
-                                  : isJoining === lobby.id 
-                                    ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
-                                    : joinedLobby?.id === lobby.id
-                                    ? '✓ JOINED'
-                                    : (isLocked ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL') : <>JOIN <ChevronRight className="h-5 w-5"/></>)}
+                              {isJoining === lobby.id 
+                                ? <><Loader2 className="h-4 w-4 animate-spin"/> Joining...</>
+                                : joinedLobby?.id === lobby.id
+                                ? '✓ JOINED'
+                                : (isLocked ? (lobby.status !== 'open' ? 'IN GAME' : 'FULL') : <>JOIN <ChevronRight className="h-5 w-5"/></>)}
                             </Button>
                           </div>
                         )}
@@ -862,7 +826,7 @@ export default function BattleArena() {
                 </div>
               </div>
               <div className="h-[calc(480px-52px)]">
-                <SpectatorChat matchId={activeMatchId} canSend={true} />
+                <SpectatorChat matchId={chatRoomId} canSend={true} />
               </div>
             </div>
           )}
