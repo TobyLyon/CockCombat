@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useWallet } from '@/hooks/use-wallet'
 import { toast } from 'sonner'
 import { isBsc } from '@/lib/chain'
@@ -11,6 +11,16 @@ export function useWalletAuth() {
   const [loading, setLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
 
+  const walletStateRef = useRef<{ connected: boolean; publicKey: any; signMessage: any }>({
+    connected: false,
+    publicKey: null,
+    signMessage: undefined,
+  })
+
+  useEffect(() => {
+    walletStateRef.current = { connected, publicKey, signMessage }
+  }, [connected, publicKey, signMessage])
+
   useEffect(() => {
     // If wallet disconnects, drop session state locally
     if (!connected) {
@@ -20,18 +30,31 @@ export function useWalletAuth() {
   }, [connected])
 
   const signIn = useCallback(async (): Promise<string | null> => {
-    if (!connected || !publicKey) {
+    const { publicKey: pk, signMessage: sm } = walletStateRef.current
+    if (!pk) {
       toast.error("Please connect your wallet first.")
       return null
     }
-    if (!signMessage) {
+    if (!sm) {
       toast.error("Your wallet does not support message signing.")
       return null
     }
-    
+
     setLoading(true)
     try {
-      const walletAddress = publicKey.toString()
+      const walletAddress = (() => {
+        try {
+          if (typeof pk === 'string') return pk
+          if (typeof pk?.toBase58 === 'function') return pk.toBase58()
+          if (typeof pk?.toString === 'function') return pk.toString()
+          return String(pk)
+        } catch {
+          return ''
+        }
+      })()
+      if (!walletAddress) {
+        throw new Error('Wallet address unavailable')
+      }
 
       // 1) Get nonce and human-readable message
       const nonceRes = await fetch('/api/auth/nonce', {
@@ -49,7 +72,7 @@ export function useWalletAuth() {
       const messageBytes = new TextEncoder().encode(message)
       // For Solana we expect base58; for BSC we accept hex
       let signature: string
-      const sig = await (signMessage as any)(messageBytes)
+      const sig = await (sm as any)(messageBytes)
       if (isBsc()) {
         signature = sig
       } else {
@@ -80,7 +103,7 @@ export function useWalletAuth() {
     } finally {
       setLoading(false)
     }
-  }, [publicKey, connected, signMessage])
+  }, [])
 
   const signOut = useCallback(async () => {
     setLoading(true)

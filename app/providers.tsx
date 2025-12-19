@@ -60,11 +60,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   ];
 
   const content = (
-    <AuthProvider>
-      <ConnectionProvider endpoint={endpoint}>
-        <WalletProvider wallets={wallets} autoConnect>
-          <WalletEnvProvider>
-            <WalletModalProvider>
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletEnvProvider>
+          <WalletModalProvider>
+            <AuthProvider>
               <WalletPromptProvider>
                 <ProfileProvider>
                   <SocketProvider>
@@ -93,11 +93,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                   </SocketProvider>
                 </ProfileProvider>
               </WalletPromptProvider>
-            </WalletModalProvider>
-          </WalletEnvProvider>
-        </WalletProvider>
-      </ConnectionProvider>
-    </AuthProvider>
+            </AuthProvider>
+          </WalletModalProvider>
+        </WalletEnvProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 
   return content as any;
