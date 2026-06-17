@@ -11,6 +11,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useWalletPrompt } from "@/contexts/WalletPromptContext"
 import { useRouter } from "next/navigation"
+import { hasToken, shortMint } from "@/lib/token-config"
 
 export default function GameLandingPage() {
   const { connected } = useWallet()
@@ -131,9 +132,11 @@ export default function GameLandingPage() {
         <section className="block sm:hidden px-4 pt-4">
           <div className="rounded-lg border border-white/10 bg-white/5 p-3 shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-mono tracking-tight text-purple-100 truncate max-w-[56%]" aria-label="Token contract address">
-                Token: 8YFsrVXE...npump
-              </span>
+              {hasToken && (
+                <span className="text-[11px] font-mono tracking-tight text-purple-100 truncate max-w-[56%]" aria-label="Token contract address">
+                  Token: {shortMint()}
+                </span>
+              )}
               <div className="flex items-center gap-2">
                 <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/></svg>
@@ -151,7 +154,7 @@ export default function GameLandingPage() {
           <div className="flex-1 flex flex-col justify-center p-8 lg:p-16">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
               <h1 className="text-6xl md:text-8xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-purple-400 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">
-                COCK COMBAT
+                CHICKEN DINNER
               </h1>
               <p className="text-xl md:text-2xl mb-8 max-w-2xl text-purple-100 drop-shadow-md">
                 The ultimate voxel chicken fighting arena on Solana. Battle for glory, bet on champions, and build your
@@ -287,7 +290,7 @@ export default function GameLandingPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
           <div className="mb-4 md:mb-0">
             <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500">
-              COCK COMBAT
+              CHICKEN DINNER
             </h3>
             <p className="text-sm text-purple-300">© {new Date().getFullYear()} All rights reserved</p>
           </div>

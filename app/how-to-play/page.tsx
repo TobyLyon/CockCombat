@@ -5,7 +5,7 @@ import * as THREE from "three"
 import { ContactShadows } from "@react-three/drei"
 import { motion } from "framer-motion"
 import { PixelChicken } from "@/components/3d/pixel-chicken-viewer"
-import { useRef, useState, useMemo } from "react"
+import { useRef, useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
@@ -171,6 +171,10 @@ function CameraAim({ target }: { target: [number, number, number] }) {
 }
 
 export default function HowToPlayPage() {
+  // R3F is externalized on the server; only mount Canvas after hydration to
+  // avoid SSR rendering a second React instance.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   return (
     <div className="min-h-screen w-full overflow-hidden relative bg-gradient-to-b from-purple-900 via-purple-800 to-purple-950 text-white">
       {/* Refined ambient background with grain effect */}
@@ -196,9 +200,11 @@ export default function HowToPlayPage() {
 
       {/* Full-page floating particles */}
       <div className="pointer-events-none absolute inset-0 z-10">
-        <Canvas camera={{ position: [0, 8, 16], fov: 60 }} dpr={[1, 1.5]} gl={{ alpha: true }}>
-          <FloatingParticles count={80} />
-        </Canvas>
+        {mounted && (
+          <Canvas camera={{ position: [0, 8, 16], fov: 60 }} dpr={[1, 1.5]} gl={{ alpha: true }}>
+            <FloatingParticles count={80} />
+          </Canvas>
+        )}
       </div>
 
       {/* Header actions */}
@@ -268,7 +274,7 @@ export default function HowToPlayPage() {
               { 
                 num: '03', 
                 title: 'Win & Earn', 
-                desc: 'Battle or spectate for $COCK or SOL', 
+                desc: 'Battle or spectate for $DINNER or SOL', 
                 icon: '💰',
                 color: 'from-yellow-500 to-amber-500'
               },
@@ -321,7 +327,7 @@ export default function HowToPlayPage() {
                 title: 'Economy', 
                 icon: '🪙',
                 items: [
-                  { key: '$COCK', desc: 'In-game currency' },
+                  { key: '$DINNER', desc: 'In-game currency' },
                   { key: 'SOL', desc: 'Chain native wagers/payouts' },
                   { key: 'Wagers', desc: 'Pool into prizes' },
                   { key: 'Winners', desc: 'Take 96% cut' },
@@ -356,13 +362,15 @@ export default function HowToPlayPage() {
 
       {/* Bottom grazing chickens - foreground overlay */}
       <div className="absolute left-0 right-0 bottom-0 h-64 md:h-72 z-30 pointer-events-none">
-        <Canvas camera={{ position: [0, 1.5, 10], fov: 45 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
-          <ambientLight intensity={0.9} />
-          <directionalLight position={[6, 8, 6]} intensity={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-          <GrazingFlock />
-          <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={30} blur={2.5} far={5} color="#1a1a1a" />
-          <CameraAim target={[0, 0.5, -2]} />
-        </Canvas>
+        {mounted && (
+          <Canvas camera={{ position: [0, 1.5, 10], fov: 45 }} dpr={[1, 1.5]} shadows gl={{ alpha: true }}>
+            <ambientLight intensity={0.9} />
+            <directionalLight position={[6, 8, 6]} intensity={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+            <GrazingFlock />
+            <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={30} blur={2.5} far={5} color="#1a1a1a" />
+            <CameraAim target={[0, 0.5, -2]} />
+          </Canvas>
+        )}
       </div>
     </div>
   )

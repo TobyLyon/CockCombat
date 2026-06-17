@@ -1,4 +1,4 @@
-# Cock Combat — Validation Runbook (Launch-Readiness)
+# Chicken Dinner — Validation Runbook (Launch-Readiness)
 
 This runbook is designed to validate **real-money SOL wagering integrity** and multiplayer reliability before enabling production stakes.
 

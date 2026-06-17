@@ -14,6 +14,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
 import { Loader2, Copy, Check } from "lucide-react"
+import { TOKEN_MINT, hasToken, shortMint } from "@/lib/token-config"
 // Removed WalletModal usage in EVM-only build
 
 // Animated chicken in background
@@ -37,8 +38,7 @@ export default function PixelGameInterface() {
   const [isNavigating, setIsNavigating] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const TOKEN_MINT = "8YFsrVXEt9ZBsPhxqcKYRZgUWh6d9kkZw3jpJPGnpump"
-  const TOKEN_PREVIEW = "8YFsrVXE...npump"
+  const TOKEN_PREVIEW = shortMint()
   const isMobile = useMemo(() => {
     if (typeof window === "undefined") return false
     return window.matchMedia && window.matchMedia('(max-width: 768px)').matches
@@ -277,8 +277,8 @@ export default function PixelGameInterface() {
       <div className="absolute top-4 sm:top-8 left-1/2 transform -translate-x-1/2 z-30 text-center pointer-events-none">
         <div className="relative inline-block">
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-white drop-shadow-[0_0_40px_rgba(0,0,0,1)] [text-shadow:_8px_8px_0_rgb(0_0_0_/_80%)] mb-2 pixel-font leading-none">
-            <span className="block">COCK</span>
-            <span className="block">COMBAT</span>
+            <span className="block">CHICKEN</span>
+            <span className="block">DINNER</span>
           </h1>
           <span className="absolute -top-2 left-full ml-1 md:-top-3 md:ml-2 bg-yellow-400 text-black border-2 border-yellow-500 text-sm md:text-lg font-extrabold px-3 py-1 rounded-md leading-none shadow-lg rotate-[-6deg] pixel-font">
             BETA
@@ -399,7 +399,7 @@ export default function PixelGameInterface() {
           <div className="flex items-center gap-2 flex-nowrap">
             <button
               onClick={() => { handleCopyTokenAddress(); playSound("click") }}
-              className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 rounded-full border transition-colors duration-150 border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10 focus:outline-none"
+              className={`${hasToken ? 'flex' : 'hidden'} min-w-0 flex-1 items-center gap-2 px-2.5 py-2 rounded-full border transition-colors duration-150 border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10 focus:outline-none`}
               aria-label="Copy token contract address"
               title={TOKEN_MINT}
               type="button"

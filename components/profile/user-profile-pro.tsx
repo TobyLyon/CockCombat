@@ -290,7 +290,7 @@ export default function UserProfilePro() {
         </div>
         <div className="mt-4 md:mt-0 flex items-center gap-3">
           <div className="bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-            <span className="text-white font-semibold">{(profile?.token_balance ?? 0).toLocaleString()} $COCK</span>
+            <span className="text-white font-semibold">{(profile?.token_balance ?? 0).toLocaleString()} $DINNER</span>
           </div>
           {/* EVM-only build: remove Solana token balance display */}
         </div>
@@ -620,7 +620,7 @@ function HistoryItem({ result, fighter, opponent, reward, date }: { result: 'win
         </div>
       </div>
       <div className={result === "win" ? "text-green-400 font-semibold" : "text-white/60"}>
-        {result === "win" ? `+${reward} $COCK` : "No reward"}
+        {result === "win" ? `+${reward} $DINNER` : "No reward"}
       </div>
     </div>
   )

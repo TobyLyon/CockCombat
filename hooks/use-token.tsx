@@ -10,8 +10,8 @@ export function useToken() {
 }
 // EVM-only: token actions disabled
 
-// Default token configuration from environment variables
-const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || 'V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump';
+// Default token configuration from environment variables (empty until $DINNER launches)
+const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_TOKEN_MINT || '';
 const GAME_ESCROW_WALLET = process.env.NEXT_PUBLIC_GAME_ESCROW_WALLET || '';
 
 // Admin wallet for token creation/airdrop (should be in environment variables)
@@ -39,10 +39,10 @@ export function useToken(): TokenHookResult {
   const { publicKey, connected, signTransaction } = useWallet();
   
   // State for token data
-  const [tokenMint, setTokenMint] = useLocalStorage('cockTokenMint', DEFAULT_TOKEN_MINT);
+  const [tokenMint, setTokenMint] = useLocalStorage('dinnerTokenMint', DEFAULT_TOKEN_MINT);
   const [balance, setBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [escrowWallet, setEscrowWallet] = useLocalStorage('cockEscrowWallet', GAME_ESCROW_WALLET);
+  const [escrowWallet, setEscrowWallet] = useLocalStorage('dinnerEscrowWallet', GAME_ESCROW_WALLET);
   
   // Initialize token service with stored mint address and escrow wallet
   useEffect(() => {
@@ -116,7 +116,7 @@ export function useToken(): TokenHookResult {
           amount
         );
         
-        toast.success(`Airdropped ${amount} $COCK tokens!`);
+        toast.success(`Airdropped ${amount} $DINNER tokens!`);
         
         // Refresh balance after successful airdrop
         await refreshBalance();
@@ -158,7 +158,7 @@ export function useToken(): TokenHookResult {
           amount
         );
         
-        toast.success(`Bet of ${amount} $COCK tokens placed successfully!`);
+        toast.success(`Bet of ${amount} $DINNER tokens placed successfully!`);
         
         // Refresh balance after successful bet
         await refreshBalance();
@@ -219,7 +219,7 @@ export function useToken(): TokenHookResult {
         // 2. We might just display a success message here
         
         // For demo purposes, we'll just simulate a successful claim
-        toast.success(`Won ${amount} $COCK tokens!`);
+        toast.success(`Won ${amount} $DINNER tokens!`);
         
         // Simulate the claim by airdropping tokens 
         // In a real implementation, this would transfer from the escrow wallet

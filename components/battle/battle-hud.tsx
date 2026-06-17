@@ -65,7 +65,7 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
 
         {/* Top Center: Title */}
         <div className="bg-black/80 border border-yellow-500/60 rounded px-2 sm:px-3 py-0.5 sm:py-1 shadow backdrop-blur-sm">
-          <h1 className="text-xs sm:text-sm lg:text-base text-yellow-400 font-bold tracking-wide">COCK COMBAT</h1>
+          <h1 className="text-xs sm:text-sm lg:text-base text-yellow-400 font-bold tracking-wide">CHICKEN DINNER</h1>
         </div>
 
         {/* Top Right: Player List - Better spacing and sizing with responsive width */}

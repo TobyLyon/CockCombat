@@ -11,6 +11,7 @@ import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { useGameState } from "@/contexts/GameStateContext"
 import Image from 'next/image';
+import { TOKEN_MINT, hasToken, shortMint } from "@/lib/token-config"
 
 export default function NavBar() {
   const { publicKey } = useWallet()
@@ -37,22 +38,21 @@ export default function NavBar() {
   }
 
   const title = useMemo(() => {
-    if (!pathname) return "COCK COMBAT"
-    if (pathname === "/") return "COCK COMBAT"
+    if (!pathname) return "CHICKEN DINNER"
+    if (pathname === "/") return "CHICKEN DINNER"
     if (pathname.startsWith("/arena")) return "ARENA"
     // marketplace removed
     if (pathname.startsWith("/profile")) return "PROFILE"
     if (pathname.startsWith("/spectate")) return "SPECTATE"
     if (pathname.startsWith("/lobbies")) return "LOBBIES"
-    return "COCK COMBAT"
+    return "CHICKEN DINNER"
   }, [pathname])
 
   // State to prevent hydration mismatch for client-only components
   const [isMounted, setIsMounted] = useState(false);
   const [copied, setCopied] = useState(false)
 
-  const TOKEN_MINT = "8YFsrVXEt9ZBsPhxqcKYRZgUWh6d9kkZw3jpJPGnpump"
-  const tokenEndPreview = "8YFsrVXE...npump"
+  const tokenEndPreview = shortMint()
 
   const handleCopyTokenAddress = async () => {
     try {
@@ -137,7 +137,7 @@ export default function NavBar() {
 
         {/* Copy Token - moved to left group after music controls */}
         <div
-          className={`hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[110px] border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10`}
+          className={`${hasToken ? 'hidden sm:inline-flex' : 'hidden'} items-center gap-2 px-3 py-1 rounded-full border transition-colors duration-150 min-w-[110px] border-white/20 bg-white/5 text-white/80 cursor-pointer hover:bg-white/10`}
           aria-label="Copy token contract address"
           title={TOKEN_MINT}
           onClick={() => { handleCopyTokenAddress(); playSound("click"); }}
@@ -177,7 +177,7 @@ export default function NavBar() {
           target="_blank"
           rel="noopener noreferrer"
           className="hidden sm:flex p-2 items-center justify-center"
-          aria-label="Cock Combat on X"
+          aria-label="Chicken Dinner on X"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/>
@@ -190,7 +190,7 @@ export default function NavBar() {
           target="_blank"
           rel="noopener noreferrer"
           className="hidden sm:flex p-2 items-center justify-center"
-          aria-label="Join the Cock Combat Discord"
+          aria-label="Join the Chicken Dinner Discord"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M20.317 4.369a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 00-5.487 0 12.317 12.317 0 00-.617-1.249.077.077 0 00-.079-.037 19.736 19.736 0 00-4.885 1.515.07.07 0 00-.032.027C.533 9.045-.32 13.58.099 18.07a.082.082 0 00.031.056 19.9 19.9 0 006.014 3.06.08.08 0 00.087-.029c.463-.63.875-1.295 1.226-1.993a.076.076 0 00-.041-.104 12.795 12.795 0 01-1.806-.86.077.077 0 01-.008-.128c.122-.091.244-.186.361-.28a.074.074 0 01.078-.01c3.78 1.727 7.86 1.727 11.6 0a.074.074 0 01.079.009c.118.095.24.19.362.281a.077.077 0 01-.006.127 12.584 12.584 0 01-1.807.86.076.076 0 00-.04.105c.36.698.772 1.363 1.225 1.992a.08.08 0 00.087.03 19.876 19.876 0 006.015-3.06.08.08 0 00.031-.055c.5-5.177-.838-9.673-3.548-13.675a.061.061 0 00-.031-.028zM8.02 15.33c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.94 2.366-2.11 2.366zm7.975 0c-1.163 0-2.11-1.06-2.11-2.366 0-1.307.94-2.367 2.11-2.367 1.18 0 2.12 1.07 2.11 2.367 0 1.306-.93 2.366-2.11 2.366z" fill="#5865F2"/>

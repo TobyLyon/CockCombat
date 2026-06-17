@@ -109,9 +109,9 @@ export default function UserProfile() {
 
         <div className="mt-4 md:mt-0 flex items-center space-x-4">
           <div className="bg-purple-800/50 px-4 py-2 rounded-lg border border-purple-700">
-            <span className="text-yellow-400 font-bold">{stats.cluckBalance} $COCK</span>
+            <span className="text-yellow-400 font-bold">{stats.cluckBalance} $DINNER</span>
           </div>
-          <Button className="bg-yellow-600 hover:bg-yellow-700 text-white">Get More $COCK</Button>
+          <Button className="bg-yellow-600 hover:bg-yellow-700 text-white">Get More $DINNER</Button>
         </div>
       </div>
 
@@ -211,7 +211,7 @@ function HistoryItem({ result, fighter, opponent, reward, date }) {
         </div>
       </div>
       <div className={result === "win" ? "text-yellow-400 font-bold" : "text-purple-300"}>
-        {result === "win" ? `+${reward} $COCK` : "No reward"}
+        {result === "win" ? `+${reward} $DINNER` : "No reward"}
       </div>
     </div>
   )

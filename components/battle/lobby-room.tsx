@@ -688,7 +688,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           confirmRes = await tryConfirm('/api/wager/confirm');
         }
         if (!confirmRes.ok) {
-          const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
+          const absUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/api/wager/confirm';
           confirmRes = await tryConfirm(absUrl);
         }
         if (!confirmRes.ok) {
@@ -763,7 +763,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           confirmRes = await tryConfirm('/api/wager/confirm');
         }
         if (!confirmRes.ok) {
-          const absUrl = 'https://www.cockcombat.xyz/api/wager/confirm';
+          const absUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/api/wager/confirm';
           confirmRes = await tryConfirm(absUrl);
         }
         if (!confirmRes.ok) {

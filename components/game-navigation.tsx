@@ -53,7 +53,7 @@ export default function GameNavigation({ onButtonClick }) {
           borderColor="border-[#15803d]"
         />
         <NavigationCard
-          title="My Cocks"
+          title="My Chickens"
           icon={<User className="h-6 w-6" />}
           onClick={() => handleClick("profile")}
           color="bg-[#eab308]"

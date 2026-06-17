@@ -126,7 +126,7 @@ export default function GameUI({
             <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             <div>
               <div className="text-yellow-400 font-bold text-xs">Prize Pool</div>
-              <div className="text-white text-sm sm:text-lg">{prize} $COCK</div>
+              <div className="text-white text-sm sm:text-lg">{prize} $DINNER</div>
             </div>
           </div>
 
@@ -161,10 +161,10 @@ export default function GameUI({
           <div className="bg-black/60 p-1 sm:p-2 rounded-lg border-2 border-yellow-500">
             <img 
               src="/images/cock_combat_coin_spin.gif" 
-              alt="$COCK Coin" 
+              alt="$DINNER Coin" 
               className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain"
             />
-            <div className="text-yellow-400 text-xs text-center mt-1 font-bold pixel-font">$COCK</div>
+            <div className="text-yellow-400 text-xs text-center mt-1 font-bold pixel-font">$DINNER</div>
           </div>
         </motion.div>
       )}
@@ -291,7 +291,7 @@ export default function GameUI({
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.4 }}
                 >
-                  You are the last cock standing!
+                  You are the last chicken standing!
                 </motion.p>
               )}
               {!isWinner && (

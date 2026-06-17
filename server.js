@@ -297,7 +297,8 @@ preparePromise.then(() => {
     path: '/api/socketio',
     addTrailingSlash: false,
     cors: (() => {
-      const allow = [process.env.NEXT_PUBLIC_APP_URL, process.env.RENDER_EXTERNAL_URL, 'http://localhost:3000', 'https://www.cockcombat.xyz']
+      const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+      const allow = [process.env.NEXT_PUBLIC_APP_URL, railwayDomain, 'http://localhost:3000', 'http://localhost:3055']
         .filter(Boolean);
       const origin = (o, cb) => {
         try {
@@ -305,7 +306,7 @@ preparePromise.then(() => {
           if (allow.includes(o)) return cb(null, true);
           const u = new URL(o);
           const h = String(u.hostname || '').toLowerCase();
-          if (h === 'www.cockcombat.xyz' || h.endsWith('.cockcombat.xyz')) return cb(null, true);
+          if (h.endsWith('.up.railway.app') || h === 'localhost') return cb(null, true);
         } catch {}
         return cb(new Error('Not allowed by CORS'), false);
       };
@@ -3454,7 +3455,7 @@ preparePromise.then(() => {
                           const cur = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players.slice() : [];
                           const need = Math.max(0, capacity - cur.length);
                           if (need > 0) {
-                            const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                            const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCluck'];
                             for (let i = 0; i < need; i++) {
                               const name = aiNames[Math.floor(Math.random() * aiNames.length)];
                               cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
@@ -3581,7 +3582,7 @@ preparePromise.then(() => {
                 const cur = Array.isArray(mem.players) ? mem.players.slice() : [];
                 const need = Math.max(0, capacity - cur.length);
                 if (need > 0) {
-                  const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                  const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCluck'];
                   for (let i = 0; i < need; i++) {
                     const name = aiNames[Math.floor(Math.random() * aiNames.length)];
                     cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
@@ -3648,7 +3649,7 @@ preparePromise.then(() => {
                     const cur = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players.slice() : [];
                     const need = Math.max(0, capacity - cur.length);
                     if (need > 0) {
-                      const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCock'];
+                      const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCluck'];
                       for (let i = 0; i < need; i++) {
                         const name = aiNames[Math.floor(Math.random() * aiNames.length)];
                         cur.push({ playerId: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenId: 'Default', isReady: true });
@@ -3900,7 +3901,7 @@ preparePromise.then(() => {
           const current = Array.isArray(expectedRoster) ? expectedRoster.length : 0;
           const missing = Math.max(0, lobbyMeta.capacity - current);
           if (missing > 0) {
-            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCluck'];
             for (let i = 0; i < missing; i++) {
               const name = aiNames[Math.floor(Math.random() * aiNames.length)];
               expectedRoster.push({ wallet: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenName: 'default-ai-chicken' });
@@ -3946,7 +3947,7 @@ preparePromise.then(() => {
         if (isTutorial) {
           const missing = Math.max(0, (lobbyMeta.capacity || 8) - expectedRoster.length);
           if (missing > 0) {
-            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCock'];
+            const aiNames = ['ChickenBot', 'RoboRooster', 'CyberCluck', 'TechnoTender', 'ByteBird', 'PixelPecker', 'DataDrummer', 'CodeCluck'];
             for (let i = 0; i < missing; i++) {
               const name = aiNames[Math.floor(Math.random() * aiNames.length)];
               expectedRoster.push({ wallet: `ai-${Date.now()}-${i}`, isAi: true, username: name, chickenName: 'default-ai-chicken' });

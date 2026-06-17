@@ -140,7 +140,7 @@ export default function BattleResultsModal({
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-300">$COCK</p>
+                  <p className="text-sm text-gray-300">$DINNER</p>
                   <p className="font-bold text-yellow-400">
                     {isWinner ? `+${currentWagerAmount}` : `-${currentWagerAmount}`}
                   </p>
@@ -159,13 +159,13 @@ export default function BattleResultsModal({
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm text-gray-300">Wagered</p>
-                  <p className="font-bold text-yellow-400">{currentWagerAmount} $COCK</p>
+                  <p className="font-bold text-yellow-400">{currentWagerAmount} $DINNER</p>
                 </div>
 
                 <div>
                   <p className="text-sm text-gray-300">{isWinner ? 'Won' : 'Lost'}</p>
                   <p className={`font-bold ${isWinner ? 'text-green-400' : 'text-red-400'}`}>
-                    {isWinner ? `${cockReward} $COCK` : `${currentWagerAmount} $COCK`}
+                    {isWinner ? `${cockReward} $DINNER` : `${currentWagerAmount} $DINNER`}
                   </p>
                 </div>
               </div>
@@ -197,12 +197,12 @@ export default function BattleResultsModal({
                   
                   <div>
                     <p className="text-gray-300">Total Won</p>
-                    <p className="font-bold text-green-400">{profile.total_tokens_won} $COCK</p>
+                    <p className="font-bold text-green-400">{profile.total_tokens_won} $DINNER</p>
                   </div>
                   
                   <div>
                     <p className="text-gray-300">Total Lost</p>
-                    <p className="font-bold text-red-400">{profile.total_tokens_lost} $COCK</p>
+                    <p className="font-bold text-red-400">{profile.total_tokens_lost} $DINNER</p>
                   </div>
                 </div>
                 

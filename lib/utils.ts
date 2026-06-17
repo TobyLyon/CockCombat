@@ -55,7 +55,7 @@ export function getRandomChickenName(): string {
   
   const suffixes = [
     "Fury", "Breaker", "Warrior", "Crusher", "Rage", "Champ", "Punisher", 
-    "Cock", "Terror", "Pounder", "Savage", "Crusher", "Brawler", "Yeeter", "Commander"
+    "Cluck", "Terror", "Pounder", "Savage", "Crusher", "Brawler", "Yeeter", "Commander"
   ];
   
   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];

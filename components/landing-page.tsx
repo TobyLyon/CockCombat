@@ -28,7 +28,7 @@ export default function LandingPage() {
         {/* Content */}
         <div className="relative z-10 container mx-auto px-4 text-center">
           <h1 className="text-6xl md:text-8xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-purple-100">
-            COCK COMBAT
+            CHICKEN DINNER
           </h1>
           <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto text-purple-200">
             The ultimate voxel chicken fighting arena on Solana. Battle for glory, bet on champions, and build your
@@ -83,7 +83,7 @@ export default function LandingPage() {
             />
             <FeatureCard
               title="BET"
-              description="Can't fight? Place bets on your favorite champions and earn $COCK when they triumph in the arena."
+              description="Can't fight? Place bets on your favorite champions and earn $DINNER when they triumph in the arena."
               icon="💰"
             />
             <FeatureCard
@@ -98,7 +98,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-8 bg-purple-950 text-purple-400 text-center">
         <div className="container mx-auto px-4">
-          <p>© {new Date().getFullYear()} Cock Combat. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Chicken Dinner. All rights reserved.</p>
           <p className="text-sm mt-2">Powered by Solana</p>
         </div>
       </footer>

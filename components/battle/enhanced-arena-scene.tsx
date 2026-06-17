@@ -336,7 +336,7 @@ function SceneContent({
   const [remainingPlayers, setRemainingPlayers] = useState(8);
   const [matchTime, setMatchTime] = useState(180); // 3 minutes
   const [isWinner, setIsWinner] = useState(false);
-  const [prizePool, setPrizePool] = useState(8); // 1 $COCK per player
+  const [prizePool, setPrizePool] = useState(8); // 1 $DINNER per player
 
   // Collision objects
   const collisionObjects = useRef<THREE.Object3D[]>([]);

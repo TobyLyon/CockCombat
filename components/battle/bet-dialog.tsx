@@ -69,7 +69,7 @@ export default function BetDialog({
     if (newAmount <= balance) {
       setError(null)
     } else {
-      setError(`Not enough $COCK tokens. You have ${balance.toFixed(1)} but need ${newAmount}`)
+      setError(`Not enough $DINNER tokens. You have ${balance.toFixed(1)} but need ${newAmount}`)
     }
   }
   
@@ -102,17 +102,17 @@ export default function BetDialog({
     
     // Validate bet amount
     if (betAmount < minBet) {
-      setError(`Minimum bet is ${minBet} $COCK`)
+      setError(`Minimum bet is ${minBet} $DINNER`)
       return
     }
     
     if (betAmount > maxBet) {
-      setError(`Maximum bet is ${maxBet} $COCK`)
+      setError(`Maximum bet is ${maxBet} $DINNER`)
       return
     }
     
     if (betAmount > balance) {
-      setError(`Not enough $COCK tokens. You have ${balance.toFixed(1)} but need ${betAmount}`)
+      setError(`Not enough $DINNER tokens. You have ${balance.toFixed(1)} but need ${betAmount}`)
       return
     }
     
@@ -201,14 +201,14 @@ export default function BetDialog({
                 <div className="relative h-8 w-8 mr-2">
                   <Image 
                     src="/images/cock-token.png" 
-                    alt="$COCK Token" 
+                    alt="$DINNER Token" 
                     width={32} 
                     height={32}
                     className="object-contain"
                   />
                 </div>
                 <span className="text-xl font-bold text-white">
-                  {balance.toFixed(2)} $COCK
+                  {balance.toFixed(2)} $DINNER
                 </span>
               </div>
             </div>
@@ -232,7 +232,7 @@ export default function BetDialog({
                   <div className="relative h-6 w-6 absolute left-3 top-1/2 transform -translate-y-1/2">
                     <Image 
                       src="/images/cock-token.png" 
-                      alt="$COCK Token" 
+                      alt="$DINNER Token" 
                       width={24} 
                       height={24}
                       className="object-contain"
@@ -250,7 +250,7 @@ export default function BetDialog({
                   />
                   
                   <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    $COCK
+                    $DINNER
                   </span>
                 </div>
                 
@@ -264,8 +264,8 @@ export default function BetDialog({
               </div>
               
               <div className="mt-2 flex justify-between text-sm text-gray-400">
-                <span>Min: {minBet} $COCK</span>
-                <span>Max: {maxBet} $COCK</span>
+                <span>Min: {minBet} $DINNER</span>
+                <span>Max: {maxBet} $DINNER</span>
               </div>
             </div>
             
@@ -276,14 +276,14 @@ export default function BetDialog({
                 <div className="relative h-8 w-8 mr-2">
                   <Image 
                     src="/images/cock-token.png" 
-                    alt="$COCK Token" 
+                    alt="$DINNER Token" 
                     width={32} 
                     height={32}
                     className="object-contain"
                   />
                 </div>
                 <span className="text-xl font-bold text-green-500">
-                  {(betAmount * 1.95).toFixed(2)} $COCK
+                  {(betAmount * 1.95).toFixed(2)} $DINNER
                 </span>
               </div>
             </div>
@@ -338,7 +338,7 @@ export default function BetDialog({
                 ? 'Try Again'
                 : !connected
                 ? 'Connect Wallet'
-                : `Place ${betAmount} $COCK Bet`
+                : `Place ${betAmount} $DINNER Bet`
               }
             </button>
             
