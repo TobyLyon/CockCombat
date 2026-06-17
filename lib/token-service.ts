@@ -24,9 +24,9 @@ import {
 } from '@solana/spl-token';
 import { toast } from 'sonner';
 
-// The mint address for our custom $COCK token
-// Get from environment variable or use default fallback
-let COCK_TOKEN_MINT_ADDRESS: string | null = process.env.NEXT_PUBLIC_COCK_TOKEN_MINT || 'V6CRprMSfhuETeSCfWm4SL8dfr6KFRwTnUWB6NQpump';
+// The mint address for our custom $DINNER token.
+// Env-driven and intentionally empty until the token launches. No hardcoded fallback.
+let COCK_TOKEN_MINT_ADDRESS: string | null = process.env.NEXT_PUBLIC_TOKEN_MINT || null;
 
 // Token decimals from environment or default to 6
 const TOKEN_DECIMALS = parseInt(process.env.NEXT_PUBLIC_TOKEN_DECIMALS || '6', 10);
@@ -42,7 +42,7 @@ let GAME_ESCROW_WALLET: string | null = null;
 
 /**
  * Initialize token service with the mint address and escrow wallet
- * @param mintAddress The mint address of the $COCK token
+ * @param mintAddress The mint address of the $DINNER token
  * @param escrowWallet The game escrow wallet address
  */
 export function initializeTokenService(mintAddress: string, escrowWallet?: string): void {
@@ -54,7 +54,7 @@ export function initializeTokenService(mintAddress: string, escrowWallet?: strin
 
 /**
  * Get the token mint address
- * @returns The $COCK token mint address, if available
+ * @returns The $DINNER token mint address, if available
  */
 export function getTokenMintAddress(): string | null {
   return COCK_TOKEN_MINT_ADDRESS;
@@ -78,7 +78,7 @@ export function setEscrowWalletAddress(escrowWallet: string): void {
 
 /**
  * Convert token amount from display units to raw units
- * @param amount Amount in display units (e.g., 1.5 $COCK)
+ * @param amount Amount in display units (e.g., 1.5 $DINNER)
  * @returns Amount in raw units with decimals
  */
 export function toRawAmount(amount: number): number {
@@ -88,7 +88,7 @@ export function toRawAmount(amount: number): number {
 /**
  * Convert token amount from raw units to display units
  * @param rawAmount Amount in raw units
- * @returns Amount in display units (e.g., 1.5 $COCK)
+ * @returns Amount in display units (e.g., 1.5 $DINNER)
  */
 export function toDisplayAmount(rawAmount: number): number {
   return rawAmount / Math.pow(10, TOKEN_DECIMALS);
@@ -113,7 +113,7 @@ export async function createToken(
     // Get minimum balance for rent exemption
     const mintRent = await getMinimumBalanceForRentExemptMint(connection);
 
-    console.log(`🪙 Creating $COCK token with ${totalSupply} supply...`);
+    console.log(`🪙 Creating $DINNER token with ${totalSupply} supply...`);
     console.log(`   Mint address: ${mintKeypair.publicKey.toBase58()}`);
 
     // Create instructions
@@ -199,7 +199,7 @@ export async function createToken(
     COCK_TOKEN_MINT_ADDRESS = mintKeypair.publicKey.toString();
     
     console.log(`✅ Token created successfully: ${COCK_TOKEN_MINT_ADDRESS}`);
-    toast.success(`Successfully created $COCK token with ${totalSupply} supply`);
+    toast.success(`Successfully created $DINNER token with ${totalSupply} supply`);
     
     return COCK_TOKEN_MINT_ADDRESS;
   } catch (error) {
@@ -313,7 +313,7 @@ function getErrorMessage(error: any): string {
  * @param payer The wallet keypair that will sign the transaction
  * @param fromWallet The source wallet address
  * @param toWallet The destination wallet address
- * @param amount The amount of tokens to transfer (in $COCK, not native units)
+ * @param amount The amount of tokens to transfer (in $DINNER, not native units)
  * @returns The transaction signature
  */
 export async function transferTokens(
@@ -332,7 +332,7 @@ export async function transferTokens(
     const fromWalletPublicKey = new PublicKey(fromWallet);
     const toWalletPublicKey = new PublicKey(toWallet);
 
-    console.log(`💸 Transferring ${amount} $COCK from ${fromWallet} to ${toWallet}`);
+    console.log(`💸 Transferring ${amount} $DINNER from ${fromWallet} to ${toWallet}`);
 
     // Get associated token accounts
     const fromTokenAccount = await getAssociatedTokenAddress(
@@ -426,7 +426,7 @@ export async function airdropTokens(
     const mintPublicKey = new PublicKey(COCK_TOKEN_MINT_ADDRESS);
     const targetWalletPublicKey = new PublicKey(targetWallet);
 
-    console.log(`🪂 Airdropping ${amount} $COCK to ${targetWallet}`);
+    console.log(`🪂 Airdropping ${amount} $DINNER to ${targetWallet}`);
 
     // Get target token account
     const targetTokenAccount = await getAssociatedTokenAddress(
@@ -482,7 +482,7 @@ export async function airdropTokens(
     );
 
     console.log(`✅ Airdrop successful: ${signature}`);
-    toast.success(`Airdropped ${amount} $COCK to ${targetWallet}`);
+    toast.success(`Airdropped ${amount} $DINNER to ${targetWallet}`);
     return signature;
   } catch (error) {
     console.error('❌ Error airdropping tokens:', error);
@@ -512,7 +512,7 @@ export async function placeBet(
     const balance = await getTokenBalance(connection, playerWallet);
     
     if (balance < betAmount) {
-      toast.error(`Not enough $COCK tokens. You have ${balance.toFixed(2)} but need ${betAmount.toFixed(2)}`);
+      toast.error(`Not enough $DINNER tokens. You have ${balance.toFixed(2)} but need ${betAmount.toFixed(2)}`);
       return false;
     }
     
@@ -525,7 +525,7 @@ export async function placeBet(
       betAmount
     );
     
-    toast.success(`Bet of ${betAmount} $COCK placed successfully!`);
+    toast.success(`Bet of ${betAmount} $DINNER placed successfully!`);
     return true;
   } catch (error) {
     console.error('Error placing bet:', error);
@@ -569,7 +569,7 @@ export async function processWinnings(
       winAmount
     );
     
-    toast.success(`You won ${winAmount} $COCK!`);
+    toast.success(`You won ${winAmount} $DINNER!`);
     return true;
   } catch (error) {
     console.error('Error processing winnings:', error);

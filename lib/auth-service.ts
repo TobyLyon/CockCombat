@@ -222,7 +222,7 @@ class AuthService {
    * Build the authentication message to be signed
    */
   public buildAuthMessage(walletAddress: string, nonce: string): string {
-    return `Welcome to Cock Combat!\n\nSign this message to authenticate your wallet.\n\nWallet: ${walletAddress}\nNonce: ${nonce}\n\nThis request will not trigger any blockchain transaction or cost any gas fees.`;
+    return `Welcome to Chicken Dinner!\n\nSign this message to authenticate your wallet.\n\nWallet: ${walletAddress}\nNonce: ${nonce}\n\nThis request will not trigger any blockchain transaction or cost any gas fees.`;
   }
 
   /**

@@ -23,16 +23,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  async rewrites() {
-    return {
-      fallback: [
-        {
-          source: '/api/:path*',
-          destination: 'https://cockcombat.onrender.com/api/:path*',
-        },
-      ],
-    }
-  },
+  // The custom server (server.js) serves all /api routes directly, so no
+  // external API proxy/rewrite is needed.
+
   images: {
     unoptimized: true,
   },
@@ -46,17 +39,13 @@ const nextConfig = {
       '**/*.tsbuildinfo',
     ],
   },
-  // Prevent R3F/Three from being bundled on the server
-  serverExternalPackages: ['three', '@react-three/fiber', '@react-three/drei'],
   webpack: (config, { isServer, dev }) => {
-    // Don't attempt to bundle Three.js on server
-    if (isServer) {
-      config.externals.push({
-        'three': 'three',
-        '@react-three/fiber': '@react-three/fiber',
-        '@react-three/drei': '@react-three/drei',
-      })
-    }
+    // R3F/Three are NOT externalized: externalizing them made the server
+    // `require()` a second React module instance (CJS) separate from the
+    // bundled one, which nulled React's hook dispatcher during SSR and crashed
+    // every page ("Cannot read properties of null (reading 'useMemo')"). The 3D
+    // components are loaded client-only (ssr:false), so Three is never rendered
+    // on the server anyway.
     // Ensure @ alias resolves to project root for production builds
     config.resolve = config.resolve || {}
     config.resolve.alias = {

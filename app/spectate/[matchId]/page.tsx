@@ -1,7 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
-import ArenaViewer from "../../../components/3d/arena-viewer";
+import dynamic from "next/dynamic";
+// React Three Fiber is externalized server-side; load the 3D viewer client-only.
+const ArenaViewer = dynamic(() => import("../../../components/3d/arena-viewer"), { ssr: false });
 import SpectatorView from "../../../components/spectator/spectator-view";
 import { useSpectator } from "../../../hooks/use-spectator";
 import { useEffect, useState } from 'react';

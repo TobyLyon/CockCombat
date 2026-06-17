@@ -92,7 +92,7 @@ export default function WinnerCelebration({ onExit }: WinnerCelebrationProps = {
             <div className="relative h-16 w-16">
               <Image 
                 src="/images/cock-token.png" 
-                alt="Cock Combat Coin"
+                alt="Chicken Dinner Coin"
                 width={64}
                 height={64}
                 className="object-contain drop-shadow-[0_0_12px_rgba(255,212,0,0.6)]"
@@ -134,14 +134,14 @@ export default function WinnerCelebration({ onExit }: WinnerCelebrationProps = {
               <div className="relative h-10 w-10">
                 <Image 
                   src="/images/cock-token.png" 
-                  alt="COCK Token" 
+                  alt="DINNER Token"
                   width={40} 
                   height={40}
                   className="object-contain"
                 />
               </div>
               <div className="text-3xl font-bold text-yellow-300 pixel-font">
-                {prizeAmount} $COCK
+                {prizeAmount} $DINNER
               </div>
             </div>
           </motion.div>

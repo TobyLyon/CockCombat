@@ -214,7 +214,7 @@ export default function SpectatorBetting({ matchId, onPlaceBet, gameState, match
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5 text-yellow-500" />
                 <span className="font-medium">Your Balance:</span>
-                <span className="font-bold text-yellow-500">{userBalance} $COCK</span>
+                <span className="font-bold text-yellow-500">{userBalance} $DINNER</span>
               </div>
               
               {!bettingOpen && (
@@ -237,7 +237,7 @@ export default function SpectatorBetting({ matchId, onPlaceBet, gameState, match
         
         {selectedChicken && bettingOpen && (
           <div className="flex flex-col gap-2">
-            <div className="font-medium text-sm">Bet Amount: {betAmount} $COCK</div>
+            <div className="font-medium text-sm">Bet Amount: {betAmount} $DINNER</div>
             <Slider 
               value={[betAmount]} 
               max={userBalance}
@@ -306,7 +306,7 @@ export default function SpectatorBetting({ matchId, onPlaceBet, gameState, match
                 
                 {chicken.betAmount > 0 && (
                   <Badge className="w-full mt-2 justify-center bg-primary/20 text-primary border-primary/50">
-                    Your bet: {chicken.betAmount} $COCK
+                    Your bet: {chicken.betAmount} $DINNER
                   </Badge>
                 )}
               </div>
@@ -344,7 +344,7 @@ export default function SpectatorBetting({ matchId, onPlaceBet, gameState, match
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-yellow-500">{bet.amount} $COCK</span>
+                    <span className="font-bold text-yellow-500">{bet.amount} $DINNER</span>
                     <span className="text-xs text-gray-400">
                       {formatTimeAgo(bet.timestamp)}
                     </span>

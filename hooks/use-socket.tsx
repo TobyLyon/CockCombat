@@ -28,14 +28,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const socketUrl = (() => {
       const explicit = process.env.NEXT_PUBLIC_SOCKET_URL
       if (explicit && explicit.trim()) return explicit.trim()
-      try {
-        if (typeof window !== 'undefined') {
-          const host = window.location.hostname
-          if (host === 'www.cockcombat.xyz' || host.endsWith('.cockcombat.xyz')) {
-            return 'https://cockcombat.onrender.com'
-          }
-        }
-      } catch {}
+      // Default to same-origin: the custom server serves both Next and Socket.io.
       return undefined
     })();
     const isProd = process.env.NODE_ENV === 'production';

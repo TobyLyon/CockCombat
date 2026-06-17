@@ -103,7 +103,7 @@ export function ProfileSetupModal({
         <DialogHeader>
           <DialogTitle>Create Your Profile</DialogTitle>
           <DialogDescription>
-            Choose a username to start your journey in Cock Combat.
+            Choose a username to start your journey in Chicken Dinner.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">

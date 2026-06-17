@@ -6,7 +6,7 @@ import NavBar from "@/components/ui/nav-bar"
 import { GameStateProvider } from "@/contexts/GameStateContext"
 
 export const metadata = {
-  title: "COCK COMBAT",
+  title: "CHICKEN DINNER",
   description: `The ultimate 8-bit chicken fighting arena on Solana.`,
   icons: {
     icon: "/images/logo%202.png",
@@ -14,24 +14,24 @@ export const metadata = {
     apple: "/images/logo%202.png",
   },
   // Ensure social share URLs resolve correctly
-  metadataBase: new URL('https://www.cockcombat.xyz'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://chicken-dinner-production.up.railway.app'),
   openGraph: {
     type: 'website',
-    url: 'https://www.cockcombat.xyz',
-    title: 'COCK COMBAT',
+    url: process.env.NEXT_PUBLIC_APP_URL || 'https://chicken-dinner-production.up.railway.app',
+    title: 'CHICKEN DINNER',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: [
       {
         url: '/images/cock-combat-banner.png',
         width: 1200,
         height: 630,
-        alt: 'Cock Combat Banner'
+        alt: 'Chicken Dinner Banner'
       }
     ]
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'COCK COMBAT',
+    title: 'CHICKEN DINNER',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: ['/images/cock-combat-banner.png']
   }

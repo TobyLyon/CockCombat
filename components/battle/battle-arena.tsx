@@ -969,7 +969,7 @@ export default function BattleArena() {
 
       {gameState !== "battle" && gameState !== "gameOver" && gameState !== "winner" && (
         <footer className="relative z-10 p-2 bg-black/20 border-t border-white/10 text-white text-center text-xs flex-shrink-0">
-          <p> {new Date().getFullYear()} Cock Combat • Powered by Solana</p>
+          <p> {new Date().getFullYear()} Chicken Dinner • Powered by Solana</p>
         </footer>
       )}
     </div>
