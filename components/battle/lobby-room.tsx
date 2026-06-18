@@ -45,6 +45,12 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
   const [countdown, setCountdown] = useState<number | null>(null)
   // Client no longer maintains its own lobby snapshot; rely on server events only
   const [isProcessingWager, setIsProcessingWager] = useState(false)
+  // While the solo-human AI autofill is counting down, the match auto-starts on a
+  // server timer (no ready needed). We surface that state so the ready button is
+  // replaced by a non-interactive "FILLING WITH AI" — this keeps the solo human
+  // OUT of the ready system entirely during autofill, so it can never flicker.
+  const [autofillDeadline, setAutofillDeadline] = useState<number | null>(null)
+  const autofillSafetyRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [hasWagered, setHasWagered] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
@@ -298,6 +304,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     const handleMatchStarted = () => {
       console.log('🎮 Match started!');
       transitionedToQueueRef.current = true;
+      try { setAutofillDeadline(null) } catch {}
       // Reset local wager/ready flags at round start; next round requires new wager
       try { setHasWagered(false); } catch {}
       try { setIsReady(false); } catch {}
@@ -405,6 +412,19 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     socket.on('player_left_lobby', handlePlayerLeft);
     socket.on('player_ready_status', handlePlayerReady);
     socket.on('match_starting', handleMatchStarting);
+    const onAutofillScheduled = (d: any) => {
+      try { if (d && d.lobbyId && d.lobbyId !== lobby.id) return } catch {}
+      const ts = Number(d?.deadlineTs) || (Date.now() + (Number(d?.seconds) || 10) * 1000)
+      setAutofillDeadline(ts)
+      try { if (autofillSafetyRef.current) clearTimeout(autofillSafetyRef.current) } catch {}
+      autofillSafetyRef.current = setTimeout(() => setAutofillDeadline(null), Math.max(0, ts - Date.now()) + 12000)
+    }
+    const onAutofillClear = () => {
+      setAutofillDeadline(null)
+      try { if (autofillSafetyRef.current) { clearTimeout(autofillSafetyRef.current); autofillSafetyRef.current = null } } catch {}
+    }
+    socket.on('free_autofill_scheduled', onAutofillScheduled)
+    socket.on('free_autofill_cancelled', onAutofillClear)
     socket.on('match_started', handleMatchStarted);
     socket.on('round_start', handleMatchStarted);
     // Force transition out of lobby on roster lock to avoid 5s overlay leaking into arena
@@ -465,6 +485,9 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
       socket.off('player_left_lobby', handlePlayerLeft);
       socket.off('player_ready_status', handlePlayerReady);
       socket.off('match_starting', handleMatchStarting);
+      try { socket.off('free_autofill_scheduled', onAutofillScheduled) } catch {}
+      try { socket.off('free_autofill_cancelled', onAutofillClear) } catch {}
+      try { if (autofillSafetyRef.current) { clearTimeout(autofillSafetyRef.current); autofillSafetyRef.current = null } } catch {}
       socket.off('match_started', handleMatchStarted);
       socket.off('round_start', handleMatchStarted);
       socket.off('arena_lock_roster', handleMatchStarted);
@@ -1018,14 +1041,21 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
           <div className="w-full">
         <Button
           onClick={handleReadyToggle}
-          disabled={isProcessingWager || missingIdentity || isTogglingReady}
+          disabled={isProcessingWager || missingIdentity || isTogglingReady || !!autofillDeadline}
           className={`w-full h-10 text-sm font-bold pixel-font transition-all ${
-            isReady
+            autofillDeadline
+              ? 'bg-yellow-600 text-black'
+              : isReady
               ? 'bg-red-600 hover:bg-red-500 text-white'
               : 'bg-green-600 hover:bg-green-500 text-white'
           } disabled:bg-gray-600 disabled:cursor-not-allowed`}
         >
-          {missingIdentity ? (
+          {autofillDeadline ? (
+            <>
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              FILLING WITH AI…
+            </>
+          ) : missingIdentity ? (
             <>INITIALIZE GUEST SESSION</>
           ) : isProcessingWager ? (
             <>
