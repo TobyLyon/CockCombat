@@ -412,7 +412,7 @@ export default function PixelGameInterface() {
               <span className="min-w-0 flex-1 text-xs font-mono tracking-wide truncate whitespace-nowrap leading-tight text-white">{copied ? 'Copied!' : `Token: ${TOKEN_PREVIEW}`}</span>
             </button>
             <div className="flex items-center gap-2 shrink-0">
-              <a href="https://www.x.com/CockCombatSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
+              <a href="https://www.x.com/ChicknDinnerSOL" target="_blank" rel="noopener noreferrer" aria-label="X" className="p-2 rounded-md border border-white/10 bg-white/5">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22.46 5.924c-.793.352-1.645.59-2.54.697a4.48 4.48 0 001.963-2.475 8.959 8.959 0 01-2.828 1.082A4.478 4.478 0 0016.112 4c-2.482 0-4.495 2.013-4.495 4.495 0 .353.04.698.117 1.028-3.74-.188-7.055-1.98-9.273-4.702a4.49 4.49 0 00-.608 2.262c0 1.56.794 2.936 2.004 3.744a4.468 4.468 0 01-2.037-.563v .057c0 2.18 1.55 4.002 3.605 4.418a4.506 4.506 0 01-2.03 .077c.573 1.788 2.236 3.09 4.208 3.126A8.987 8.987 0 012 19.54a12.697 12.697 0 006.88 2.018c8.253 0 12.777-6.837 12.777-12.776 0-.195-.004-.39-.013-.583A9.14 9.14 0 0024 4.59a8.98 8.98 0 01-2.54 .697z" fill="#1DA1F2"/></svg>
               </a>
               <a href="https://discord.gg/Tj2vBPgbFP" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="p-2 rounded-md border border-white/10 bg-white/5">

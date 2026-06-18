@@ -87,7 +87,7 @@ const GameOver: React.FC<GameOverProps> = ({ winner, humanPlayer, onExit }) => {
 
   const handleShare = () => {
     try {
-      window.open('https://x.com/CockCombatSOL', '_blank', 'noopener,noreferrer');
+      window.open('https://x.com/ChicknDinnerSOL', '_blank', 'noopener,noreferrer');
     } catch {}
   };
 
