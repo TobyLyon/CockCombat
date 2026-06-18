@@ -15,6 +15,7 @@ import WaitingQueue from "./waiting-queue"
 const LobbyRoom = dynamic(() => import("./lobby-room"), { ssr: false })
 import { useAudio } from "../../contexts/AudioContext"
 import BattleHUD from './battle-hud';
+import MobileControls from './mobile-controls';
 import GameOver from './game-over';
 import WinnerCelebration from './winner-celebration';
 import { useGameState, GameState } from "../../contexts/GameStateContext"
@@ -25,6 +26,7 @@ import SpectatorChat from "../spectator/spectator-chat"
 import ArenaBackground from "./arena-background"
 import { toast } from "sonner"
 import { useSocket } from "../../hooks/use-socket"
+import FreeAutofillBanner from "./free-autofill-banner"
 import {
   Dialog,
   DialogContent,
@@ -553,6 +555,7 @@ export default function BattleArena() {
     <div className="battle-arena-container relative min-h-screen bg-gray-900 text-white flex flex-col overflow-hidden" style={{
       backgroundImage: `radial-gradient(circle at top right, rgba(255, 170, 0, 0.1), transparent 30%), radial-gradient(circle at bottom left, rgba(255, 0, 0, 0.1), transparent 30%)`
     }}>
+      <FreeAutofillBanner />
       <Dialog open={walletRequiredOpen} onOpenChange={setWalletRequiredOpen}>
         <DialogContent className="bg-[#1f1f1f] border-white/10 text-white max-w-[420px]">
           <DialogHeader className="space-y-2">
@@ -883,6 +886,9 @@ export default function BattleArena() {
                 />
               </div>
             </div>
+
+            {/* On-screen touch controls for mobile (hidden on desktop / when defeated) */}
+            <MobileControls active={Boolean(playerChicken?.isAlive) && !canSpectate} />
 
             {/* Defeated overlay with spectate controls */}
             {canSpectate && (

@@ -438,6 +438,92 @@ preparePromise.then(() => {
       return { humans, total };
     } catch { return { humans: 0, total: 0 }; }
   }
+
+  // ---- Free-lobby AI autofill: a solo human in a FREE lobby starts a vs-AI match after 10s ----
+  if (!global.freeAutofillTimers) global.freeAutofillTimers = new Map();   // lobbyId -> timeout handle
+  if (!global.freeAutofillDeadline) global.freeAutofillDeadline = new Map(); // lobbyId -> epoch ms
+  const FREE_AUTOFILL_MS = 10000;
+
+  // Free lobbies are the seeded "free-*" ids (capacity 8, amount 0). We detect by id
+  // prefix so these helpers don't depend on the per-request `lobbies` fetch.
+  function isFreeAutofillEligible(lobbyId) {
+    try {
+      if (!lobbyId || !String(lobbyId).startsWith('free-')) return false;
+      if (global.countdownActive && global.countdownActive[lobbyId]) return false;
+      if (global.activeQueueForLobby && global.activeQueueForLobby.get && global.activeQueueForLobby.get(lobbyId)) return false;
+      return true;
+    } catch { return false; }
+  }
+
+  // Human player ids currently joined to the lobby room (deduped, AI excluded).
+  function freeLobbyHumans(lobbyId) {
+    const ids = [];
+    try {
+      const seen = new Set();
+      for (const [, conn] of activeConnections.entries()) {
+        if (!conn || conn.currentLobby !== lobbyId) continue;
+        const inRoom = (() => { try { return conn.socket && conn.socket.rooms && conn.socket.rooms.has && conn.socket.rooms.has(lobbyId); } catch { return false; } })();
+        if (!inRoom) continue;
+        const addr = String(conn.walletAddress || '').toLowerCase();
+        if (!addr || addr.startsWith('ai-') || seen.has(addr)) continue;
+        seen.add(addr);
+        ids.push(addr);
+      }
+    } catch {}
+    return ids;
+  }
+  function freeLobbyHumanCount(lobbyId) { return freeLobbyHumans(lobbyId).length; }
+
+  function cancelFreeAutofill(lobbyId, io, reason) {
+    try {
+      const t = global.freeAutofillTimers.get(lobbyId);
+      if (t) { clearTimeout(t); global.freeAutofillTimers.delete(lobbyId); }
+      if (global.freeAutofillDeadline.has(lobbyId)) {
+        global.freeAutofillDeadline.delete(lobbyId);
+        try { if (io) io.to(lobbyId).emit('free_autofill_cancelled', { lobbyId, reason: reason || 'cancelled' }); } catch {}
+      }
+    } catch {}
+  }
+
+  function fireFreeAutofill(lobbyId, io) {
+    try {
+      global.freeAutofillTimers.delete(lobbyId);
+      global.freeAutofillDeadline.delete(lobbyId);
+      if (!isFreeAutofillEligible(lobbyId)) return;
+      const humans = freeLobbyHumans(lobbyId);
+      if (humans.length !== 1) return; // an opponent joined, or the human left
+      const humanId = humans[0];
+      const capacity = 8;
+      const roster = [{ wallet: String(humanId).toLowerCase(), isAi: false, username: String(humanId).slice(0, 8) + '...', chickenName: 'Default' }];
+      const aiNames = ['ChickenBot','RoboRooster','CyberCluck','TechnoTender','ByteBird','PixelPecker','DataDrummer','CodeCluck'];
+      for (let i = 0; roster.length < capacity; i++) {
+        roster.push({ wallet: `ai-${Date.now()}-${i}`, isAi: true, username: aiNames[i % aiNames.length], chickenName: 'default-ai-chicken' });
+      }
+      console.log(`🤖 Free lobby ${lobbyId}: autofilling with AI for solo human ${humanId}`);
+      try { startQueuePhase(lobbyId, io, roster, { aiFill: true }).catch((e) => console.warn('autofill startQueuePhase rejected:', e?.message || e)); } catch (e) { console.warn('autofill start failed:', e?.message || e); }
+    } catch (e) { console.warn('fireFreeAutofill error:', e?.message || e); }
+  }
+
+  function evaluateFreeAutofill(lobbyId, io) {
+    try {
+      if (!lobbyId) return;
+      if (!isFreeAutofillEligible(lobbyId)) { cancelFreeAutofill(lobbyId, io, 'ineligible'); return; }
+      const humans = freeLobbyHumanCount(lobbyId);
+      if (humans === 1) {
+        if (!global.freeAutofillTimers.has(lobbyId)) {
+          const deadlineTs = Date.now() + FREE_AUTOFILL_MS;
+          global.freeAutofillDeadline.set(lobbyId, deadlineTs);
+          const to = setTimeout(() => fireFreeAutofill(lobbyId, io), FREE_AUTOFILL_MS);
+          global.freeAutofillTimers.set(lobbyId, to);
+          try { io.to(lobbyId).emit('free_autofill_scheduled', { lobbyId, deadlineTs, seconds: Math.round(FREE_AUTOFILL_MS / 1000) }); } catch {}
+          console.log(`⏳ Free lobby ${lobbyId}: solo human, AI autofill scheduled in ${FREE_AUTOFILL_MS / 1000}s`);
+        }
+      } else {
+        cancelFreeAutofill(lobbyId, io, humans >= 2 ? 'opponent_joined' : 'empty');
+      }
+    } catch {}
+  }
+
   // Helper: compute global active humans (browsing/queued/in lobbies)
   function getGlobalActiveHumans() {
     try {
@@ -1165,6 +1251,8 @@ preparePromise.then(() => {
             const addr = String(connection.walletAddressLower || connection.walletAddress || '').toLowerCase();
             global.lobbyPresence.get(lobbyId).add(addr);
           }
+          // Free-lobby autofill: a solo human triggers a vs-AI match after a short countdown
+          try { evaluateFreeAutofill(lobbyId, io); } catch {}
         }
 
         // Ensure this websocket instance has the player in the in-memory lobby roster.
@@ -1259,6 +1347,8 @@ preparePromise.then(() => {
           if (connection.walletAddress && global.lobbyPresence && global.lobbyPresence.has(lobbyId)) {
             global.lobbyPresence.get(lobbyId).delete(connection.walletAddress);
           }
+          // Re-evaluate free-lobby autofill (cancel countdown if the solo human left)
+          try { evaluateFreeAutofill(lobbyId, io); } catch {}
         }
 
         // Emit an explicit ready=false for this identity to clear any sticky UI badges
@@ -3018,6 +3108,8 @@ preparePromise.then(() => {
             if (global.lobbyPresence && global.lobbyPresence.has(lobbyAtDisconnect)) {
               global.lobbyPresence.get(lobbyAtDisconnect).delete(walletAtDisconnect);
             }
+            // Re-evaluate free-lobby autofill after a disconnect
+            try { evaluateFreeAutofill(lobbyAtDisconnect, io); } catch {}
             // Notify others in lobby about leave
             try {
               io.to(lobbyAtDisconnect).emit('player_left_lobby', {
@@ -3822,7 +3914,8 @@ preparePromise.then(() => {
   }
 
   // Begin queue confirmation phase for a lobby
-  async function startQueuePhase(lobbyId, io, rosterOverride = null) {
+  async function startQueuePhase(lobbyId, io, rosterOverride = null, opts = {}) {
+    const aiFill = !!(opts && opts.aiFill);
     try {
       // Per-lobby lock to avoid concurrent queue sessions
       try {
@@ -3913,7 +4006,7 @@ preparePromise.then(() => {
           const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
           const minHumansNeeded = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
           const humansOnly = (expectedRoster || []).filter(r => !r.isAi);
-          if (isFreeNonTutorial && humansOnly.length < minHumansNeeded) {
+          if (isFreeNonTutorial && !aiFill && humansOnly.length < minHumansNeeded) {
             const present = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
             const have = new Set((expectedRoster || []).filter(r => !r.isAi).map(r => String(r.wallet || '').toLowerCase()));
             for (const addr of present.values()) {
@@ -3968,7 +4061,7 @@ preparePromise.then(() => {
           const isFreeNonTutorial = !!(lobbyMeta && lobbyMeta.matchType !== 'tutorial' && (lobbyMeta.amount || 0) === 0);
           const minHumansNeeded = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
           const humansOnly = (expectedRoster || []).filter(r => !r.isAi);
-          if (isFreeNonTutorial && humansOnly.length < minHumansNeeded) {
+          if (isFreeNonTutorial && !aiFill && humansOnly.length < minHumansNeeded) {
             const present = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || new Set();
             const have = new Set(humansOnly.map(r => String(r.wallet || '').toLowerCase()));
             for (const addr of present.values()) {
@@ -4003,7 +4096,7 @@ preparePromise.then(() => {
             const humans = (roster || []).filter(r => !r.isAi);
             const ai = (roster || []).filter(r => r.isAi);
             const trimmed = humans.slice(0, capacity);
-            if (isTutorial) {
+            if (isTutorial || aiFill) {
               while (trimmed.length < capacity && ai.length > 0) {
                 trimmed.push(ai.shift());
               }
@@ -4048,6 +4141,7 @@ preparePromise.then(() => {
         presenceAcks: new Map(), // wallet -> ts
         assetsAcks: new Map(),   // wallet -> ts
         walletCanonicalByKey,
+        aiFill,
       };
       try { global.queueSessions.set(matchSessionId, session); } catch {}
       try { global.activeQueueForLobby.set(lobbyId, matchSessionId); } catch {}
@@ -4117,7 +4211,7 @@ preparePromise.then(() => {
         arenaSeedCommit,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4),
+        minHumans: (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4),
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
@@ -4165,6 +4259,7 @@ preparePromise.then(() => {
       const session = global.queueSessions && global.queueSessions.get(matchSessionId);
     if (!session) return;
     const { lobbyId, expectedRoster, presenceAcks, assetsAcks } = session;
+    const aiFill = !!session.aiFill;
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
       const response = await fetch(`${baseUrl}/api/lobbies`).catch(() => null);
@@ -4181,9 +4276,9 @@ preparePromise.then(() => {
         return (isTutorial || isFreeNonTutorial) ? presenceAcks.has(key) : (presenceAcks.has(key) && assetsAcks.has(key));
       });
 
-      // Ranked cancellation if insufficient humans
-      const minHumans = isTutorial ? 1 : (isFreeNonTutorial ? 2 : 4);
-      if (!isTutorial && presentHumans.length < minHumans) {
+      // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human)
+      const minHumans = (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4);
+      if (!isTutorial && !aiFill && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function
           const { processRefundServerOnly } = require('./app/api/wager/refund/route.ts');
@@ -4200,10 +4295,10 @@ preparePromise.then(() => {
       }
 
       // Build final roster
-      // Tutorial: include all AI plus any present humans
+      // Tutorial / free-AI-autofill: include all AI plus any present humans
       // Ranked: include present humans only (no AI ever)
       let finalRoster = [];
-      if (isTutorial) {
+      if (isTutorial || aiFill) {
         const aiEntries = expectedRoster.filter(p => p.isAi);
         const presentHumanEntries = expectedRoster.filter(p => !p.isAi && presentHumans.includes(String(p.wallet || '').toLowerCase()));
         finalRoster = [...presentHumanEntries, ...aiEntries];
