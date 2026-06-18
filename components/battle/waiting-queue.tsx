@@ -154,7 +154,7 @@ export default function WaitingQueue({
             try {
               await Promise.race([
                 Promise.all([
-                  img('/images/cock-token.png'),
+                  img('/images/chicken-dinner-coin.png'),
                   img('/textures/grass/Grass005_1K-PNG_Color.png'),
                   img('/textures/ground/Ground085_1K-PNG_Color.png'),
                 ]).then(() => Promise.all([

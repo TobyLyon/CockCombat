@@ -9,9 +9,9 @@ export const metadata = {
   title: "CHICKEN DINNER",
   description: `The ultimate 8-bit chicken fighting arena on Solana.`,
   icons: {
-    icon: "/images/logo%202.png",
-    shortcut: "/images/logo%202.png",
-    apple: "/images/logo%202.png",
+    icon: "/images/chicken-dinner-coin.png",
+    shortcut: "/images/chicken-dinner-coin.png",
+    apple: "/images/chicken-dinner-coin.png",
   },
   // Ensure social share URLs resolve correctly
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://chicken-dinner-production.up.railway.app'),
@@ -22,10 +22,10 @@ export const metadata = {
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: [
       {
-        url: '/images/cock-combat-banner.png',
+        url: '/images/chicken-dinner-banner.png',
         width: 1200,
         height: 630,
-        alt: 'Chicken Dinner Banner'
+        alt: 'Chicken Dinner — Only on Solana'
       }
     ]
   },
@@ -33,7 +33,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'CHICKEN DINNER',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
-    images: ['/images/cock-combat-banner.png']
+    images: ['/images/chicken-dinner-banner.png']
   }
 }
 

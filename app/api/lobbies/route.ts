@@ -120,7 +120,7 @@ function removeOneAiPlayer(lobby: any) {
 
 // API handler to get the current state of all lobbies
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, RATE_LIMITS.READ, async () => {
+  return withRateLimit(req, RATE_LIMITS.LOBBY_READ, async () => {
     try {
       // Prune ghost humans from FREE lobbies based on live presence before returning
       for (const lob of lobbies) {

@@ -160,7 +160,7 @@ export default function GameUI({
         >
           <div className="bg-black/60 p-1 sm:p-2 rounded-lg border-2 border-yellow-500">
             <img 
-              src="/images/cock_combat_coin_spin.gif" 
+              src="/images/chicken-dinner-coin.png"
               alt="$DINNER Coin" 
               className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain"
             />

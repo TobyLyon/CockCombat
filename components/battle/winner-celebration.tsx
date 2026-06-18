@@ -91,7 +91,7 @@ export default function WinnerCelebration({ onExit }: WinnerCelebrationProps = {
           >
             <div className="relative h-16 w-16">
               <Image 
-                src="/images/cock-token.png" 
+                src="/images/chicken-dinner-coin.png" 
                 alt="Chicken Dinner Coin"
                 width={64}
                 height={64}
@@ -133,7 +133,7 @@ export default function WinnerCelebration({ onExit }: WinnerCelebrationProps = {
             <div className="flex items-center justify-center gap-3">
               <div className="relative h-10 w-10">
                 <Image 
-                  src="/images/cock-token.png" 
+                  src="/images/chicken-dinner-coin.png" 
                   alt="DINNER Token"
                   width={40} 
                   height={40}

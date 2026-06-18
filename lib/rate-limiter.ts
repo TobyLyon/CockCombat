@@ -286,5 +286,14 @@ export const RATE_LIMITS = {
   
   // Lenient for read operations
   READ: { maxRequests: 100, windowMs: 60 * 1000 }, // 100 per minute
+
+  // Lobby list reads (GET /api/lobbies). This is a cheap in-memory read that the
+  // game server ALSO polls internally (get_lobby_state, queue finalize, ranked
+  // enforcement, disconnect handlers). Because the server fetches its own public
+  // URL, all internal polls share one egress IP and would blow the 100/min READ
+  // limit under live load — the route then returns a 429 {error} object, and
+  // callers that do `.find` on it crash, deferring/blocking match starts. Give
+  // it a generous bound so the server never throttles its own lobby polling.
+  LOBBY_READ: { maxRequests: 2000, windowMs: 60 * 1000 }, // 2000 per minute
 };
 

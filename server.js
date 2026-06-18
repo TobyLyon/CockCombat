@@ -2484,8 +2484,12 @@ preparePromise.then(() => {
     // Realtime arena sync: receive local player transform and broadcast to lobby room
     socket.on('player_state', (payload) => {
       try {
-        // ~20 updates/sec cap to balance smoothness and server load
-        if (!checkRateLimit('player_state', 1200)) {
+        // The client emits transforms at ~30 Hz (every 34ms, on deltas). The cap
+        // here must sit ABOVE that or the limiter silently drops ~1/3 of position
+        // updates, making remote players look choppy. 2000/min ≈ 33/sec gives
+        // headroom over the client rate while still bounding abuse (payload is
+        // also hard-capped at 1KB below).
+        if (!checkRateLimit('player_state', 2000)) {
           return;
         }
         // Hard cap payload size to prevent abuse

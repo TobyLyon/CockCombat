@@ -200,7 +200,7 @@ export default function BetDialog({
               <div className="flex items-center">
                 <div className="relative h-8 w-8 mr-2">
                   <Image 
-                    src="/images/cock-token.png" 
+                    src="/images/chicken-dinner-coin.png" 
                     alt="$DINNER Token" 
                     width={32} 
                     height={32}
@@ -231,7 +231,7 @@ export default function BetDialog({
                 <div className="relative flex-1">
                   <div className="relative h-6 w-6 absolute left-3 top-1/2 transform -translate-y-1/2">
                     <Image 
-                      src="/images/cock-token.png" 
+                      src="/images/chicken-dinner-coin.png" 
                       alt="$DINNER Token" 
                       width={24} 
                       height={24}
@@ -275,7 +275,7 @@ export default function BetDialog({
               <div className="flex items-center">
                 <div className="relative h-8 w-8 mr-2">
                   <Image 
-                    src="/images/cock-token.png" 
+                    src="/images/chicken-dinner-coin.png" 
                     alt="$DINNER Token" 
                     width={32} 
                     height={32}
