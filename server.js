@@ -448,6 +448,8 @@ preparePromise.then(() => {
   // prefix so these helpers don't depend on the per-request `lobbies` fetch.
   function isFreeAutofillEligible(lobbyId) {
     try {
+      // Kill-switch: disabled by default. Set FREE_AUTOFILL_ENABLED=true to turn on.
+      if (process.env.FREE_AUTOFILL_ENABLED !== 'true') return false;
       if (!lobbyId || !String(lobbyId).startsWith('free-')) return false;
       if (global.countdownActive && global.countdownActive[lobbyId]) return false;
       if (global.activeQueueForLobby && global.activeQueueForLobby.get && global.activeQueueForLobby.get(lobbyId)) return false;
@@ -1730,7 +1732,7 @@ preparePromise.then(() => {
         const inflight = fetch(`${baseUrl}/api/lobbies`).then(r => r.json()).finally(() => { try { delete global.__lobbyStateInflight[lobbyId] } catch {} });
         global.__lobbyStateInflight[lobbyId] = inflight;
         const lobbies = await inflight;
-        const lobby = lobbies.find(l => l.id === lobbyId);
+        const lobby = (Array.isArray(lobbies) ? lobbies : []).find(l => l.id === lobbyId);
         
         if (lobby) {
           const cap = Math.max(1, Math.min(8, Number(lobby.capacity || 8) || 8));
@@ -3409,7 +3411,7 @@ preparePromise.then(() => {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
             const res = await fetch(`${baseUrl}/api/lobbies`, { cache: 'no-store' });
             const all = await res.json();
-            const liveLobby = all.find(l => l.id === lobbyId);
+            const liveLobby = (Array.isArray(all) ? all : []).find(l => l.id === lobbyId);
             if (liveLobby && liveLobby.amount > 0) {
               const humans = (liveLobby.players || []).filter(p => !p.isAi && presenceSet.has(String(p.playerId || '').toLowerCase()));
               // Cross-check hasWagered with socket roster map to avoid API staleness
@@ -4270,10 +4272,28 @@ preparePromise.then(() => {
 
       // Normalize required humans and ack maps to lowercase for consistent matching
       const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => String(p.wallet || '').toLowerCase());
+      // Resilience: a human can miss the short queue_presence ack window if their socket
+      // blips/reconnects (very common on mobile). For free/tutorial matches, also treat any
+      // required human who is still connected AND in THIS lobby as present, so they aren't
+      // silently dropped from their own match (which loads them in with no controllable chicken).
+      // Paid (ranked) lobbies are intentionally unchanged: they still require presence + assets,
+      // since that gate protects escrow/payout correctness.
+      const connectedInLobby = new Set();
+      try {
+        for (const conn of activeConnections.values()) {
+          if (conn && String(conn.currentLobby || '') === String(lobbyId)) {
+            const k = String(conn.walletAddressLower || conn.walletAddress || '').toLowerCase();
+            if (k) connectedInLobby.add(k);
+          }
+        }
+      } catch {}
       const presentHumans = requiredHumans.filter((w) => {
         const key = String(w).toLowerCase();
-        // Tutorial and free (amount==0) lobbies: presence-only; Ranked paid: require presence + assets
-        return (isTutorial || isFreeNonTutorial) ? presenceAcks.has(key) : (presenceAcks.has(key) && assetsAcks.has(key));
+        // Tutorial and free (amount==0) lobbies: presence-only (explicit ack OR live in-lobby connection).
+        // Ranked paid: require presence + assets.
+        return (isTutorial || isFreeNonTutorial)
+          ? (presenceAcks.has(key) || connectedInLobby.has(key))
+          : (presenceAcks.has(key) && assetsAcks.has(key));
       });
 
       // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human)
