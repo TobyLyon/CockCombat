@@ -22,19 +22,21 @@ export interface Lobby {
 // TODO: Move this to Supabase database for persistence
 const CURRENCY = 'SOL';
 
-// Paid lobbies need a configured escrow wallet to hold entry deposits and pay
-// out winners. Until one is set (server logs "No escrow wallets configured"),
-// paid lobbies are gated to "coming soon" so players can't enter and risk SOL
-// while payouts are disabled. This auto-enables once escrow env is present, so
-// no code change is needed to turn paid matches back on — just set the wallet
-// env vars (and rotate the previously-leaked keys first). Server-side only:
-// these non-public envs are undefined on the client, which safely keeps paid
-// lobbies gated there too (the authoritative list comes from /api/lobbies).
+// Paid lobbies stay "coming soon" until BOTH conditions hold:
+//   1. Escrow is actually configured (a treasury wallet keypair is set), AND
+//   2. We explicitly flip OPEN_PAID_LOBBIES=true.
+// Decoupling the public gate from escrow presence lets us wire up and TEST the
+// full wager/escrow/payout plumbing (set the escrow env vars) WITHOUT exposing
+// paid lobbies to players before the lobby configuration is finalized for smooth
+// matches with more than 2 people. Server-side only: these non-public envs are
+// undefined on the client, which safely keeps paid lobbies gated there too (the
+// authoritative list is served from /api/lobbies).
 const ESCROW_CONFIGURED = !!(
   (process.env.ESCROW_WALLET_A_PUBLIC_KEY && process.env.ESCROW_WALLET_A_PRIVATE_KEY) ||
   (process.env.EVM_ESCROW_A_ADDRESS && process.env.EVM_ESCROW_A_PRIVATE_KEY)
 );
-const PAID_COMING_SOON = !ESCROW_CONFIGURED;
+const PAID_LOBBIES_OPEN = String(process.env.OPEN_PAID_LOBBIES || '').toLowerCase() === 'true';
+const PAID_COMING_SOON = !(ESCROW_CONFIGURED && PAID_LOBBIES_OPEN);
 
 export const lobbies: Lobby[] = [
   // Free lobbies (no AI, require 2 humans)
