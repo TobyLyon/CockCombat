@@ -2659,25 +2659,7 @@ preparePromise.then(() => {
         const wallet = String(connection.walletAddress || socket.id).toLowerCase();
         const targetRoom = matchId ? matchId : lobbyId;
 
-        // Per-attacker attempt throttle (edge-trigger style) – 1 attempt per second
         const now = Date.now();
-        try {
-          const last = global.__lastPeckAttemptTs[wallet] || 0;
-          if (now - last < 1000) return; // 1 peck per second
-          global.__lastPeckAttemptTs[wallet] = now;
-        } catch {}
-
-        // Ensure only ONE damage resolve per swing window (~1s) regardless of duplicates
-        try {
-          const swing = global.__peckSwing[wallet] || { until: 0, resolved: false };
-          if (!swing.until || now > swing.until) {
-            swing.until = now + 1000; // swing window
-            swing.resolved = false;
-          } else if (swing.resolved) {
-            return; // already resolved a hit for this swing
-          }
-          global.__peckSwing[wallet] = swing;
-        } catch {}
 
         // Fetch authoritative match state
         const store = (matchId && global.matchStateBySession && global.matchStateBySession.get && global.matchStateBySession.get(matchId)) || null;
@@ -2686,8 +2668,12 @@ preparePromise.then(() => {
         const attacker = store.pos[wallet];
         if (!attacker) return;
 
-        const reach = 3.2;
-        const verticalWindow = 0.45;
+        // Forgiving hitbox: absorbs ~30Hz position quantization, network latency, and
+        // the forward lunge of the peck animation, so pecks that visually connect
+        // register reliably for BOTH players. Vertical window covers hops/landings
+        // (a jump easily exceeded the old 0.45).
+        const reach = 3.7;
+        const verticalWindow = 1.5;
         let chosen = null;
         let bestDist = Infinity;
         try {
@@ -2709,21 +2695,18 @@ preparePromise.then(() => {
           }
         } catch {}
 
-        if (!chosen) return; // no valid target in range
+        if (!chosen) return; // no valid target in range — a whiff does NOT start the cooldown
 
-        // Reuse damage throttles to avoid duplicate hits (1 damage per second)
-        if (!global.__lastDamageMap) global.__lastDamageMap = Object.create(null);
+        // Single per-attacker damage cooldown. Only an in-range hit consumes it, so a
+        // missed peck never blocks the follow-up. ~340ms matches the client peck cadence
+        // (200ms swing + 120ms recover), so every connecting peck lands — fixing the old
+        // 1/sec cap that silently dropped ~2 of every 3 pecks the client threw.
+        const PECK_COOLDOWN_MS = 340;
         if (!global.__lastAttackerHitTs) global.__lastAttackerHitTs = Object.create(null);
         try {
-          const lastGlobal = global.__lastAttackerHitTs[wallet] || 0;
-          if (now - lastGlobal < 1000) return; // 1/s across all targets
+          const lastHit = global.__lastAttackerHitTs[wallet] || 0;
+          if (now - lastHit < PECK_COOLDOWN_MS) return;
           global.__lastAttackerHitTs[wallet] = now;
-        } catch {}
-        try {
-          const k = wallet + '->' + chosen;
-          const last = global.__lastDamageMap[k] || 0;
-          if (now - last < 1000) return; // 1/s per attacker->target
-          global.__lastDamageMap[k] = now;
         } catch {}
 
         // Apply damage and broadcast authoritative update
@@ -2750,9 +2733,6 @@ preparePromise.then(() => {
         } catch {}
 
         try { io.to(targetRoom).emit('player_damage', { targetId: chosen, amount, by: wallet, ts: Date.now() }); } catch {}
-
-        // Mark swing as resolved so duplicates cannot apply more damage in the same window
-        try { const s = global.__peckSwing && global.__peckSwing[wallet]; if (s) s.resolved = true; } catch {}
       } catch {}
     });
 
@@ -3492,9 +3472,8 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready
         const isRankedLobby = !!(lobby && (lobby.amount || 0) > 0);
-        // Both free and wagered matches start at 2 players (1v1 and up). Wagered
-        // previously required 4, which left 2 wagered players stuck forever.
-        const minPlayers = 2;
+        // Ranked (wagered) requires 4 players; free requires 2.
+        const minPlayers = isRankedLobby ? 4 : 2;
         // Readiness semantics:
         // - Ranked (amount>0): ready requires BOTH wager confirmation AND explicit ready toggle
         // - Free (amount==0): ready uses isReady
@@ -3815,7 +3794,7 @@ preparePromise.then(() => {
                 const presenceSetNow = getDurableLobbyPresence(lobbyId);
                 const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
                 const isRankedNow = !isTutorialNow && (liveLobbyNow.amount || 0) > 0;
-                const minPlayersNow = isTutorialNow ? 1 : 2;
+                const minPlayersNow = isTutorialNow ? 1 : (isRankedNow ? 4 : 2);
                 const roster = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players : [];
                 const eligibleNow = roster.filter(p => p.isAi || presenceSetNow.has(String(p.playerId || '').toLowerCase()));
                 const readyNow = eligibleNow.filter(p => {
@@ -4315,7 +4294,7 @@ preparePromise.then(() => {
         arenaSeedCommit,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: (isTutorial || aiFill) ? 1 : 2,
+        minHumans: (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4),
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
@@ -4393,9 +4372,8 @@ preparePromise.then(() => {
           : (presenceAcks.has(key) && assetsAcks.has(key));
       });
 
-      // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human).
-      // Free and wagered both require just 2 humans (1v1+); 4 left wagered pairs stuck.
-      const minHumans = (isTutorial || aiFill) ? 1 : 2;
+      // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human)
+      const minHumans = (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4);
       if (!isTutorial && !aiFill && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function
