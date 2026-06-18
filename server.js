@@ -3492,17 +3492,17 @@ preparePromise.then(() => {
 
         // Check if we have minimum players and all are ready
         const isRankedLobby = !!(lobby && (lobby.amount || 0) > 0);
-        const minPlayers = isRankedLobby ? 4 : 2;
+        // Both free and wagered matches start at 2 players (1v1 and up). Wagered
+        // previously required 4, which left 2 wagered players stuck forever.
+        const minPlayers = 2;
         // Readiness semantics:
         // - Ranked (amount>0): ready requires BOTH wager confirmation AND explicit ready toggle
         // - Free (amount==0): ready uses isReady
-        const readyPlayers = eligiblePlayers.filter(p => {
-          if ((lobby.amount || 0) > 0 && !p.isAi) {
-            const hasWageredFlag = !!(p && p.hasWagered);
-            return Boolean(p.isReady) && hasWageredFlag;
-          }
-          return p.isReady;
-        });
+        // `isReady` already encodes "wagered AND ready" for paid players (computed
+        // above at the isReady assignment). The previous re-check read p.hasWagered,
+        // which is NOT a field on this mapped object → it was always false for paid,
+        // so wagered+ready players were dropped and paid matches never started.
+        const readyPlayers = eligiblePlayers.filter(p => p.isReady);
         const hasHumanReady = true;
         let allReady = false;
         allReady = eligiblePlayers.length >= minPlayers && readyPlayers.length === eligiblePlayers.length && hasHumanReady;
@@ -3815,7 +3815,7 @@ preparePromise.then(() => {
                 const presenceSetNow = getDurableLobbyPresence(lobbyId);
                 const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
                 const isRankedNow = !isTutorialNow && (liveLobbyNow.amount || 0) > 0;
-                const minPlayersNow = isTutorialNow ? 1 : (isRankedNow ? 4 : 2);
+                const minPlayersNow = isTutorialNow ? 1 : 2;
                 const roster = Array.isArray(liveLobbyNow.players) ? liveLobbyNow.players : [];
                 const eligibleNow = roster.filter(p => p.isAi || presenceSetNow.has(String(p.playerId || '').toLowerCase()));
                 const readyNow = eligibleNow.filter(p => {
@@ -4315,7 +4315,7 @@ preparePromise.then(() => {
         arenaSeedCommit,
         serverNow: Date.now(),
         ackDeadlineMs,
-        minHumans: (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4),
+        minHumans: (isTutorial || aiFill) ? 1 : 2,
         escrowId: escrowIdVal,
       };
       // Mark lobby as starting for UI cards/state
@@ -4393,8 +4393,9 @@ preparePromise.then(() => {
           : (presenceAcks.has(key) && assetsAcks.has(key));
       });
 
-      // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human)
-      const minHumans = (isTutorial || aiFill) ? 1 : (isFreeNonTutorial ? 2 : 4);
+      // Ranked cancellation if insufficient humans (aiFill free matches need only 1 human).
+      // Free and wagered both require just 2 humans (1v1+); 4 left wagered pairs stuck.
+      const minHumans = (isTutorial || aiFill) ? 1 : 2;
       if (!isTutorial && !aiFill && presentHumans.length < minHumans) {
         try {
           // Refund all expected humans (best-effort) via server-only function

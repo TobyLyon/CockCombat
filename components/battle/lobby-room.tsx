@@ -817,7 +817,7 @@ export default function LobbyRoom({ lobby, onLeaveLobby, onStartMatch, playerIde
     }
   }
 
-  const minRequired = lobby.amount === 0 ? 2 : 4
+  const minRequired = 2 // free and wagered both start at 2 players (1v1+)
   const paidPlayers = players.filter(p => p.isReady || p.isAi).length
   const humanPlayersJoined = players.filter(p => !p.isAi).length
 
