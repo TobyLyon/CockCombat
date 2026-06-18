@@ -52,13 +52,14 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
         if (!supabase || !matchId) return
         const { data, error } = await supabase
           .from('chat_messages')
-          .select('*')
+          .select('id, match_session_id, sender_wallet, sender_display_name, message, created_at')
           .eq('match_session_id', matchId)
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: false })
+          .limit(100)
         if (!error && Array.isArray(data)) {
-          const initial = data.map((row: any) => ({
+          const initial = data.slice().reverse().map((row: any) => ({
             id: row.id || String(row.created_at),
-            user: { id: row.user_id || row.wallet || '', name: row.username || (row.wallet ? `${row.wallet.slice(0,4)}...${row.wallet.slice(-4)}` : 'Anonymous'), address: row.wallet || '' },
+            user: { id: row.sender_wallet || '', name: row.sender_display_name || (row.sender_wallet ? `${String(row.sender_wallet).slice(0,4)}...${String(row.sender_wallet).slice(-4)}` : 'Anonymous'), address: row.sender_wallet || '' },
             message: row.message,
             timestamp: row.created_at,
             isSpectator: true
@@ -168,19 +169,10 @@ export default function SpectatorChat({ matchId, onNewMessage, onSendMessage, ca
       message: messageText,
       username,
     });
-    // Persist to Supabase for history
-    try {
-      if (supabase && matchId) {
-        await supabase.from('chat_messages').insert({
-          match_session_id: matchId,
-          message: messageText,
-          username,
-          wallet: walletAddr || null,
-          user_id: walletAddr || socket?.id || null
-        })
-      }
-    } catch {}
-    
+    // Persistence is handled server-side in the 'spectator_chat' socket handler
+    // (service role, correct schema). The anon client key cannot write here (RLS),
+    // so we intentionally do NOT insert from the browser.
+
     setMessageText("")
     
     if (onSendMessage) {

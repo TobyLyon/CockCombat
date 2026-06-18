@@ -97,6 +97,34 @@ async function getUsernameForWallet(walletAddress) {
 }
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// ---- Chat persistence (service-role Supabase bypasses RLS; client anon key cannot write) ----
+let __chatSupabase = null;
+function getChatSupabase() {
+  try {
+    if (__chatSupabase) return __chatSupabase;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return null;
+    const { createClient } = require('@supabase/supabase-js');
+    __chatSupabase = createClient(url, key);
+    return __chatSupabase;
+  } catch { return null; }
+}
+const __chatRoomIdCache = new Map();
+async function ensureChatRoomId(sb, roomId) {
+  try {
+    if (__chatRoomIdCache.has(roomId)) return __chatRoomIdCache.get(roomId);
+    const kind = roomId.startsWith('lobby') ? 'lobby' : (roomId === 'chat-global' ? 'global' : 'match');
+    const p_lobby = kind === 'lobby' ? roomId : null;
+    const p_match = kind === 'lobby' ? null : roomId;
+    const { data, error } = await sb.rpc('ensure_chat_room', { p_kind: kind, p_lobby, p_match });
+    if (error || !data) return null;
+    const id = (typeof data === 'string') ? data : (data && data.id ? data.id : null);
+    if (id) __chatRoomIdCache.set(roomId, id);
+    return id;
+  } catch { return null; }
+}
+
 function paidMatchesEnabled() {
   try {
     const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true';
@@ -3092,7 +3120,7 @@ preparePromise.then(() => {
     });
 
     // Handle spectator chat messages
-    socket.on('spectator_chat', ({ matchId, message, username }) => {
+    socket.on('spectator_chat', async ({ matchId, message, username }) => {
       try {
         if (!checkRateLimit('spectator_chat', 20)) {
           console.warn(`⚠️ Rate limit exceeded for spectator_chat: ${socket.id}`);
@@ -3104,11 +3132,38 @@ preparePromise.then(() => {
         if (!text) return;
         text = text.slice(0, 240);
         const name = String(username || `Spectator_${socket.id.slice(0, 6)}`).slice(0, 64);
+        const conn = activeConnections.get(socket.id);
+        const wallet = (conn && conn.walletAddress) ? String(conn.walletAddress) : '';
+
+        // Persist server-side (service role bypasses RLS) so chat has durable
+        // history. Best-effort: never let a DB hiccup block the live broadcast.
+        let savedId = null;
+        let savedTs = new Date().toISOString();
+        try {
+          const sb = getChatSupabase();
+          if (sb) {
+            const roomUuid = await ensureChatRoomId(sb, roomId);
+            if (roomUuid) {
+              const kind = roomId.startsWith('lobby') ? 'lobby' : (roomId === 'chat-global' ? 'global' : 'match');
+              const { data } = await sb.from('chat_messages').insert({
+                room_id: roomUuid,
+                match_session_id: roomId,
+                lobby_id: kind === 'lobby' ? roomId : null,
+                sender_wallet: wallet ? wallet.toLowerCase() : null,
+                sender_display_name: name,
+                message: text,
+                is_system: false,
+              }).select('id, created_at').single();
+              if (data) { savedId = data.id; if (data.created_at) savedTs = data.created_at; }
+            }
+          }
+        } catch {}
+
         io.to(roomId).emit('chat_message', {
-          id: `${socket.id}-${Date.now()}`,
-          user: { id: socket.id, name, address: socket.id.slice(0, 10) },
+          id: savedId || `${socket.id}-${Date.now()}`,
+          user: { id: wallet || socket.id, name, address: wallet || '' },
           message: text,
-          timestamp: new Date().toISOString(),
+          timestamp: savedTs,
           isSpectator: true,
         });
       } catch {}
