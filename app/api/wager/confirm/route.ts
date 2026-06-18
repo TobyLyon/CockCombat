@@ -16,7 +16,9 @@ function paidLobbiesUnlocked(): { unlocked: boolean; unlockAtMs: number | null }
 
 function paidMatchesEnabled(): boolean {
   try {
-    const enabled = String(process.env.ENABLE_PAID_MATCHES || 'true').toLowerCase() !== 'false'
+    // Fail closed: paid matches are OFF unless ENABLE_PAID_MATCHES is explicitly 'true'.
+    // Matches server.js so there's no "deposit accepted but match cancels" half-on state.
+    const enabled = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
     if (!enabled) return false
     const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
     const hasSettlement = Boolean(process.env.PAYOUT_SERVER_SECRET)
@@ -30,7 +32,7 @@ function paidMatchesEnabled(): boolean {
 
 function paidMatchesDiagnostics(): Record<string, boolean> {
   try {
-    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || 'true').toLowerCase() !== 'false'
+    const enableFlag = String(process.env.ENABLE_PAID_MATCHES || '').toLowerCase() === 'true'
     const unlock = paidLobbiesUnlocked();
     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
