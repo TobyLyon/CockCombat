@@ -39,11 +39,8 @@ const PAID_LOBBIES_OPEN = String(process.env.OPEN_PAID_LOBBIES || '').toLowerCas
 const PAID_COMING_SOON = !(ESCROW_CONFIGURED && PAID_LOBBIES_OPEN);
 
 export const lobbies: Lobby[] = [
-  // Free lobbies (no AI, require 2 humans)
+  // Free lobby (single — consolidates players so a match can actually fill; no AI, require 2 humans)
   { id: 'free-1', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'free-2', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'free-3', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
-  { id: 'free-4', name: 'Free Match', amount: 0, currency: "FREE", players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked' },
   // Wagered lobbies — gated to "coming soon" until escrow wallets are configured
   { id: 'lobby-0.01', amount: 0.01, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: PAID_COMING_SOON },
   { id: 'lobby-0.25', amount: 0.25, currency: CURRENCY, players: [], capacity: 8, highRoller: false, status: 'open', matchType: 'ranked', isComingSoon: PAID_COMING_SOON },
