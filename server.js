@@ -439,6 +439,35 @@ preparePromise.then(() => {
     } catch { return { humans: 0, total: 0 }; }
   }
 
+  // Durable lobby presence: the UNION of (a) live-socket presence
+  // (conn.currentLobby === lobbyId) and (b) the persisted global.lobbyPresence
+  // set. On Railway, websocket transports close/reopen constantly, so relying on
+  // the per-socket conn.currentLobby alone caused legitimate multi-human players
+  // to be treated as "ghosts" mid-reconnect. That blocked >1v1 lobbies from ever
+  // reaching "all ready" and split players who DID start into separate arenas
+  // (a dropped player loads in with no controllable chicken). global.lobbyPresence
+  // is keyed by wallet and survives brief flaps (only removed on explicit leave
+  // or after the disconnect grace), so the union is the robust source of truth for
+  // "who is in this lobby right now". Returns a Set of lowercased wallet ids.
+  function getDurableLobbyPresence(lobbyId) {
+    const set = new Set();
+    try {
+      for (const [, c] of activeConnections.entries()) {
+        if (c && c.currentLobby === lobbyId) {
+          const k = String(c.walletAddressLower || c.walletAddress || '').toLowerCase();
+          if (k) set.add(k);
+        }
+      }
+    } catch {}
+    try {
+      const persisted = global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId);
+      if (persisted && typeof persisted.forEach === 'function') {
+        persisted.forEach((w) => { const k = String(w || '').toLowerCase(); if (k) set.add(k); });
+      }
+    } catch {}
+    return set;
+  }
+
   // ---- Free-lobby AI autofill: a solo human in a FREE lobby starts a vs-AI match after 10s ----
   if (!global.freeAutofillTimers) global.freeAutofillTimers = new Map();   // lobbyId -> timeout handle
   if (!global.freeAutofillDeadline) global.freeAutofillDeadline = new Map(); // lobbyId -> epoch ms
@@ -1172,12 +1201,22 @@ preparePromise.then(() => {
         return;
       }
       if (lobbyId) {
-        // Block joining lobby room when countdown has begun
+        // Block NEW players from joining once the countdown has begun, but ALLOW
+        // existing members to rejoin (reconnect/handoff). Without this exception, a
+        // member whose websocket flaps during the 5s countdown gets locked out of
+        // their own match and never receives queue_begin/round_start.
         try {
           if (global.countdownActive && global.countdownActive[lobbyId]) {
-            try { socket.emit('join_blocked', { lobbyId, reason: 'countdown_active' }); } catch {}
-            console.log(`🚫 Blocked lobby room join during countdown for ${lobbyId} (socket ${socket.id})`);
-            return;
+            const connNow = activeConnections.get(socket.id);
+            const idLower = String((connNow && (connNow.walletAddressLower || connNow.walletAddress)) || '').toLowerCase();
+            const presence = (global.lobbyPresence && global.lobbyPresence.get && global.lobbyPresence.get(lobbyId)) || null;
+            const isMember = !!(idLower && presence && presence.has && presence.has(idLower));
+            if (!isMember) {
+              try { socket.emit('join_blocked', { lobbyId, reason: 'countdown_active' }); } catch {}
+              console.log(`🚫 Blocked NEW lobby room join during countdown for ${lobbyId} (socket ${socket.id})`);
+              return;
+            }
+            console.log(`↩️ Allowing existing member rejoin during countdown for ${lobbyId} (${idLower})`);
           }
         } catch {}
         // Check if already in this lobby to prevent duplicate joins
@@ -3170,8 +3209,12 @@ preparePromise.then(() => {
           } catch {}
         };
 
-        // Small grace period to allow immediate reconnection/handoff
-        setTimeout(tryRemoveAfterGrace, 800);
+        // Grace period to allow reconnection/handoff before pruning a player from
+        // the lobby + presence. 800ms was far too short for Railway websocket flaps
+        // (transport close → reconnect routinely takes a few seconds), which evicted
+        // active players from multi-human lobbies mid-match. Configurable via env.
+        const graceMs = Math.max(800, parseInt(String(process.env.DISCONNECT_GRACE_MS || ''), 10) || 4000);
+        setTimeout(tryRemoveAfterGrace, graceMs);
       } catch {}
 
       // Always remove this socket from active connections immediately to avoid ghost counts
@@ -3353,13 +3396,13 @@ preparePromise.then(() => {
         // Disabled tutorial AI backfill for now
         try { /* no-op */ } catch {}
         
-        // Filter out ghost humans (present in API but no live socket presence)
-        let presenceSet = new Set();
-        try {
-          for (const [, c] of activeConnections.entries()) {
-            if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSet.add(String(c.walletAddress).toLowerCase());
-          }
-        } catch {}
+        // Filter out ghost humans (in the API list but genuinely gone). Use
+        // DURABLE presence (live socket OR persisted lobby presence) so a player
+        // whose websocket is mid-reconnect on Railway is not wrongly dropped as a
+        // ghost. The live-socket-only check here was the primary reason >1v1
+        // lobbies never started: real members were filtered out, leaving "0/1
+        // ready" forever (see deploy logs "Filtered N ghost player(s)").
+        let presenceSet = getDurableLobbyPresence(lobbyId);
         let eligiblePlayers = lobbyPlayers.filter(p => p.isAi || presenceSet.has(String(p.playerId || '').toLowerCase()));
         if (eligiblePlayers.length !== lobbyPlayers.length) {
           console.log(`🧹 Filtered ${lobbyPlayers.length - eligiblePlayers.length} ghost player(s) from ${lobbyId} for readiness check`);
@@ -3709,8 +3752,8 @@ preparePromise.then(() => {
               const liveLobbyNow = Array.isArray(allNow) ? allNow.find(l => l && l.id === lobbyId) : null;
               if (liveLobbyNow) {
                 // Build presence and recompute quick readiness
-                const presenceSetNow = new Set();
-                try { for (const [, c] of activeConnections.entries()) { if (c && c.currentLobby === lobbyId && c.walletAddress) presenceSetNow.add(String(c.walletAddress).toLowerCase()); } } catch {}
+                // Durable presence so reconnecting members aren't dropped on recheck
+                const presenceSetNow = getDurableLobbyPresence(lobbyId);
                 const isTutorialNow = liveLobbyNow.matchType === 'tutorial';
                 const isRankedNow = !isTutorialNow && (liveLobbyNow.amount || 0) > 0;
                 const minPlayersNow = isTutorialNow ? 1 : (isRankedNow ? 4 : 2);
@@ -4273,20 +4316,15 @@ preparePromise.then(() => {
       // Normalize required humans and ack maps to lowercase for consistent matching
       const requiredHumans = expectedRoster.filter(p => !p.isAi).map(p => String(p.wallet || '').toLowerCase());
       // Resilience: a human can miss the short queue_presence ack window if their socket
-      // blips/reconnects (very common on mobile). For free/tutorial matches, also treat any
-      // required human who is still connected AND in THIS lobby as present, so they aren't
-      // silently dropped from their own match (which loads them in with no controllable chicken).
-      // Paid (ranked) lobbies are intentionally unchanged: they still require presence + assets,
-      // since that gate protects escrow/payout correctness.
-      const connectedInLobby = new Set();
-      try {
-        for (const conn of activeConnections.values()) {
-          if (conn && String(conn.currentLobby || '') === String(lobbyId)) {
-            const k = String(conn.walletAddressLower || conn.walletAddress || '').toLowerCase();
-            if (k) connectedInLobby.add(k);
-          }
-        }
-      } catch {}
+      // blips/reconnects (very common on mobile/Railway). For free/tutorial matches, also
+      // treat any required human still present in THIS lobby as present, so they aren't
+      // silently dropped from their own match (which loads them in with no controllable
+      // chicken). NOTE: the match_started countdown handler clears conn.currentLobby BEFORE
+      // this runs, so a live-socket-only check is always empty here — we must use the
+      // durable presence (persisted global.lobbyPresence) which survives the handoff.
+      // Paid (ranked) lobbies are intentionally unchanged: they still require presence +
+      // assets, since that gate protects escrow/payout correctness.
+      const connectedInLobby = getDurableLobbyPresence(lobbyId);
       const presentHumans = requiredHumans.filter((w) => {
         const key = String(w).toLowerCase();
         // Tutorial and free (amount==0) lobbies: presence-only (explicit ack OR live in-lobby connection).
