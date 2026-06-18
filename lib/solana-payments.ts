@@ -381,3 +381,99 @@ export async function sendIdempotentSolBundlePayment(args: SendSolBundleArgs): P
     } catch {}
   }
 }
+
+export interface SendSplBundleArgs {
+  opId: string
+  type: 'payout' | 'refund'
+  fromEscrowId: 'A' | 'B' | 'C'
+  mint: string
+  transfers: Array<{ to: string; amount: number }> // amounts in token BASE UNITS
+}
+
+/**
+ * SPL-token analogue of sendIdempotentSolBundlePayment. Exactly-once via the same
+ * payments(op_id) ledger; pays all transfers in one atomic token tx.
+ */
+export async function sendIdempotentSplBundlePayment(args: SendSplBundleArgs): Promise<{ txSig: string }> {
+  const { opId, type, fromEscrowId, mint, transfers } = args
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const canDb = Boolean(supabaseUrl && supabaseServiceKey)
+  const supabase = canDb ? createClient(supabaseUrl!, supabaseServiceKey!) : null
+  if (!supabase && process.env.NODE_ENV === 'production') {
+    throw new Error('Solana payments idempotency unavailable (Supabase not configured)')
+  }
+
+  ;(global as any).__splBundlePaymentsInFlight =
+    (global as any).__splBundlePaymentsInFlight || new Map<string, Promise<{ txSig: string }>>()
+  const inFlight: Map<string, Promise<{ txSig: string }>> = (global as any).__splBundlePaymentsInFlight
+  const existingPromise = inFlight.get(opId)
+  if (existingPromise) return existingPromise
+
+  const connection = getSolanaConnection()
+  escrowService.setConnection(connection)
+  const dryRun = String(process.env.SOLANA_PAYMENTS_DRY_RUN || '').toLowerCase() === 'true'
+  const fromWallet = escrowService.getWallet(fromEscrowId)
+  const fromAddress = fromWallet ? fromWallet.publicKey.toBase58() : `dryrun_escrow_${fromEscrowId}`
+  if (!fromWallet && !dryRun) throw new Error(`Escrow wallet ${fromEscrowId} unavailable`)
+
+  const normalized = (Array.isArray(transfers) ? transfers : [])
+    .map((t) => ({ to: String((t as any)?.to || ''), amount: Math.max(0, Math.floor(Number((t as any)?.amount) || 0)) }))
+    .filter((t) => t.to && t.amount > 0)
+  const totalUnits = normalized.reduce((s, t) => s + t.amount, 0)
+  const drySig = (() => {
+    try { return `dryrun_${crypto.createHash('sha256').update(`${opId}|${type}|${fromEscrowId}|spl|${mint}|${JSON.stringify(normalized)}`).digest('hex').slice(0, 48)}` }
+    catch { return `dryrun_${Date.now()}_${Math.floor(Math.random() * 1e6)}` }
+  })()
+
+  const execPromise = (async () => {
+    if (normalized.length === 0) throw new Error('No valid transfers provided')
+    if (supabase) {
+      try {
+        const { data: existing } = await supabase.from('payments').select('op_id, tx_hash, state').eq('op_id', opId).maybeSingle()
+        if (existing && existing.tx_hash) {
+          const sig = String(existing.tx_hash)
+          if (await isConfirmedSignature(connection, sig)) return { txSig: sig }
+          try { await supabase.from('payments').update({ state: 'pending', tx_hash: null }).eq('op_id', opId) } catch {}
+        }
+      } catch {}
+    }
+    if (supabase) {
+      try {
+        await supabase.from('payments').upsert(
+          { op_id: opId, type, from_address: fromAddress, to_address: normalized[0]?.to || null, token: mint, amount_wei: String(totalUnits), state: 'pending', chain: 'solana', metadata: { transfers: normalized, mint } },
+          { onConflict: 'op_id' }
+        )
+      } catch {}
+      const claimed = await claimPaymentOpStrict({ supabase, opId, ttlSeconds: 300 })
+      if (!claimed) {
+        const start = Date.now()
+        while (Date.now() - start < 20000) {
+          try {
+            const { data: row } = await supabase.from('payments').select('tx_hash, state').eq('op_id', opId).maybeSingle()
+            if (row && row.tx_hash) { const sig = String(row.tx_hash); if (await isConfirmedSignature(connection, sig)) return { txSig: sig } }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 400))
+        }
+        if (process.env.NODE_ENV === 'production') throw new Error(`Payment lock unavailable for ${opId}`)
+      } else {
+        try { await supabase.from('payments').update({ state: 'in_progress', metadata: { transfers: normalized, mint, attempt_id: `${Date.now()}_${Math.floor(Math.random() * 1e6)}` } }).eq('op_id', opId).is('tx_hash', null) } catch {}
+      }
+    }
+
+    const txSig = dryRun ? drySig : await escrowService.transferTokenBundle(mint, normalized.map((t) => ({ toAddress: t.to, amount: t.amount })), fromWallet as any)
+
+    if (supabase) {
+      try { await supabase.from('payments').update({ tx_hash: txSig, state: 'sent', locked_until: null }).eq('op_id', opId) } catch {}
+      try {
+        if (dryRun) { await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opId) }
+        else if (await isConfirmedSignature(connection, txSig)) { await supabase.from('payments').update({ state: 'confirmed_soft' }).eq('op_id', opId) }
+      } catch {}
+    }
+    return { txSig }
+  })()
+
+  inFlight.set(opId, execPromise)
+  try { return await execPromise } finally { try { if (inFlight.get(opId) === execPromise) inFlight.delete(opId) } catch {} }
+}

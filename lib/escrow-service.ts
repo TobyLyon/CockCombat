@@ -119,6 +119,44 @@ class EscrowService {
   }
 
   /**
+   * Transfer SPL tokens to multiple recipients in a single atomic tx (creating
+   * destination ATAs as needed). Amounts are in BASE UNITS. Used for token-wager
+   * payouts (winner + house cut) so both land or neither does.
+   */
+  public async transferTokenBundle(
+    mintAddress: string,
+    transfers: Array<{ toAddress: string; amount: bigint | number }>,
+    fromWallet?: EscrowWallet
+  ): Promise<string> {
+    if (!this.connection) throw new Error('Connection not initialized')
+    if (!Array.isArray(transfers) || transfers.length === 0) throw new Error('No transfers provided')
+    const wallet = fromWallet || await this.getNextWallet()
+    const mint = new PublicKey(mintAddress)
+    const fromAta = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+    const tx = new Transaction()
+    for (const t of transfers) {
+      const amt = typeof t.amount === 'bigint' ? t.amount : BigInt(Math.floor(Number(t.amount) || 0))
+      if (amt <= BigInt(0)) continue
+      const to = new PublicKey(t.toAddress)
+      const toAta = await getAssociatedTokenAddress(mint, to, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      let exists = false
+      try { await getAccount(this.connection, toAta, 'confirmed', TOKEN_PROGRAM_ID); exists = true } catch {}
+      if (!exists) {
+        tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, toAta, to, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
+      }
+      tx.add(createTransferInstruction(fromAta, toAta, wallet.publicKey, amt, [], TOKEN_PROGRAM_ID))
+    }
+    if (tx.instructions.length === 0) throw new Error('No valid token transfers to execute')
+    try {
+      const signature = await sendAndConfirmTransaction(this.connection, tx, [wallet.keypair], { commitment: 'confirmed', maxRetries: 3 })
+      return signature
+    } catch (error) {
+      console.error(`❌ Token bundle transfer failed from wallet ${wallet.id}:`, error)
+      throw error
+    }
+  }
+
+  /**
    * Get singleton instance
    */
   public static getInstance(): EscrowService {

@@ -7,6 +7,7 @@ import { getEvmProvider } from '@/lib/evm-config';
 
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferInstruction, getAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import escrowService from '@/lib/escrow-service';
 import { createClient } from '@supabase/supabase-js';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
@@ -189,14 +190,39 @@ export async function POST(request: NextRequest) {
 
     const payer = new PublicKey(playerPublicKey)
     const escrowPk = escrow.publicKey
-    const lamports = Math.round(lobby.amount * LAMPORTS_PER_SOL)
-    const ix = SystemProgram.transfer({ fromPubkey: payer, toPubkey: escrowPk, lamports })
-    const tx = new Transaction().add(ix)
+
+    // Build the deposit tx. Token lobbies (lobby.tokenMint set) send an SPL transfer
+    // of amount*10^decimals base units from the player's ATA to the escrow's ATA;
+    // SOL lobbies send native lamports. Player is the fee payer either way. We store
+    // the expected base units in expected_lamports (BIGINT) for the confirm/settlement.
+    const isTokenLobby = !!(lobby.tokenMint && String(lobby.tokenMint).trim())
+    const tx = new Transaction()
+    let expectedBaseUnits: bigint
+    let mintStr: string | null = null
+    if (isTokenLobby) {
+      mintStr = String(lobby.tokenMint)
+      const mint = new PublicKey(mintStr)
+      const decimals = Number(lobby.tokenDecimals ?? 6)
+      expectedBaseUnits = BigInt(Math.round(Number(lobby.amount))) * (BigInt(10) ** BigInt(decimals))
+      const payerAta = await getAssociatedTokenAddress(mint, payer, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      const escrowAta = await getAssociatedTokenAddress(mint, escrowPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      // Create the escrow's token account if it doesn't exist yet (payer funds the rent).
+      let escrowAtaExists = false
+      try { await getAccount(connection, escrowAta, 'confirmed', TOKEN_PROGRAM_ID); escrowAtaExists = true } catch {}
+      if (!escrowAtaExists) {
+        tx.add(createAssociatedTokenAccountInstruction(payer, escrowAta, escrowPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
+      }
+      tx.add(createTransferInstruction(payerAta, escrowAta, payer, expectedBaseUnits, [], TOKEN_PROGRAM_ID))
+    } else {
+      expectedBaseUnits = BigInt(Math.round(lobby.amount * LAMPORTS_PER_SOL))
+      tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: escrowPk, lamports: Number(expectedBaseUnits) }))
+    }
     const { blockhash } = await connection.getLatestBlockhash('finalized')
     tx.recentBlockhash = blockhash
     tx.feePayer = payer
 
     const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64')
+    const expectedUnitsNum = Number(expectedBaseUnits)
     let intentId: string | null = null;
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -209,7 +235,7 @@ export async function POST(request: NextRequest) {
             lobby_id: lobbyId,
             player_wallet: String(playerPublicKey || ''),
             escrow_wallet_id: String(lobby.escrowWalletId),
-            expected_lamports: lamports,
+            expected_lamports: expectedUnitsNum,
             status: 'intent',
           })
           .select('intent_id')
@@ -220,7 +246,7 @@ export async function POST(request: NextRequest) {
       }
     } catch {}
 
-    return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports, transaction: serialized, lobbyId, intentId })
+    return NextResponse.json({ chain: 'solana', escrow: escrowPk.toBase58(), lamports: expectedUnitsNum, mint: mintStr, currency: lobby.currency, transaction: serialized, lobbyId, intentId })
 
     } catch (error) {
       console.error("❌ Error creating wager transaction:", error);

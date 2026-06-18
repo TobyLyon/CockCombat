@@ -384,11 +384,37 @@ async function handleWagerConfirmation(req: NextRequest) {
       }
 
       const sender = new PublicKey(playerPublicKey).toBase58()
+      const isTokenLobby = !!(lobby.tokenMint && String(lobby.tokenMint).trim())
       let found = false
       try {
         const meta = tx.meta
         const message = tx.transaction.message
-        if (meta && message) {
+        if (isTokenLobby && meta) {
+          // SPL token deposit: verify the escrow's token account for this mint grew by
+          // >= the expected base units AND the player's shrank by >= the same. amountLamports
+          // holds the expected base units for token lobbies (see wager/route.ts).
+          const mint = String(lobby.tokenMint)
+          const expectedUnits = BigInt(Math.round(amountLamports))
+          const preTB = (meta.preTokenBalances || []) as any[]
+          const postTB = (meta.postTokenBalances || []) as any[]
+          const amtAt = (arr: any[], idx: number) => {
+            const e = arr.find((x: any) => x.accountIndex === idx)
+            try { return e ? BigInt(String(e.uiTokenAmount?.amount || '0')) : 0n } catch { return 0n }
+          }
+          let escrowDelta = 0n
+          for (const pb of postTB) {
+            if (String(pb.mint) === mint && String(pb.owner) === toExpected) {
+              escrowDelta += (amtAt(postTB, pb.accountIndex) - amtAt(preTB, pb.accountIndex))
+            }
+          }
+          let senderDelta = 0n
+          for (const pb of preTB) {
+            if (String(pb.mint) === mint && String(pb.owner) === sender) {
+              senderDelta += (amtAt(preTB, pb.accountIndex) - amtAt(postTB, pb.accountIndex))
+            }
+          }
+          if (escrowDelta >= expectedUnits && senderDelta >= expectedUnits) found = true
+        } else if (meta && message) {
           const pre = meta.preBalances
           const post = meta.postBalances
           const acctKeys = message.getAccountKeys().staticAccountKeys

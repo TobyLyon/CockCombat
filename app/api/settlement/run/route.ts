@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getChain } from '@/lib/chain'
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter'
+import { lobbies } from '@/lib/lobbies'
 
 export const runtime = 'nodejs'
 
@@ -28,8 +29,9 @@ export async function POST(request: NextRequest) {
     }
 
     let sendIdempotentSolBundlePayment: (args: any) => Promise<{ txSig: string }>
+    let sendIdempotentSplBundlePayment: (args: any) => Promise<{ txSig: string }>
     try {
-      ;({ sendIdempotentSolBundlePayment } = await import('@/lib/solana-payments'))
+      ;({ sendIdempotentSolBundlePayment, sendIdempotentSplBundlePayment } = await import('@/lib/solana-payments'))
     } catch (e: any) {
       const details = e?.message ? String(e.message) : String(e)
       return NextResponse.json({ error: 'Failed to load solana-payments', details }, { status: 500 })
@@ -91,6 +93,22 @@ export async function POST(request: NextRequest) {
         if (!matchId || !escrowWalletId) {
           throw new Error('Invalid match record for settlement')
         }
+
+        // Token-wager matches pay out / refund in SPL tokens (base units), not SOL.
+        // expected_lamports / ledger amounts already hold token base units for these.
+        let tokenMint: string | null = null
+        try {
+          let lid = String(mr?.lobby_id || '')
+          if (!lid) {
+            const { data: wd } = await supabase.from('wager_deposits').select('lobby_id').eq('match_result_id', matchId).limit(1).maybeSingle()
+            lid = wd ? String((wd as any).lobby_id || '') : ''
+          }
+          if (lid) {
+            const lob = lobbies.find((l) => l && l.id === lid)
+            if (lob && (lob as any).tokenMint) tokenMint = String((lob as any).tokenMint)
+          }
+        } catch {}
+        const isTokenMatch = !!tokenMint
 
         const ledger = await (async () => {
           try {
@@ -170,6 +188,8 @@ export async function POST(request: NextRequest) {
 
         const refundTransfers = (() => {
           if (ledger.refundTransfers.length > 0) return ledger.refundTransfers
+          // Token refunds must use ledger base units (from expected_lamports), not amt*1e9.
+          if (isTokenMatch) return [] as Array<{ to: string; lamports: number }>
           const byWallet = new Map<string, number>()
           for (const p of Array.isArray(participants) ? participants : []) {
             const w = String((p as any)?.wallet || '')
@@ -191,20 +211,20 @@ export async function POST(request: NextRequest) {
           if (ledger.totalLamports > BigInt(String(Number.MAX_SAFE_INTEGER))) {
             throw new Error('Prize pool too large')
           }
-          const totalLamports = Number(ledger.totalLamports)
-          const houseLamports = Math.floor(totalLamports * houseCutPercentage)
-          const winnerLamports = Math.max(0, totalLamports - houseLamports)
+          const totalUnits = Number(ledger.totalLamports)
+          const houseUnits = Math.floor(totalUnits * houseCutPercentage)
+          const winnerUnits = Math.max(0, totalUnits - houseUnits)
 
           const opId = `settle:${matchId}:bundle_v1`
-          const resp = await sendIdempotentSolBundlePayment({
-            opId,
-            type: 'payout',
-            fromEscrowId: escrowWalletId,
-            transfers: [
-              { to: winnerWallet, lamports: winnerLamports },
-              { to: houseWallet, lamports: houseLamports },
-            ],
-          })
+          const resp = isTokenMatch
+            ? await sendIdempotentSplBundlePayment({
+                opId, type: 'payout', fromEscrowId: escrowWalletId, mint: tokenMint!,
+                transfers: [ { to: winnerWallet, amount: winnerUnits }, { to: houseWallet, amount: houseUnits } ],
+              })
+            : await sendIdempotentSolBundlePayment({
+                opId, type: 'payout', fromEscrowId: escrowWalletId,
+                transfers: [ { to: winnerWallet, lamports: winnerUnits }, { to: houseWallet, lamports: houseUnits } ],
+              })
           txSig = resp.txSig
           outcome = 'settled'
 
@@ -217,12 +237,14 @@ export async function POST(request: NextRequest) {
           } catch {}
         } else if (refundTransfers.length > 0) {
           const opId = `refund:${matchId}:bundle_v1`
-          const resp = await sendIdempotentSolBundlePayment({
-            opId,
-            type: 'refund',
-            fromEscrowId: escrowWalletId,
-            transfers: refundTransfers,
-          })
+          const resp = isTokenMatch
+            ? await sendIdempotentSplBundlePayment({
+                opId, type: 'refund', fromEscrowId: escrowWalletId, mint: tokenMint!,
+                transfers: refundTransfers.map((t) => ({ to: t.to, amount: t.lamports })),
+              })
+            : await sendIdempotentSolBundlePayment({
+                opId, type: 'refund', fromEscrowId: escrowWalletId, transfers: refundTransfers,
+              })
           txSig = resp.txSig
           outcome = 'refunded'
 
