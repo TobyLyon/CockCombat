@@ -1,12 +1,16 @@
 // Single source of truth for the project token (Solana SPL mint + display symbol).
 //
-// The mint is env-driven and intentionally EMPTY until the $DINNER token launches.
-// Set NEXT_PUBLIC_TOKEN_MINT (build-time public env) once the mint exists.
-// Do NOT hardcode mint addresses anywhere else in the app.
+// The $DINNER token has launched on pump.fun — the mint is hardcoded below.
+// An env override (NEXT_PUBLIC_TOKEN_MINT) is still honored if ever needed,
+// but the launched mint is the default so the address shows without any env.
+// Do NOT hardcode mint addresses anywhere else in the app — import from here.
 
 export const TOKEN_SYMBOL = "DINNER" as const;
 
-export const TOKEN_MINT: string = (process.env.NEXT_PUBLIC_TOKEN_MINT || "").trim();
+// $DINNER SPL mint (pump.fun launch).
+export const TOKEN_MINT: string = (
+  process.env.NEXT_PUBLIC_TOKEN_MINT || "A3pSvCXGcdvicHn8cR7PinrTjpuPLXcsTBZQTkTjpump"
+).trim();
 
 // True once a real mint has been configured via env.
 export const hasToken: boolean = TOKEN_MINT.length > 0;
