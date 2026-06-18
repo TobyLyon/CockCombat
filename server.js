@@ -824,6 +824,19 @@ preparePromise.then(() => {
       const canonicalMap = (meta && meta.walletCanonicalByKey) ? meta.walletCanonicalByKey : null;
       const winnerWallet = (canonicalMap && canonicalMap[winnerLower]) ? canonicalMap[winnerLower] : winnerLower;
 
+      // Match is decided — clear this lobby's active-match signals NOW so its status
+      // deterministically returns to "open". The GET /api/lobbies derived status is the
+      // single source of truth, computed from these live signals (set on start via
+      // round_start, cleared here on end). Paid payout still runs async below.
+      try {
+        const lid = meta && meta.lobbyId ? meta.lobbyId : null;
+        if (meta) meta.roundEndedAt = Date.now();
+        if (lid) {
+          try { if (global.activeQueueForLobby && typeof global.activeQueueForLobby.delete === 'function') global.activeQueueForLobby.delete(lid); } catch {}
+          try { if (global.countdownActive) delete global.countdownActive[lid]; } catch {}
+        }
+      } catch {}
+
       // Append end marker to audit transcript (best-effort)
       try {
         const a = store && store.audit ? store.audit : null;
@@ -2664,6 +2677,12 @@ preparePromise.then(() => {
         // Fetch authoritative match state
         const store = (matchId && global.matchStateBySession && global.matchStateBySession.get && global.matchStateBySession.get(matchId)) || null;
         if (!store || !store.hp || !store.pos) return;
+
+        // Match already decided — freeze damage so the loser's in-flight killing blow
+        // can't drop the winner to 0 HP after they've already won ("we both lost").
+        const __mk = String(matchId || '');
+        if ((global.__arenaResolvedBySession && global.__arenaResolvedBySession.has(__mk)) ||
+            (global.__arenaResolveInFlightBySession && global.__arenaResolveInFlightBySession.has(__mk))) return;
 
         const attacker = store.pos[wallet];
         if (!attacker) return;

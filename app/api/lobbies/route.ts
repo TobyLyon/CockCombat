@@ -150,7 +150,12 @@ export async function GET(req: NextRequest) {
         const activeQueueForLobby = (global as any).activeQueueForLobby;
         const matchMap = (global as any).recentMatchMetaBySession;
         return lobbies.map((lob) => {
-          let status = lob.status;
+          // SINGLE SOURCE OF TRUTH for lobby status: derive PURELY from live match
+          // signals, defaulting to 'open'. We intentionally ignore the mutable
+          // lob.status (which could be left stale at 'in-progress'/'starting' and
+          // was the cause of lobbies "stuck active"). A match sets roundStartedAt on
+          // start and the resolver sets roundEndedAt + clears the queue on end.
+          let status: 'open' | 'starting' | 'in-progress' = 'open';
           try {
             const id = lob.id;
             const inCountdown = Boolean(countdownActive && countdownActive[id]);

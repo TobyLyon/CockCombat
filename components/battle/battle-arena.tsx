@@ -56,6 +56,10 @@ export default function BattleArena() {
   // Chat state
   const [xConnected, setXConnected] = useState<boolean>(false)
   const [chatOpen, setChatOpen] = useState<boolean>(false)
+  // Authoritative match winner from the server (arena_match_ended). Drives win/loss
+  // so a player who actually won never sees "you lost" because a late blow dropped
+  // their HP. null = no server verdict yet (fall back to local aliveness).
+  const [matchWinner, setMatchWinner] = useState<string | null>(null)
   const [activeMatchId, setActiveMatchId] = useState<string | undefined>(undefined)
   const [walletRequiredOpen, setWalletRequiredOpen] = useState(false)
   const [walletRequiredAmount, setWalletRequiredAmount] = useState<number | null>(null)
@@ -156,9 +160,28 @@ export default function BattleArena() {
     socket.on?.('play_sound', onPlaySound);
     return () => socket.off?.('play_sound', onPlaySound);
   }, [socket, playSound]);
+
+  // Capture the server's authoritative winner (deterministic single survivor).
+  useEffect(() => {
+    if (!socket) return;
+    const onEnded = (p: any) => { try { const w = String(p?.winner || '').toLowerCase(); if (w) setMatchWinner(w); } catch {} };
+    socket.on?.('arena_match_ended', onEnded);
+    return () => { try { socket.off?.('arena_match_ended', onEnded); } catch {} };
+  }, [socket]);
+
+  // Clear the prior verdict when a fresh battle starts.
+  useEffect(() => {
+    if (gameState === 'battle') setMatchWinner(null);
+  }, [gameState]);
   
-  // Check if player is victorious (player is alive and all others are dead)
-  const isVictorious = Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);
+  // Win/loss follows the SERVER's authoritative verdict (arena_match_ended winner =
+  // the deterministic single survivor) when available, and only falls back to local
+  // aliveness for free/no-verdict cases. This is what makes the result screen agree
+  // with payouts and prevents "we both lost".
+  const myIdLower = (() => { try { return String(getCurrentPlayerId() || '').toLowerCase() } catch { return '' } })()
+  const isVictorious = matchWinner
+    ? (!!myIdLower && matchWinner === myIdLower)
+    : Boolean(playerChicken?.isAlive && players.filter(p => !p.isPlayer && p.isAlive).length === 0);
 
   // Robust queue->battle transition: listen at top-level too in case the waiting view misses the event
   useEffect(() => {
