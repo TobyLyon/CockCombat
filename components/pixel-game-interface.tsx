@@ -13,8 +13,9 @@ import { useAudio } from "@/contexts/AudioContext"
 import { useWallet } from "@/hooks/use-wallet"
 import { useProfile } from "@/contexts/ProfileContext"
 import { toast } from "sonner"
-import { Loader2, Copy, Check } from "lucide-react"
+import { Loader2, Copy, Check, Sparkles } from "lucide-react"
 import { TOKEN_MINT, hasToken, shortMint } from "@/lib/token-config"
+import { GAME_UPDATES } from "@/lib/updates"
 // Removed WalletModal usage in EVM-only build
 
 // Animated chicken in background
@@ -288,6 +289,27 @@ export default function PixelGameInterface() {
           Battle Royale on Solana
         </p>
         </div>
+
+      {/* Latest Updates panel (desktop) — sleek side changelog */}
+      <div className="absolute right-3 top-24 lg:top-28 z-30 hidden md:block pointer-events-auto w-[252px]">
+        <div className="bg-black/45 backdrop-blur-md border-2 border-yellow-500/30 rounded-xl shadow-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-900/40 to-orange-900/40 border-b-2 border-yellow-500/30">
+            <Sparkles className="h-3.5 w-3.5 text-yellow-400" />
+            <span className="text-[11px] font-bold text-yellow-400 pixel-font leading-none tracking-wide">LATEST UPDATES</span>
+          </div>
+          <div className="max-h-[40vh] overflow-y-auto p-2 flex flex-col gap-1">
+            {GAME_UPDATES.map((u, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5 transition-colors">
+                <span className={`mt-0.5 shrink-0 text-[8px] font-extrabold px-1.5 py-0.5 rounded pixel-font leading-none border ${u.tag === 'LIVE' ? 'bg-green-500/20 text-green-300 border-green-500/40' : u.tag === 'NEW' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40' : 'bg-sky-500/20 text-sky-300 border-sky-500/40'}`}>{u.tag}</span>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-white/90 leading-snug">{u.title}</p>
+                  <p className="text-[9px] text-white/40 leading-none mt-1">{u.date}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* 3D Scene Background - cycles through mini-scenes of real chickens */}
       <div className="absolute inset-0 z-10 pointer-events-none" aria-hidden style={{ filter: 'blur(2px)' }}>

@@ -136,7 +136,46 @@ export async function GET(req: NextRequest) {
         } catch {}
       }
     } catch {}
-    return NextResponse.json(lobbies);
+
+    // Derive each lobby's status from the SAME live signals that block joins
+    // (countdown / active queue session / active match window), so the lobby
+    // cards show ACTIVE/LIVE in lock-step with join-blocking. This is computed
+    // per-response (no mutation of stored state) to avoid conflicting sources of
+    // truth or stale 'in-progress' flags that never reset.
+    const out = (() => {
+      try {
+        const now = Date.now();
+        const lockMs = Math.max(5_000, parseInt(String(process.env.LOBBY_LOCK_MS || ''), 10) || 45_000);
+        const countdownActive = (global as any).countdownActive || {};
+        const activeQueueForLobby = (global as any).activeQueueForLobby;
+        const matchMap = (global as any).recentMatchMetaBySession;
+        return lobbies.map((lob) => {
+          let status = lob.status;
+          try {
+            const id = lob.id;
+            const inCountdown = Boolean(countdownActive && countdownActive[id]);
+            const inQueue = Boolean(activeQueueForLobby && typeof activeQueueForLobby.get === 'function' && activeQueueForLobby.get(id));
+            let inMatch = false;
+            if (matchMap && typeof matchMap.values === 'function') {
+              for (const meta of matchMap.values()) {
+                if (meta && meta.lobbyId === id) {
+                  const startedAt = Number((meta as any).roundStartedAt || 0);
+                  const endedAt = Number((meta as any).roundEndedAt || 0);
+                  if (endedAt && endedAt > startedAt) continue;
+                  if (startedAt && now < startedAt + lockMs) { inMatch = true; break; }
+                }
+              }
+            }
+            if (inMatch) status = 'in-progress';
+            else if (inCountdown || inQueue) status = 'starting';
+          } catch {}
+          return { ...lob, status };
+        });
+      } catch {
+        return lobbies;
+      }
+    })();
+    return NextResponse.json(out);
   });
 }
 
