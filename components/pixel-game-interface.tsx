@@ -897,7 +897,11 @@ function ArenaEnvironment() {
     sandTexture.wrapS = sandTexture.wrapT = THREE.RepeatWrapping
     sandTexture.repeat.set(2, 2)
   } catch (e) {
-    console.warn('Texture loading failed, using fallback colors', e)
+    // useLoader throws a Promise for Suspense while textures load; that's not a
+    // real failure, so only warn on genuine errors to avoid console spam.
+    if (!(e && typeof (e as any).then === 'function')) {
+      console.warn('Texture loading failed, using fallback colors', e)
+    }
   }
   
   return (
@@ -956,7 +960,10 @@ function ForestEnvironment() {
     barkTexture.wrapS = barkTexture.wrapT = THREE.RepeatWrapping
     barkTexture.repeat.set(1, 3)
   } catch (e) {
-    console.warn('Forest texture loading failed, using fallback', e)
+    // useLoader throws a Promise for Suspense while textures load; ignore those.
+    if (!(e && typeof (e as any).then === 'function')) {
+      console.warn('Forest texture loading failed, using fallback', e)
+    }
   }
   
   return (
