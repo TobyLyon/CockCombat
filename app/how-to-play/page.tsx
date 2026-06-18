@@ -249,7 +249,7 @@ export default function HowToPlayPage() {
                 <li>• Cleanest refund path: toggle Ready OFF, then tap "Leave Lobby" before countdown starts.</li>
                 <li>• If you close the tab, refunds may still process—give it up to a minute.</li>
                 <li>• Wallet stuck? Reconnect your wallet from the header and try again.</li>
-                <li>• Need help or a manual refund? Open a ticket in our Discord and we’ll assist (complaints, feedback, or refunds).</li>
+                <li>• Need help or a manual refund? Reach out to us on X (@ChicknDinnerSOL) and we’ll assist (complaints, feedback, or refunds).</li>
               </ul>
             </div>
           </div>
