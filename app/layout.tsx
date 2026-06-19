@@ -22,7 +22,7 @@ export const metadata = {
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
     images: [
       {
-        url: '/images/chicken-dinner-banner.png',
+        url: '/images/chicken-dinner-banner.png?v=cd2',
         width: 1200,
         height: 630,
         alt: 'Chicken Dinner — Only on Solana'
@@ -33,7 +33,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'CHICKEN DINNER',
     description: 'JESUS CHRIST, HOW MANY DRUGS DID I JUST DO?',
-    images: ['/images/chicken-dinner-banner.png']
+    images: ['/images/chicken-dinner-banner.png?v=cd2']
   }
 }
 
