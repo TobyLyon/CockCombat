@@ -157,6 +157,24 @@ class EscrowService {
   }
 
   /**
+   * Ensure the escrow wallet owns an associated token account for `mintAddress`,
+   * creating it (escrow pays + owns) if missing. Done server-side so player DEPOSIT
+   * txs are a single clean transfer — a player paying to create a third-party-owned
+   * account is a classic wallet-scanner red flag (Phantom/Blowfish blocks it).
+   */
+  public async ensureOwnTokenAccount(mintAddress: string, wallet?: EscrowWallet): Promise<void> {
+    if (!this.connection) throw new Error('Connection not initialized')
+    const w = wallet || await this.getNextWallet()
+    const mint = new PublicKey(mintAddress)
+    const ata = await getAssociatedTokenAddress(mint, w.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+    try { await getAccount(this.connection, ata, 'confirmed', TOKEN_PROGRAM_ID); return } catch {}
+    const tx = new Transaction().add(
+      createAssociatedTokenAccountInstruction(w.publicKey, ata, w.publicKey, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+    )
+    await sendAndConfirmTransaction(this.connection, tx, [w.keypair], { commitment: 'confirmed', maxRetries: 3 })
+  }
+
+  /**
    * Get singleton instance
    */
   public static getInstance(): EscrowService {
