@@ -4209,6 +4209,54 @@ preparePromise.then(() => {
         expectedRoster = capRoster(Array.isArray(expectedRoster) ? expectedRoster : []);
       } catch {}
 
+      // Attach each human's selected skin (their active chicken's colors) so every
+      // client renders the right cosmetic in-match. Best-effort and bounded: this
+      // runs on the match-start path, so it uses just two batched queries (not
+      // 2-per-player) and a hard timeout so it can never delay a match. On any
+      // miss/timeout, clients fall back to their deterministic colors.
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const humansInRoster = (expectedRoster || []).filter((e) => e && !e.isAi && e.wallet);
+        if (supabaseUrl && supabaseServiceKey && humansInRoster.length) {
+          const { createClient } = require('@supabase/supabase-js');
+          const sb = createClient(supabaseUrl, supabaseServiceKey);
+          // never let a slow/hung DB call stall match start
+          const withTimeout = (p, ms) => Promise.race([
+            Promise.resolve(p),
+            new Promise((res) => setTimeout(() => res({ data: null }), ms)),
+          ]);
+          // canonical (original-cased) wallet for each human — Solana addresses are case-sensitive
+          const canonicalByLower = new Map();
+          for (const e of humansInRoster) {
+            const lw = String(e.wallet || '').toLowerCase();
+            canonicalByLower.set(lw, (walletCanonicalByKey && walletCanonicalByKey[lw]) ? walletCanonicalByKey[lw] : e.wallet);
+          }
+          const wallets = Array.from(new Set(Array.from(canonicalByLower.values())));
+          // 1) wallets -> active_chicken_id
+          const { data: profs } = await withTimeout(
+            sb.from('profiles').select('wallet_address, active_chicken_id').in('wallet_address', wallets), 2500);
+          const acidByLower = new Map();
+          for (const p of (profs || [])) {
+            if (p && p.active_chicken_id) acidByLower.set(String(p.wallet_address || '').toLowerCase(), p.active_chicken_id);
+          }
+          const acids = Array.from(new Set(Array.from(acidByLower.values())));
+          if (acids.length) {
+            // 2) active_chicken_id -> colors
+            const { data: chks } = await withTimeout(
+              sb.from('chickens').select('id, colors').in('id', acids), 2500);
+            const colorsById = new Map();
+            for (const c of (chks || [])) {
+              if (c && c.colors && typeof c.colors === 'object') colorsById.set(String(c.id), c.colors);
+            }
+            for (const entry of humansInRoster) {
+              const acid = acidByLower.get(String(entry.wallet || '').toLowerCase());
+              if (acid && colorsById.has(String(acid))) entry.colors = colorsById.get(String(acid));
+            }
+          }
+        }
+      } catch (e) { console.warn('[skins] attach colors failed:', e && e.message ? e.message : e); }
+
       // Guard against duplicate sessions for the same lobby (secondary guard in addition to lock)
       try {
         const existingMs = global.activeQueueForLobby && global.activeQueueForLobby.get(lobbyId);

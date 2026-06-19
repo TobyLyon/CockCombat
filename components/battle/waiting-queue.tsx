@@ -93,8 +93,8 @@ export default function WaitingQueue({
       setCurrentLobby(prev => ({ ...prev, players: list as any }))
       // Keep latest roster cached for start override
       latestRosterRef.current = (Array.isArray(roster) ? roster : []).map((p: any) => ({ wallet: (p && (p.wallet ?? p.playerId)) || '', username: p?.username, isAi: !!p?.isAi }))
-      try { (window as any).__latest_roster_override = list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) } catch {}
-      try { syncLobbyPlayers(list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
+      try { (window as any).__latest_roster_override = list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi, colors: p.colors })) } catch {}
+      try { syncLobbyPlayers(list.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi, colors: p.colors }))) } catch {}
     } catch {}
   }
 
@@ -115,7 +115,7 @@ export default function WaitingQueue({
       const expected = rawExpected.filter((p:any)=> !p?.isAi)
       // Normalize wallet identities to lowercase to match server acks
       latestRosterRef.current = expected.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
-      try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
+      try { (window as any).__latest_roster_override = expected.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors })) } catch {}
       try { syncLobbyPlayers(expected.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
@@ -188,7 +188,7 @@ export default function WaitingQueue({
       const rawFinal = Array.isArray(payload?.finalRoster) ? payload.finalRoster : []
       const finalR = rawFinal.filter((p:any)=> !p?.isAi)
       latestRosterRef.current = finalR.map((p:any)=> ({ ...p, wallet: String(p.wallet||'').toLowerCase() }))
-      try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
+      try { (window as any).__latest_roster_override = finalR.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors })) } catch {}
       try { syncLobbyPlayers(finalR.map((p: any) => {
         const idStr = String(p.wallet || '')
         const isGuest = idStr.startsWith('guest_')
@@ -223,8 +223,8 @@ export default function WaitingQueue({
         const fr = Array.isArray((payload as any)?.finalRoster) ? (payload as any).finalRoster : []
         if (fr.length > 0) {
           latestRosterRef.current = fr
-          try { (window as any).__latest_roster_override = fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi })) } catch {}
-          try { syncLobbyPlayers(fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))) } catch {}
+          try { (window as any).__latest_roster_override = fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors })) } catch {}
+          try { syncLobbyPlayers(fr.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors }))) } catch {}
         }
       } catch {}
       try { playSound('button') } catch {}
@@ -232,9 +232,9 @@ export default function WaitingQueue({
       try {
         const cached = latestRosterRef.current || []
         if ((!Array.isArray(players) || players.length === 0) && cached.length > 0) {
-          try { syncLobbyPlayers(cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))) } catch {}
+          try { syncLobbyPlayers(cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors }))) } catch {}
         } else if ((!Array.isArray(players) || players.length === 0) && Array.isArray(currentLobby?.players) && currentLobby.players.length > 0) {
-          try { syncLobbyPlayers(currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi }))) } catch {}
+          try { syncLobbyPlayers(currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi, colors: p.colors }))) } catch {}
         }
       } catch {}
       // Cancel any scheduled start if server event arrives
@@ -246,8 +246,8 @@ export default function WaitingQueue({
         try {
           const cached = Array.isArray(latestRosterRef.current) ? latestRosterRef.current : []
           const override = (cached.length > 0
-            ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi }))
-            : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi })) : []))
+            ? cached.map((p: any) => ({ playerId: p.wallet, username: p.username, isAi: p.isAi, colors: p.colors }))
+            : (Array.isArray(currentLobby?.players) ? currentLobby.players.map((p: any) => ({ playerId: p.playerId, username: p.username, isAi: p.isAi, colors: p.colors })) : []))
           onStartBattle(override)
         } catch {
           onStartBattle()

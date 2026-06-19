@@ -385,6 +385,16 @@ export default function PixelGameInterface() {
         >
           How to Play
         </Button>
+
+        {/* Drip Shop button */}
+        <Button
+          className="h-8 px-3 text-xs sm:h-12 sm:px-6 sm:text-base font-bold rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white active:scale-[0.985] touch-manipulation select-none"
+          onClick={() => handleNavigation("/shop")}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNavigation('/shop') }}
+          disabled={isNavigating}
+        >
+          Shop
+        </Button>
                   </div>
 
       {/* Mobile-only action buttons (kept above footer for clean spacing) */}
