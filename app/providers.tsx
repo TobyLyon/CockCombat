@@ -12,17 +12,8 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { clusterApiUrl } from "@solana/web3.js";
 import { getBrowserSolanaRpcEndpoint } from "../lib/solana-rpc";
 import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  CoinbaseWalletAdapter,
-  TrustWalletAdapter,
-  TokenPocketWalletAdapter,
-  SafePalWalletAdapter,
   TorusWalletAdapter,
   LedgerWalletAdapter,
-  NightlyWalletAdapter,
-  Coin98WalletAdapter,
-  XDEFIWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -45,18 +36,14 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     } catch {}
     return endpointBase;
   })();
+  // Phantom, Solflare, Coinbase, Trust, etc. now register themselves via the
+  // Wallet Standard and are auto-detected. Registering their legacy adapters too
+  // creates a duplicate Phantom entry whose stale window.solana path holds onto an
+  // old account and ignores in-wallet account switches ("sticks to old wallet").
+  // Only register adapters that are NOT auto-detected (hardware / OAuth).
   const wallets = [
-    new PhantomWalletAdapter(),
-    new SolflareWalletAdapter(),
-    new CoinbaseWalletAdapter(),
-    new TrustWalletAdapter(),
-    new TokenPocketWalletAdapter(),
-    new SafePalWalletAdapter(),
     new TorusWalletAdapter(),
     new LedgerWalletAdapter(),
-    new NightlyWalletAdapter(),
-    new Coin98WalletAdapter(),
-    new XDEFIWalletAdapter(),
   ];
 
   const content = (
