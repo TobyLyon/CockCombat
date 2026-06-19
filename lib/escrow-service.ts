@@ -14,9 +14,20 @@ import {
   createTransferInstruction,
   getAccount,
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import bs58 from 'bs58';
+
+// Resolve which token program owns a mint (legacy SPL Token vs Token-2022) so we
+// derive the right ATAs and use the right transfer program. $DINNER is Token-2022.
+async function detectTokenProgram(connection: Connection, mint: PublicKey): Promise<PublicKey> {
+  try {
+    const info = await connection.getAccountInfo(mint)
+    if (info && info.owner && info.owner.equals(TOKEN_2022_PROGRAM_ID)) return TOKEN_2022_PROGRAM_ID
+  } catch {}
+  return TOKEN_PROGRAM_ID
+}
 
 // Escrow wallet configuration
 interface EscrowWallet {
@@ -132,19 +143,20 @@ class EscrowService {
     if (!Array.isArray(transfers) || transfers.length === 0) throw new Error('No transfers provided')
     const wallet = fromWallet || await this.getNextWallet()
     const mint = new PublicKey(mintAddress)
-    const fromAta = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+    const tokenProgram = await detectTokenProgram(this.connection, mint)
+    const fromAta = await getAssociatedTokenAddress(mint, wallet.publicKey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
     const tx = new Transaction()
     for (const t of transfers) {
       const amt = typeof t.amount === 'bigint' ? t.amount : BigInt(Math.floor(Number(t.amount) || 0))
       if (amt <= BigInt(0)) continue
       const to = new PublicKey(t.toAddress)
-      const toAta = await getAssociatedTokenAddress(mint, to, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      const toAta = await getAssociatedTokenAddress(mint, to, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
       let exists = false
-      try { await getAccount(this.connection, toAta, 'confirmed', TOKEN_PROGRAM_ID); exists = true } catch {}
+      try { await getAccount(this.connection, toAta, 'confirmed', tokenProgram); exists = true } catch {}
       if (!exists) {
-        tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, toAta, to, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
+        tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, toAta, to, mint, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID))
       }
-      tx.add(createTransferInstruction(fromAta, toAta, wallet.publicKey, amt, [], TOKEN_PROGRAM_ID))
+      tx.add(createTransferInstruction(fromAta, toAta, wallet.publicKey, amt, [], tokenProgram))
     }
     if (tx.instructions.length === 0) throw new Error('No valid token transfers to execute')
     try {
@@ -166,10 +178,11 @@ class EscrowService {
     if (!this.connection) throw new Error('Connection not initialized')
     const w = wallet || await this.getNextWallet()
     const mint = new PublicKey(mintAddress)
-    const ata = await getAssociatedTokenAddress(mint, w.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
-    try { await getAccount(this.connection, ata, 'confirmed', TOKEN_PROGRAM_ID); return } catch {}
+    const tokenProgram = await detectTokenProgram(this.connection, mint)
+    const ata = await getAssociatedTokenAddress(mint, w.publicKey, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
+    try { await getAccount(this.connection, ata, 'confirmed', tokenProgram); return } catch {}
     const tx = new Transaction().add(
-      createAssociatedTokenAccountInstruction(w.publicKey, ata, w.publicKey, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      createAssociatedTokenAccountInstruction(w.publicKey, ata, w.publicKey, mint, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
     )
     await sendAndConfirmTransaction(this.connection, tx, [w.keypair], { commitment: 'confirmed', maxRetries: 3 })
   }

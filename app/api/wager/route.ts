@@ -7,7 +7,7 @@ import { getEvmProvider } from '@/lib/evm-config';
 
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferInstruction, createTransferCheckedInstruction, getAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferInstruction, createTransferCheckedInstruction, getAccount, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import escrowService from '@/lib/escrow-service';
 import { createClient } from '@supabase/supabase-js';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
@@ -204,23 +204,28 @@ export async function POST(request: NextRequest) {
       const mint = new PublicKey(mintStr)
       const decimals = Number(lobby.tokenDecimals ?? 6)
       expectedBaseUnits = BigInt(Math.round(Number(lobby.amount))) * (BigInt(10) ** BigInt(decimals))
-      const payerAta = await getAssociatedTokenAddress(mint, payer, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
-      const escrowAta = await getAssociatedTokenAddress(mint, escrowPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+      // Detect the owning token program ($DINNER is Token-2022). Using the wrong
+      // program id makes the deposit tx fail simulation — which is exactly what made
+      // Phantom block it — and derives the wrong ATA addresses.
+      let tokenProgram = TOKEN_PROGRAM_ID
+      try { const mi = await connection.getAccountInfo(mint); if (mi && mi.owner && mi.owner.equals(TOKEN_2022_PROGRAM_ID)) tokenProgram = TOKEN_2022_PROGRAM_ID } catch {}
+      const payerAta = await getAssociatedTokenAddress(mint, payer, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
+      const escrowAta = await getAssociatedTokenAddress(mint, escrowPk, false, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID)
       // Ensure the escrow OWNS its token account server-side (escrow pays its own rent)
       // so the player's tx is a single, clean transfer. A player paying to create a
-      // third-party-owned account is a classic scanner red flag and Phantom/Blowfish
-      // blocks it. Only fall back to player-side creation if the server couldn't.
+      // third-party-owned account is a classic scanner red flag. Only fall back to
+      // player-side creation if the server couldn't.
       let escrowAtaExists = false
-      try { await getAccount(connection, escrowAta, 'confirmed', TOKEN_PROGRAM_ID); escrowAtaExists = true } catch {}
+      try { await getAccount(connection, escrowAta, 'confirmed', tokenProgram); escrowAtaExists = true } catch {}
       if (!escrowAtaExists) {
         try { await escrowService.ensureOwnTokenAccount(mintStr, escrow); escrowAtaExists = true } catch {}
       }
       if (!escrowAtaExists) {
-        tx.add(createAssociatedTokenAccountInstruction(payer, escrowAta, escrowPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
+        tx.add(createAssociatedTokenAccountInstruction(payer, escrowAta, escrowPk, mint, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID))
       }
       // transferChecked carries the mint + decimals so wallets can verify the exact
       // outcome (amount/token), which simulators trust far more than a bare transfer.
-      tx.add(createTransferCheckedInstruction(payerAta, mint, escrowAta, payer, expectedBaseUnits, decimals, [], TOKEN_PROGRAM_ID))
+      tx.add(createTransferCheckedInstruction(payerAta, mint, escrowAta, payer, expectedBaseUnits, decimals, [], tokenProgram))
     } else {
       expectedBaseUnits = BigInt(Math.round(lobby.amount * LAMPORTS_PER_SOL))
       tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: escrowPk, lamports: Number(expectedBaseUnits) }))
